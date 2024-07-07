@@ -1,10 +1,11 @@
-#%%
+# %%
 # Imports
 import sys
 import os
 import random
 import gc
 from collections import defaultdict
+import einops
 
 import torch as t
 from torch import nn
@@ -18,7 +19,7 @@ from nnsight import LanguageModel
 
 # Configuration
 DEBUGGING = False
-DEVICE = 'cuda:0'
+DEVICE = "cuda:0"
 SEED = 42
 BATCH_SIZE = 128
 ACTIVATION_DIM = 512
@@ -26,94 +27,135 @@ LAYER = 4
 MIN_SAMPLES_PER_GROUP = 1024
 
 # Set up paths and model
-parent_dir = os.path.abspath('..')
+parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
 
 tracer_kwargs = dict(scan=DEBUGGING, validate=DEBUGGING)
-model = LanguageModel('EleutherAI/pythia-70m-deduped', device_map=DEVICE, dispatch=True)
+model = LanguageModel("EleutherAI/pythia-70m-deduped", device_map=DEVICE, dispatch=True)
+
 
 # Load and prepare dataset
 def load_and_prepare_dataset():
     dataset = load_dataset("LabHC/bias_in_bios")
-    df = pd.DataFrame(dataset['train'])
-    df['combined_label'] = df['profession'].astype(str) + '_' + df['gender'].astype(str)
+    df = pd.DataFrame(dataset["train"])
+    df["combined_label"] = df["profession"].astype(str) + "_" + df["gender"].astype(str)
     return dataset, df
+
 
 # Profession dictionary
 profession_dict = {
-    'accountant': 0, 'architect': 1, 'attorney': 2, 'chiropractor': 3, 'comedian': 4,
-    'composer': 5, 'dentist': 6, 'dietitian': 7, 'dj': 8, 'filmmaker': 9,
-    'interior_designer': 10, 'journalist': 11, 'model': 12, 'nurse': 13,
-    'painter': 14, 'paralegal': 15, 'pastor': 16, 'personal_trainer': 17,
-    'photographer': 18, 'physician': 19, 'poet': 20, 'professor': 21,
-    'psychologist': 22, 'rapper': 23, 'software_engineer': 24, 'surgeon': 25,
-    'teacher': 26, 'yoga_teacher': 27
+    "accountant": 0,
+    "architect": 1,
+    "attorney": 2,
+    "chiropractor": 3,
+    "comedian": 4,
+    "composer": 5,
+    "dentist": 6,
+    "dietitian": 7,
+    "dj": 8,
+    "filmmaker": 9,
+    "interior_designer": 10,
+    "journalist": 11,
+    "model": 12,
+    "nurse": 13,
+    "painter": 14,
+    "paralegal": 15,
+    "pastor": 16,
+    "personal_trainer": 17,
+    "photographer": 18,
+    "physician": 19,
+    "poet": 20,
+    "professor": 21,
+    "psychologist": 22,
+    "rapper": 23,
+    "software_engineer": 24,
+    "surgeon": 25,
+    "teacher": 26,
+    "yoga_teacher": 27,
 }
 profession_dict_rev = {v: k for k, v in profession_dict.items()}
 
+
 # Visualization
 def plot_label_distribution(df):
-    label_counts = df['combined_label'].value_counts().sort_index()
-    labels = [f"{profession_dict_rev[int(label.split('_')[0])]} ({'Male' if label.split('_')[1] == '0' else 'Female'})"
-              for label in label_counts.index]
+    label_counts = df["combined_label"].value_counts().sort_index()
+    labels = [
+        f"{profession_dict_rev[int(label.split('_')[0])]} ({'Male' if label.split('_')[1] == '0' else 'Female'})"
+        for label in label_counts.index
+    ]
 
     plt.figure(figsize=(12, 8))
     plt.bar(labels, label_counts)
-    plt.xlabel('(Profession x Gender) Label')
-    plt.ylabel('Number of Samples')
-    plt.title('Number of Samples per (Profession x Gender) Label')
+    plt.xlabel("(Profession x Gender) Label")
+    plt.ylabel("Number of Samples")
+    plt.title("Number of Samples per (Profession x Gender) Label")
     plt.xticks(rotation=90)
     plt.tight_layout()
     plt.show()
 
+
 # Dataset balancing and preparation
 def get_balanced_dataset(dataset, min_samples_per_group, train=True):
-    df = pd.DataFrame(dataset['train' if train else 'test'])
+    df = pd.DataFrame(dataset["train" if train else "test"])
     balanced_df_list = []
 
-    for profession in df['profession'].unique():
-        prof_df = df[df['profession'] == profession]
-        min_count = prof_df['gender'].value_counts().min()
-        
+    # TODO: Set max length of text
+
+    for profession in df["profession"].unique():
+        prof_df = df[df["profession"] == profession]
+        min_count = prof_df["gender"].value_counts().min()
+
         if min_samples_per_group and min_count < min_samples_per_group:
             continue
-        
+
         cutoff = min_samples_per_group or min_count
-        balanced_prof_df = prof_df.groupby('gender').apply(lambda x: x.sample(n=cutoff)).reset_index(drop=True)
+        balanced_prof_df = (
+            prof_df.groupby("gender").apply(lambda x: x.sample(n=cutoff)).reset_index(drop=True)
+        )
         balanced_df_list.append(balanced_prof_df)
 
     balanced_df = pd.concat(balanced_df_list).reset_index(drop=True)
-    grouped = balanced_df.groupby('profession')['hard_text'].apply(list)
+    grouped = balanced_df.groupby("profession")["hard_text"].apply(list)
     return {label: shuffle(texts) for label, texts in grouped.items()}
+
 
 def sample_from_classes(data_dict, chosen_class):
     total_samples = len(data_dict[chosen_class])
     all_classes = list(data_dict.keys())
     all_classes.remove(chosen_class)
     random_class_indices = random.choices(all_classes, k=total_samples)
-    
+
     samples_count = defaultdict(int)
     for class_idx in random_class_indices:
         samples_count[class_idx] += 1
-    
+
     sampled_data = []
     for class_idx, count in samples_count.items():
         sampled_data.extend(random.sample(data_dict[class_idx], count))
-    
+
     return sampled_data
+
 
 def create_labeled_dataset(data_dict, chosen_class, batch_size):
     in_class_data = data_dict[chosen_class]
     other_class_data = sample_from_classes(data_dict, chosen_class)
 
-    combined_dataset = [(sample, 0) for sample in in_class_data] + [(sample, 1) for sample in other_class_data]
+    combined_dataset = [(sample, 0) for sample in in_class_data] + [
+        (sample, 1) for sample in other_class_data
+    ]
     random.shuffle(combined_dataset)
 
     bio_texts, bio_labels = zip(*combined_dataset)
-    text_batches = [bio_texts[i:i + batch_size] for i in range(0, len(combined_dataset), batch_size)]
-    label_batches = [t.tensor(bio_labels[i:i + batch_size], device=DEVICE) for i in range(0, len(combined_dataset), batch_size)]
+    text_batches = [
+        bio_texts[i : i + batch_size] for i in range(0, len(combined_dataset), batch_size)
+    ]
+    label_batches = [
+        t.tensor(bio_labels[i : i + batch_size], device=DEVICE)
+        for i in range(0, len(combined_dataset), batch_size)
+    ]
 
     return text_batches, label_batches
+
 
 # Probe model and training
 class Probe(nn.Module):
@@ -124,17 +166,38 @@ class Probe(nn.Module):
     def forward(self, x):
         return self.net(x).squeeze(-1)
 
+
 def get_acts(text):
-    with t.no_grad(): 
+    with t.no_grad():
         with model.trace(text, **tracer_kwargs):
-            attn_mask = model.input[1]['attention_mask']
+            attn_mask = model.input[1]["attention_mask"]
             acts = model.gpt_neox.layers[LAYER].output[0]
             acts = acts * attn_mask[:, :, None]
             acts = acts.sum(1) / attn_mask.sum(1)[:, None]
             acts = acts.save()
         return acts.value
 
-def train_probe(text_batches, label_batches, get_acts, lr=1e-2, epochs=1, dim=ACTIVATION_DIM, seed=SEED):
+
+@t.set_grad_enabled(False)
+def get_all_activations(text_batches: dict[int, list[str]]) -> t.Tensor:
+    all_acts_BD = []
+    for text_batch_BL in tqdm(text_batches, desc="Getting activations"):
+        with model.trace(text_batch_BL, **tracer_kwargs):
+            attn_mask = model.input[1]["attention_mask"]
+            acts_BLD = model.gpt_neox.layers[LAYER].output[0]
+            acts_BLD = acts_BLD * attn_mask[:, :, None]
+            acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]
+            acts_BD = acts_BD.save()
+        all_acts_BD.append(acts_BD.value)
+
+    all_acts_NBD = t.stack(all_acts_BD)
+    all_acts_bD = einops.rearrange(all_acts_NBD, "N B D -> (N B) D")
+    return all_acts_bD
+
+
+def train_probe(
+    text_batches, label_batches, get_acts, lr=1e-2, epochs=1, dim=ACTIVATION_DIM, seed=SEED
+):
     t.manual_seed(seed)
     probe = Probe(dim).to(DEVICE)
     optimizer = t.optim.AdamW(probe.parameters(), lr=lr)
@@ -154,6 +217,7 @@ def train_probe(text_batches, label_batches, get_acts, lr=1e-2, epochs=1, dim=AC
             batch_idx += 1
     return probe, losses
 
+
 def test_probe(text_batches, label_batches, probe, get_acts):
     with t.no_grad():
         corrects = []
@@ -164,34 +228,48 @@ def test_probe(text_batches, label_batches, probe, get_acts):
             corrects.append((preds == labels).float())
         return t.cat(corrects).mean().item()
 
+
 # Main execution
 def main():
     dataset, df = load_and_prepare_dataset()
     plot_label_distribution(df)
 
     bios_gender_balanced = get_balanced_dataset(dataset, MIN_SAMPLES_PER_GROUP, train=True)
-    
+
+    all_labels = {}
+    all_acts = {}
+
     probes, losses = {}, {}
     for profession in bios_gender_balanced.keys():
         t.cuda.empty_cache()
         gc.collect()
-        print(f'Training probe for profession: {profession}')
-        text_batches, label_batches = create_labeled_dataset(bios_gender_balanced, profession, BATCH_SIZE)
+        print(f"Training probe for profession: {profession}")
+        text_batches, label_batches = create_labeled_dataset(
+            bios_gender_balanced, profession, BATCH_SIZE
+        )
+
+        all_labels[profession] = label_batches
+
+        # This will collect all activations ahead of time
+        # all_acts[profession] = get_all_activations(text_batches)
+
+        # Going to move this after, so we can sample activations from all professions
         probe, loss = train_probe(text_batches, label_batches, get_acts, epochs=1)
         probes[profession] = probe
         losses[profession] = loss
 
-    os.makedirs('trained_bib_probes', exist_ok=True)
-    t.save(probes, 'trained_bib_probes/probes_0705.pt')
-    t.save(losses, 'trained_bib_probes/losses_0705.pt')
+    os.makedirs("trained_bib_probes", exist_ok=True)
+    t.save(probes, "trained_bib_probes/probes_0705.pt")
+    t.save(losses, "trained_bib_probes/losses_0705.pt")
 
     bios_test = get_balanced_dataset(dataset, min_samples_per_group=50, train=False)
     test_accuracies = {}
     for profession, probe in probes.items():
         text_batches, label_batches = create_labeled_dataset(bios_test, profession, BATCH_SIZE)
         accuracy = test_probe(text_batches, label_batches, probe, get_acts)
-        print(f'Profession: {profession}, Accuracy: {accuracy}')
+        print(f"Profession: {profession}, Accuracy: {accuracy}")
         test_accuracies[profession] = accuracy
+
 
 if __name__ == "__main__":
     main()
