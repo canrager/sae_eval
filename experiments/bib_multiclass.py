@@ -13,6 +13,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 from tqdm import tqdm
+from typing import Callable
 
 from datasets import load_dataset
 from nnsight import LanguageModel
@@ -120,6 +121,30 @@ def get_balanced_dataset(dataset, min_samples_per_group: int, train: bool, rando
     return {label: shuffle(texts) for label, texts in grouped.items()}
 
 
+def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
+    # Find keys that are in test but not in train
+    test_only_keys = set(test_data.keys()) - set(train_data.keys())
+
+    # Find keys that are in train but not in test
+    train_only_keys = set(train_data.keys()) - set(test_data.keys())
+
+    # Remove keys from test that are not in train
+    for key in test_only_keys:
+        print(f"Removing {key} from test set")
+        del test_data[key]
+
+    # Remove keys from train that are not in test
+    for key in train_only_keys:
+        print(f"Removing {key} from train set")
+        del train_data[key]
+
+    return train_data, test_data
+
+
+def batch_list(input_list, batch_size):
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
+
+
 def sample_from_classes(data_dict, chosen_class):
     total_samples = len(data_dict[chosen_class])
     all_classes = list(data_dict.keys())
@@ -196,37 +221,124 @@ def get_all_activations(text_batches: dict[int, list[str]]) -> t.Tensor:
     return all_acts_bD
 
 
+def prepare_probe_data(
+    all_activations: dict[int, t.Tensor],
+    class_idx: int,
+    batch_size: int,
+) -> tuple[t.Tensor, t.Tensor]:
+    positive_acts = all_activations[class_idx]
+
+    num_positive = len(positive_acts)
+
+    # Collect all negative class activations and labels
+    negative_acts = []
+    for idx, batched_acts in all_activations.items():
+        if idx != class_idx:
+            negative_acts.append(batched_acts)
+
+    negative_acts = t.cat(negative_acts)
+
+    # Randomly select num_positive samples from negative class
+    indices = t.randperm(len(negative_acts))[:num_positive]
+    selected_negative_acts = negative_acts[indices]
+
+    assert selected_negative_acts.shape == positive_acts.shape
+
+    # Combine positive and negative samples
+    combined_acts = t.cat([positive_acts, selected_negative_acts])
+    combined_labels = t.zeros(len(combined_acts), device=DEVICE)
+    combined_labels[num_positive:] = 1
+
+    # Shuffle the combined data
+    shuffle_indices = t.randperm(len(combined_acts))
+    shuffled_acts = combined_acts[shuffle_indices]
+    shuffled_labels = combined_labels[shuffle_indices]
+
+    # Reshape into lists of tensors with specified batch_size
+    num_samples = len(shuffled_acts)
+    num_batches = (num_samples + batch_size - 1) // batch_size  # Ceiling division
+
+    batched_acts = [
+        shuffled_acts[i * batch_size : (i + 1) * batch_size] for i in range(num_batches)
+    ]
+    batched_labels = [
+        shuffled_labels[i * batch_size : (i + 1) * batch_size] for i in range(num_batches)
+    ]
+
+    return batched_acts, batched_labels
+
+
 def train_probe(
-    text_batches, label_batches, get_acts, lr=1e-2, epochs=1, dim=ACTIVATION_DIM, seed=SEED
+    train_input_batches: list,
+    train_label_batches: list[t.Tensor],
+    test_input_batches: list,
+    test_label_batches: list[t.Tensor],
+    get_acts: Callable,
+    precomputed_acts: bool,
+    lr: float = 1e-2,
+    epochs: int = 1,
+    dim: int = ACTIVATION_DIM,
+    seed: int = SEED,
 ):
+    """input_batches can be a list of tensors or strings. If strings, get_acts must be provided."""
+
+    if type(train_input_batches[0]) == str or type(test_input_batches[0]) == str:
+        assert precomputed_acts == False
+    elif type(train_input_batches[0]) == t.Tensor or type(test_input_batches[0]) == t.Tensor:
+        assert precomputed_acts == True
+
     t.manual_seed(seed)
     probe = Probe(dim).to(DEVICE)
     optimizer = t.optim.AdamW(probe.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
 
-    losses = t.zeros(epochs * len(text_batches))
-    batch_idx = 0
+    losses = t.zeros(epochs, len(train_input_batches))
     for epoch in range(epochs):
-        for text, labels in zip(text_batches, label_batches):
-            acts = get_acts(text)
-            logits = probe(acts)
-            loss = criterion(logits, t.tensor(labels, device=DEVICE, dtype=t.float32))
+        batch_idx = 0
+        for inputs, labels in zip(train_input_batches, train_label_batches):
+            if precomputed_acts:
+                acts_BD = inputs
+            else:
+                acts_BD = get_acts(inputs)
+            logits_B = probe(acts_BD)
+            loss = criterion(logits_B, t.tensor(labels, device=DEVICE, dtype=t.float32))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            losses[batch_idx] = loss
+            losses[epoch, batch_idx] = loss
             batch_idx += 1
+        print(f"\nEpoch {epoch + 1}/{epochs} Loss: {loss.item()}")
+
+        train_accuracy = test_probe(
+            train_input_batches[:30], train_label_batches[:30], probe, get_acts, precomputed_acts
+        )
+
+        print(f"Train Accuracy: {train_accuracy}")
+
+        test_accuracy = test_probe(
+            test_input_batches, test_label_batches, probe, get_acts, precomputed_acts
+        )
+        print(f"Test Accuracy: {test_accuracy}")
     return probe, losses
 
 
-def test_probe(text_batches, label_batches, probe, get_acts):
+def test_probe(
+    input_batches: list,
+    label_batches: list[t.Tensor],
+    probe: Probe,
+    get_acts: Callable,
+    precomputed_acts: bool,
+):
     with t.no_grad():
         corrects = []
-        for text, labels in zip(text_batches, label_batches):
-            acts = get_acts(text)
-            logits = probe(acts)
-            preds = (logits > 0.0).long()
-            corrects.append((preds == labels).float())
+        for input_batch, labels_B in zip(input_batches, label_batches):
+            if precomputed_acts:
+                acts_BD = input_batch
+            else:
+                acts_BD = get_acts(input_batch)
+            logits_B = probe(acts_BD)
+            preds_B = (logits_B > 0.0).long()
+            corrects.append((preds_B == labels_B).float())
         return t.cat(corrects).mean().item()
 
 
@@ -235,41 +347,59 @@ def main():
     dataset, df = load_and_prepare_dataset()
     plot_label_distribution(df)
 
-    bios_gender_balanced = get_balanced_dataset(dataset, MIN_SAMPLES_PER_GROUP, train=True)
+    train_bios_gender_balanced = get_balanced_dataset(dataset, 1250, train=True)
+    test_bios_gender_balanced = get_balanced_dataset(dataset, 250, train=False)
 
-    all_labels = {}
-    all_acts = {}
+    train_bios_gender_balanced, test_bios_gender_balanced = ensure_shared_keys(
+        train_bios_gender_balanced, test_bios_gender_balanced
+    )
 
     probes, losses = {}, {}
-    for profession in bios_gender_balanced.keys():
+
+    all_train_acts = {}
+    all_test_acts = {}
+
+    for i, profession in enumerate(train_bios_gender_balanced.keys()):
         t.cuda.empty_cache()
         gc.collect()
         print(f"Training probe for profession: {profession}")
-        text_batches, label_batches = create_labeled_dataset(
-            bios_gender_balanced, profession, BATCH_SIZE
+        train_input_batches = batch_list(train_bios_gender_balanced[profession], BATCH_SIZE)
+
+        test_input_batches = batch_list(test_bios_gender_balanced[profession], BATCH_SIZE)
+
+        all_train_acts[profession] = get_all_activations(train_input_batches)
+
+        all_test_acts[profession] = get_all_activations(test_input_batches)
+
+        # For debugging
+        # if i > 1:
+        # break
+
+    t.set_grad_enabled(True)
+
+    probe_batch_size = 32
+
+    for profession in all_train_acts.keys():
+        train_acts, train_labels = prepare_probe_data(all_train_acts, profession, probe_batch_size)
+
+        test_acts, test_labels = prepare_probe_data(all_test_acts, profession, probe_batch_size)
+
+        probe, loss = train_probe(
+            train_acts,
+            train_labels,
+            test_acts,
+            test_labels,
+            get_acts,
+            precomputed_acts=True,
+            epochs=10,
         )
 
-        all_labels[profession] = label_batches
-
-        # This will collect all activations ahead of time
-        # all_acts[profession] = get_all_activations(text_batches)
-
-        # Going to move this after, so we can sample activations from all professions
-        probe, loss = train_probe(text_batches, label_batches, get_acts, epochs=1)
         probes[profession] = probe
         losses[profession] = loss
 
     os.makedirs("trained_bib_probes", exist_ok=True)
     t.save(probes, "trained_bib_probes/probes_0705.pt")
     t.save(losses, "trained_bib_probes/losses_0705.pt")
-
-    bios_test = get_balanced_dataset(dataset, min_samples_per_group=50, train=False)
-    test_accuracies = {}
-    for profession, probe in probes.items():
-        text_batches, label_batches = create_labeled_dataset(bios_test, profession, BATCH_SIZE)
-        accuracy = test_probe(text_batches, label_batches, probe, get_acts)
-        print(f"Profession: {profession}, Accuracy: {accuracy}")
-        test_accuracies[profession] = accuracy
 
 
 if __name__ == "__main__":
