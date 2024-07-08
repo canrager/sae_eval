@@ -204,9 +204,9 @@ def get_acts(text):
         return acts.value
 
 
-@t.set_grad_enabled(False)
-def get_all_activations(text_batches: dict[int, list[str]]) -> t.Tensor:
-    all_acts_BD = []
+@t.no_grad()
+def get_all_activations(text_batches: list[list[str]]) -> t.Tensor:
+    all_acts_list_BD = []
     for text_batch_BL in tqdm(text_batches, desc="Getting activations"):
         with model.trace(text_batch_BL, **tracer_kwargs):
             attn_mask = model.input[1]["attention_mask"]
@@ -214,10 +214,9 @@ def get_all_activations(text_batches: dict[int, list[str]]) -> t.Tensor:
             acts_BLD = acts_BLD * attn_mask[:, :, None]
             acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]
             acts_BD = acts_BD.save()
-        all_acts_BD.append(acts_BD.value)
+        all_acts_list_BD.append(acts_BD.value)
 
-    all_acts_NBD = t.stack(all_acts_BD)
-    all_acts_bD = einops.rearrange(all_acts_NBD, "N B D -> (N B) D")
+    all_acts_bD = t.cat(all_acts_list_BD, dim=0)
     return all_acts_bD
 
 
