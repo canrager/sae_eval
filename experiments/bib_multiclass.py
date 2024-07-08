@@ -95,11 +95,9 @@ def plot_label_distribution(df):
 
 
 # Dataset balancing and preparation
-def get_balanced_dataset(dataset, min_samples_per_group, train=True):
+def get_balanced_dataset(dataset, min_samples_per_group: int, train: bool, random_seed: int = SEED):
     df = pd.DataFrame(dataset["train" if train else "test"])
     balanced_df_list = []
-
-    # TODO: Set max length of text
 
     for profession in df["profession"].unique():
         prof_df = df[df["profession"] == profession]
@@ -109,9 +107,12 @@ def get_balanced_dataset(dataset, min_samples_per_group, train=True):
             continue
 
         cutoff = min_samples_per_group or min_count
-        balanced_prof_df = (
-            prof_df.groupby("gender").apply(lambda x: x.sample(n=cutoff)).reset_index(drop=True)
-        )
+        balanced_prof_df = pd.concat(
+            [
+                group.sample(n=cutoff, random_state=random_seed)
+                for _, group in prof_df.groupby("gender")
+            ]
+        ).reset_index(drop=True)
         balanced_df_list.append(balanced_prof_df)
 
     balanced_df = pd.concat(balanced_df_list).reset_index(drop=True)
