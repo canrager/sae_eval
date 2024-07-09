@@ -12,3 +12,6 @@ torchtyping>=0.1.4
 tqdm>=4.66.1
 umap>=0.1.1
 zstandard>=0.22.0
+
+# New requirements
+scikit-learn>=1.5.1
