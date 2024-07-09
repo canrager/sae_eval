@@ -14,7 +14,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
 from tqdm import tqdm
-from typing import Callable
+from typing import Callable, Optional
 
 from datasets import load_dataset
 from nnsight import LanguageModel
@@ -177,8 +177,9 @@ def get_class_nonclass_samples(
     combined_labels[: len(class_samples)] = 1
 
     batched_samples = batch_list(combined_samples, batch_size)
+    batched_labels = batch_list(combined_labels, batch_size)
 
-    return batched_samples, combined_labels
+    return batched_samples, batched_labels
 
 
 def sample_from_classes(data_dict, chosen_class):
@@ -241,7 +242,7 @@ def get_acts(text):
 
 
 @t.no_grad()
-def get_all_activations(text_batches: list[list[str]]) -> t.Tensor:
+def get_all_activations(text_batches: list[list[str]], model) -> t.Tensor:
     all_acts_list_BD = []
     for text_batch_BL in tqdm(text_batches, desc="Getting activations"):
         with model.trace(text_batch_BL, **tracer_kwargs):
@@ -361,9 +362,12 @@ def test_probe(
     input_batches: list,
     label_batches: list[t.Tensor],
     probe: Probe,
-    get_acts: Callable,
     precomputed_acts: bool,
+    get_acts: Optional[Callable] = None,
 ):
+    if precomputed_acts is True:
+        assert get_acts is None, "get_acts will not be used if precomputed_acts is True."
+
     with t.no_grad():
         corrects = []
         for input_batch, labels_B in zip(input_batches, label_batches):
