@@ -6,6 +6,7 @@ import random
 import gc
 from collections import defaultdict
 import einops
+import math
 
 import torch as t
 from torch import nn
@@ -222,6 +223,7 @@ def get_all_activations(text_batches: list[list[str]]) -> t.Tensor:
 
 def prepare_probe_data(
     all_activations: dict[int, t.Tensor],
+    all_non_class_activations: dict[int, t.Tensor],
     class_idx: int,
     batch_size: int,
 ) -> tuple[t.Tensor, t.Tensor]:
@@ -231,20 +233,16 @@ def prepare_probe_data(
 
     # Collect all negative class activations and labels
     negative_acts = []
-    for idx, batched_acts in all_activations.items():
+    for idx, acts in all_non_class_activations.items():
         if idx != class_idx:
-            negative_acts.append(batched_acts)
+            negative_acts.append(acts)
 
     negative_acts = t.cat(negative_acts)
 
-    # Randomly select num_positive samples from negative class
-    indices = t.randperm(len(negative_acts))[:num_positive]
-    selected_negative_acts = negative_acts[indices]
-
-    assert selected_negative_acts.shape == positive_acts.shape
+    assert negative_acts.shape == positive_acts.shape
 
     # Combine positive and negative samples
-    combined_acts = t.cat([positive_acts, selected_negative_acts])
+    combined_acts = t.cat([positive_acts, negative_acts])
     combined_labels = t.zeros(len(combined_acts), device=DEVICE)
     combined_labels[num_positive:] = 1
 
@@ -346,17 +344,30 @@ def main():
     dataset, df = load_and_prepare_dataset()
     plot_label_distribution(df)
 
-    train_bios_gender_balanced = get_balanced_dataset(dataset, 1250, train=True)
-    test_bios_gender_balanced = get_balanced_dataset(dataset, 250, train=False)
+    train_set_size = 5000
+    test_set_size = 1000
+
+    minimum_train_samples = train_set_size // 4
+    minimum_test_samples = test_set_size // 4
+
+    train_bios_gender_balanced = get_balanced_dataset(dataset, minimum_train_samples, train=True)
+    test_bios_gender_balanced = get_balanced_dataset(dataset, minimum_test_samples, train=False)
 
     train_bios_gender_balanced, test_bios_gender_balanced = ensure_shared_keys(
         train_bios_gender_balanced, test_bios_gender_balanced
     )
 
+    num_classes = len(train_bios_gender_balanced)
+    num_train_non_class_samples = math.ceil(train_set_size / num_classes)
+    num_test_non_class_samples = math.ceil(test_set_size / num_classes)
+
     probes, losses = {}, {}
 
     all_train_acts = {}
     all_test_acts = {}
+
+    train_non_class_acts = {}
+    test_non_class_acts = {}
 
     for i, profession in enumerate(train_bios_gender_balanced.keys()):
         t.cuda.empty_cache()
@@ -367,8 +378,10 @@ def main():
         test_input_batches = batch_list(test_bios_gender_balanced[profession], BATCH_SIZE)
 
         all_train_acts[profession] = get_all_activations(train_input_batches)
-
         all_test_acts[profession] = get_all_activations(test_input_batches)
+
+        train_non_class_acts[profession] = all_train_acts[profession][:num_train_non_class_samples]
+        test_non_class_acts[profession] = all_test_acts[profession][:num_test_non_class_samples]
 
         # For debugging
         # if i > 1:
@@ -379,9 +392,13 @@ def main():
     probe_batch_size = 32
 
     for profession in all_train_acts.keys():
-        train_acts, train_labels = prepare_probe_data(all_train_acts, profession, probe_batch_size)
+        train_acts, train_labels = prepare_probe_data(
+            all_train_acts, train_non_class_acts, profession, probe_batch_size
+        )
 
-        test_acts, test_labels = prepare_probe_data(all_test_acts, profession, probe_batch_size)
+        test_acts, test_labels = prepare_probe_data(
+            all_test_acts, test_non_class_acts, profession, probe_batch_size
+        )
 
         probe, loss = train_probe(
             train_acts,
