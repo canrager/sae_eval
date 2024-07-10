@@ -6,7 +6,8 @@ import numpy as np
 from tqdm import tqdm
 import gc
 from collections import defaultdict
-parent_dir = os.path.abspath('..')
+
+parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
 
 from datasets import load_dataset
@@ -21,13 +22,13 @@ from dictionary_learning.interp import examine_dimension
 from dictionary_learning.utils import hf_dataset_to_generator
 
 from experiments.bib_multiclass import (
-    load_and_prepare_dataset, 
-    get_train_test_data, 
-    get_class_nonclass_samples, 
+    load_and_prepare_dataset,
+    get_train_test_data,
+    get_class_nonclass_samples,
     test_probe,
     prepare_probe_data,
     get_all_activations,
-    Probe
+    Probe,
 )
 
 DEBUGGING = False
@@ -38,11 +39,17 @@ else:
     tracer_kwargs = dict(scan=False, validate=False)
 
 
-
-
-
 # loading dictionaries
-def load_submodules_and_dictionaries(model, probe_layer, activation_dim, load_embed=True, load_attn=True, load_mlp=True, load_resid=True, DEVICE='cpu'):
+def load_submodules_and_dictionaries(
+    model,
+    probe_layer,
+    activation_dim,
+    load_embed=True,
+    load_attn=True,
+    load_mlp=True,
+    load_resid=True,
+    DEVICE="cpu",
+):
     dict_id = 10
     expansion_factor = 64
     dictionary_size = expansion_factor * activation_dim
@@ -53,32 +60,31 @@ def load_submodules_and_dictionaries(model, probe_layer, activation_dim, load_em
     if load_embed:
         submodules.append(model.gpt_neox.embed_in)
         dictionaries[model.gpt_neox.embed_in] = AutoEncoder.from_pretrained(
-            f'../dictionary_learning/dictionaries/pythia-70m-deduped/embed/{dict_id}_{dictionary_size}/ae.pt',
-            device=DEVICE
+            f"../dictionary_learning/dictionaries/pythia-70m-deduped/embed/{dict_id}_{dictionary_size}/ae.pt",
+            device=DEVICE,
         )
     for i in range(probe_layer + 1):
         if load_attn:
             submodules.append(model.gpt_neox.layers[i].attention)
             dictionaries[model.gpt_neox.layers[i].attention] = AutoEncoder.from_pretrained(
-                f'../dictionary_learning/dictionaries/pythia-70m-deduped/attn_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt',
-                device=DEVICE
+                f"../dictionary_learning/dictionaries/pythia-70m-deduped/attn_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt",
+                device=DEVICE,
             )
 
         if load_mlp:
             submodules.append(model.gpt_neox.layers[i].mlp)
             dictionaries[model.gpt_neox.layers[i].mlp] = AutoEncoder.from_pretrained(
-                f'../dictionary_learning/dictionaries/pythia-70m-deduped/mlp_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt',
-                device=DEVICE
+                f"../dictionary_learning/dictionaries/pythia-70m-deduped/mlp_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt",
+                device=DEVICE,
             )
 
         if load_resid:
             submodules.append(model.gpt_neox.layers[i])
             dictionaries[model.gpt_neox.layers[i]] = AutoEncoder.from_pretrained(
-                f'../dictionary_learning/dictionaries/pythia-70m-deduped/resid_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt',
-                device=DEVICE
+                f"../dictionary_learning/dictionaries/pythia-70m-deduped/resid_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt",
+                device=DEVICE,
             )
     return submodules, dictionaries
-
 
 
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
@@ -86,21 +92,31 @@ def load_submodules_and_dictionaries(model, probe_layer, activation_dim, load_em
 # labels[0] = true labels (profession)
 # labels[1] = spurious labels (gender)
 
+
 def metric_fn(model, labels=None, probe=None):
-    attn_mask = model.input[1]['attention_mask']
+    attn_mask = model.input[1]["attention_mask"]
     acts = model.gpt_neox.layers[layer].output[0]
     acts = acts * attn_mask[:, :, None]
     acts = acts.sum(1) / attn_mask.sum(1)[:, None]
-    
-    return t.where(
-        labels == 0,
-        probe(acts),
-        - probe(acts)
-    )
+
+    return t.where(labels == 0, probe(acts), -probe(acts))
+
 
 # Attribution Patching
 
-def get_effects_per_class(model, submodules, dictionaries, probes, class_idx, train_bios, n_batches=None, batch_size=10):
+
+def get_effects_per_class(
+    model,
+    submodules,
+    dictionaries,
+    probes,
+    class_idx,
+    train_bios,
+    n_batches=None,
+    batch_size=10,
+    patching_method="ig",
+    steps=10,
+):
     probe = probes[class_idx]
     texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, batch_size)
     if n_batches is not None:
@@ -109,9 +125,11 @@ def get_effects_per_class(model, submodules, dictionaries, probes, class_idx, tr
             labels_train = labels_train[:n_batches]
 
     running_total = 0
-    running_nodes = None    
+    running_nodes = None
 
-    for batch_idx, (clean, labels) in tqdm(enumerate(zip(texts_train, labels_train)), total=n_batches):
+    for batch_idx, (clean, labels) in tqdm(
+        enumerate(zip(texts_train, labels_train)), total=n_batches
+    ):
         if batch_idx == n_batches:
             break
 
@@ -123,11 +141,14 @@ def get_effects_per_class(model, submodules, dictionaries, probes, class_idx, tr
             dictionaries,
             metric_fn,
             metric_kwargs=dict(labels=labels, probe=probe),
-            method='ig'
+            method=patching_method,
+            steps=steps,
         )
         with t.no_grad():
             if running_nodes is None:
-                running_nodes = {k : len(clean) * v.sum(dim=1).mean(dim=0) for k, v in effects.items()}
+                running_nodes = {
+                    k: len(clean) * v.sum(dim=1).mean(dim=0) for k, v in effects.items()
+                }
             else:
                 for k, v in effects.items():
                     running_nodes[k] += len(clean) * v.sum(dim=1).mean(dim=0)
@@ -135,20 +156,14 @@ def get_effects_per_class(model, submodules, dictionaries, probes, class_idx, tr
         del effects, _
         gc.collect()
 
-    nodes = {k : v / running_total for k, v in running_nodes.items()}
+    nodes = {k: v / running_total for k, v in running_nodes.items()}
     # Convert SparseAct to Tensor
-    nodes = {k : v.act for k, v in nodes.items()}
+    nodes = {k: v.act for k, v in nodes.items()}
     return nodes
 
 
 # Get the output activations for the submodule where some saes are ablated
-def get_acts_ablated(
-    text,
-    model,
-    submodules,
-    dictionaries,
-    to_ablate
-):
+def get_acts_ablated(text, model, submodules, dictionaries, to_ablate):
     is_tuple = {}
     with t.no_grad(), model.trace("_"):
         for submodule in submodules:
@@ -163,12 +178,12 @@ def get_acts_ablated(
                 x = x[0]
             x_hat, f = dictionary(x, output_features=True)
             res = x - x_hat
-            f[...,feat_idxs] = 0. # zero ablation
+            f[..., feat_idxs] = 0.0  # zero ablation
             if is_tuple[submodule]:
                 submodule.output[0][:] = dictionary.decode(f) + res
             else:
                 submodule.output = dictionary.decode(f) + res
-        attn_mask = model.input[1]['attention_mask']
+        attn_mask = model.input[1]["attention_mask"]
         act = model.gpt_neox.layers[layer].output[0]
         act = act * attn_mask[:, :, None]
         act = act.sum(1) / attn_mask.sum(1)[:, None]
@@ -181,13 +196,7 @@ def get_acts_ablated(
 
 
 # Get the output activations for the submodule where some saes are ablated
-def get_all_acts_ablated(
-    text_batches: list[list[str]],
-    model,
-    submodules,
-    dictionaries,
-    to_ablate
-):
+def get_all_acts_ablated(text_batches: list[list[str]], model, submodules, dictionaries, to_ablate):
     is_tuple = {}
     with t.no_grad(), model.trace("_"):
         for submodule in submodules:
@@ -204,12 +213,12 @@ def get_all_acts_ablated(
                     x = x[0]
                 x_hat, f = dictionary(x, output_features=True)
                 res = x - x_hat
-                f[...,feat_idxs] = 0. # zero ablation
+                f[..., feat_idxs] = 0.0  # zero ablation
                 if is_tuple[submodule]:
                     submodule.output[0][:] = dictionary.decode(f) + res
                 else:
                     submodule.output = dictionary.decode(f) + res
-            attn_mask = model.input[1]['attention_mask']
+            attn_mask = model.input[1]["attention_mask"]
             act = model.gpt_neox.layers[layer].output[0]
             act = act * attn_mask[:, :, None]
             act = act.sum(1) / attn_mask.sum(1)[:, None]
@@ -229,93 +238,114 @@ def n_hot(feats, dim):
     return out
 
 
-def select_significant_features(submodules, nodes, activation_dim, T_effect=0.05): 
+def select_significant_features(submodules, nodes, activation_dim, T_effect=0.05, verbose=True):
     top_feats_to_ablate = {}
     total_features = 0
     for component_idx, effect in enumerate(nodes.values()):
-        print(f"Component {component_idx}:")
+        if verbose:
+            print(f"Component {component_idx}:")
         top_feats_to_ablate[submodules[component_idx]] = []
         for idx in (effect > T_effect).nonzero():
-            print(idx.item(), effect[idx].item())
+            if verbose:
+                print(idx.item(), effect[idx].item())
             top_feats_to_ablate[submodules[component_idx]].append(idx.item())
             total_features += 1
     print(f"total features: {total_features}")
 
     top_feats_to_ablate = {
-        submodule : n_hot(feats, activation_dim) for submodule, feats in top_feats_to_ablate.items()
+        submodule: n_hot(feats, activation_dim) for submodule, feats in top_feats_to_ablate.items()
     }
     return top_feats_to_ablate
 
+
 ## Plotting functions
 
+
 def plot_feature_effects_above_threshold(nodes, threshold=0.05):
-        all_values = []
-        for key in nodes.keys():
-            all_values.append(nodes[key].cpu().numpy().reshape(-1))
-        all_values = [x for sublist in all_values for x in sublist]
-        all_values = [x for x in all_values if x > threshold]
+    all_values = []
+    for key in nodes.keys():
+        all_values.append(nodes[key].cpu().numpy().reshape(-1))
+    all_values = [x for sublist in all_values for x in sublist]
+    all_values = [x for x in all_values if x > threshold]
 
-        all_values = sorted(all_values, reverse=True)
-        plt.scatter(range(len(all_values)), all_values)
-        plt.title('all_values')
-        plt.show()
-
-def plot_accuracy_comparison(test_accuracies):
-    # Get unique probe_idx values
-    probe_indices = test_accuracies[-1].keys()
-
-    # Get ablated_classes values
-    ablated_class_indices = list(test_accuracies.keys())
-
-    # Set up the plot
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    # Set the width of each bar and the positions of the bars
-    width = 1/(len(ablated_class_indices)+1)
-    x = np.arange(len(probe_indices))
-
-    labels = ['Original Model'] + [f'Ablated class {class_idx}' for class_idx in ablated_class_indices[1:]]
-
-    # Create bars for each class
-    for i, class_idx in enumerate(ablated_class_indices):
-        values = [test_accuracies[class_idx].get(idx, 0)[0] for idx in probe_indices]
-        print(values)
-        print(probe_indices)
-        ax.bar(x + i*width, values, width, label=labels[i])
-
-    # Customize the plot
-    ax.set_xlabel('Probe Index')
-    ax.set_ylabel('Test Accuracy')
-    ax.set_title('Bar Plot of Values by Probe Index and Class')
-    ax.set_xticks(x + width / 2)
-    ax.set_xticklabels(probe_indices)
-    ax.legend(loc='lower right')
-
-    # Add some padding to the x-axis
-    plt.xlim(-width, len(probe_indices) - width/2)
-
-    # Show the plot
-    plt.tight_layout()
+    all_values = sorted(all_values, reverse=True)
+    plt.scatter(range(len(all_values)), all_values)
+    plt.title("all_values")
     plt.show()
 
 
+# %%
+def plot_accuracy_comparison(test_accuracies: dict, T_effects: list):
+    # Get unique probe_idx values
+    for T_effect in T_effects:
+        probe_indices = list(test_accuracies[-1].keys())[:-1]
+
+        # Get ablated_classes values
+        ablated_class_indices = list(test_accuracies.keys())
+
+        # Set up the plot
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Set the width of each bar and the positions of the bars
+        width = 1 / (len(ablated_class_indices) + 1)
+        x = np.arange(len(probe_indices))
+
+        # Create bars for each class
+        for i, class_idx in enumerate(ablated_class_indices):
+            if class_idx == -1:
+                values = [test_accuracies[class_idx].get(idx, 0)[0] for idx in probe_indices]
+            else:
+                values = [
+                    test_accuracies[class_idx][T_effect].get(idx, 0)[0] for idx in probe_indices
+                ]
+
+            if class_idx == -1:
+                colors = "green"
+            else:
+                colors = ["orange" for _ in range(len(values))]
+                colors[i - 1] = "red"
+            ax.bar(x + i * width, values, width, color=colors)
+
+        # Customize the plot
+        ax.set_xlabel("Probe Index")
+        ax.set_ylabel("Test Accuracy")
+        ax.set_title(f"Probe accuracies for ablated models\n T_effect = {T_effect}")
+        ax.set_xticks(x + width / 2)
+        ax.set_xticklabels(probe_indices)
+        ax.legend(loc="lower right")
+
+        # Add some padding to the x-axis
+        plt.xlim(-width, len(probe_indices) - width / 2)
+
+        # Show the plot
+        plt.tight_layout()
+        plt.show()
 
 
+plot_accuracy_comparison(test_accuracies, Ts_effect)
 
-#%%
+
+# %%
 # Load model and dictionaries
-DEVICE = 'cuda:0'
-layer = 4 # model layer for attaching linear classification head
+DEVICE = "cuda:0"
+layer = 4  # model layer for attaching linear classification head
 SEED = 42
-model = LanguageModel('EleutherAI/pythia-70m-deduped', device_map=DEVICE, dispatch=True)
+model = LanguageModel("EleutherAI/pythia-70m-deduped", device_map=DEVICE, dispatch=True)
 activation_dim = 512
+verbose = True
 
-submodules, dictionaries = load_submodules_and_dictionaries(model, layer, activation_dim, DEVICE=DEVICE)
+submodules, dictionaries = load_submodules_and_dictionaries(
+    model,
+    layer,
+    activation_dim,
+    load_embed=False,
+    load_attn=False,
+    load_mlp=False,
+    load_resid=True,
+    DEVICE=DEVICE,
+)
 
 
-
-
-#%%
 # Load datset and probes
 train_set_size = 500
 test_set_size = 100
@@ -323,69 +353,101 @@ batch_size_act_cache = 500
 
 dataset, _ = load_and_prepare_dataset()
 train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
-test_accuracies = {} # class ablated, class probe accuracy
+test_accuracies = {}  # class ablated, class probe accuracy
 
-probes = t.load('trained_bib_probes/probes_0705.pt')
-all_classes_list = list(probes.keys())[:5]
+probes = t.load("trained_bib_probes/probes_0705.pt")
+all_classes_list = list(probes.keys())[:4]
 
 
 ### Get activations for original model, all classes
+print("Getting activations for original model")
 test_acts = {}
-for class_idx in all_classes_list:
+for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated class"):
     class_test_acts = get_all_activations(test_bios[class_idx], model)
     test_acts[class_idx] = class_test_acts
 
 test_accuracies[-1] = defaultdict(list)
 for class_idx in all_classes_list:
-    batch_test_acts, batch_test_labels = prepare_probe_data(test_acts, class_idx, batch_size_act_cache)
-    test_acc_probe = test_probe(batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True)
-    print(f'class {class_idx} test accuracy: {test_acc_probe}')
+    batch_test_acts, batch_test_labels = prepare_probe_data(
+        test_acts, class_idx, batch_size_act_cache
+    )
+    test_acc_probe = test_probe(
+        batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True
+    )
     test_accuracies[-1][class_idx].append(test_acc_probe)
+    if verbose:
+        print(f"class {class_idx} test accuracy: {test_acc_probe}")
 
 ### Get activations for ablated models
 # ablating the top features for each class
+print("Getting activations for ablated models")
 
-N_EVAL_BATCHES = 3
-T_effect = 0.05
+N_EVAL_BATCHES = 5
+Ts_effect = [0.1, 0.01, 0.005, 0.001]
 batch_size_patching = 10
 
 for ablated_class_idx in all_classes_list:
-    test_accuracies[ablated_class_idx] = defaultdict(list)
+    test_accuracies[ablated_class_idx] = {}
 
     nodes = get_effects_per_class(
         model,
         submodules,
         dictionaries,
-        probes, 
-        ablated_class_idx, 
-        train_bios, 
-        N_EVAL_BATCHES, 
-        batch_size=batch_size_patching
+        probes,
+        ablated_class_idx,
+        train_bios,
+        N_EVAL_BATCHES,
+        batch_size=batch_size_patching,
+        patching_method="attrib",
+        steps=1,
     )
 
-    plot_feature_effects_above_threshold(nodes, threshold=T_effect)
-
-    top_feats_to_ablate = select_significant_features(submodules, nodes, activation_dim*64, T_effect=T_effect)
+    # plot_feature_effects_above_threshold(nodes, threshold=T_effect)
+    top_feats_to_ablate = {}
+    for T_effect in Ts_effect:
+        top_feats_to_ablate[T_effect] = select_significant_features(
+            submodules, nodes, activation_dim * 64, T_effect=T_effect, verbose=verbose
+        )
     del nodes
     t.cuda.empty_cache()
     gc.collect()
 
-    test_acts_ablated = {}
-    for class_idx in all_classes_list:
-        test_acts_ablated[class_idx] = get_all_acts_ablated(
-            test_bios[class_idx],
-            model,
-            submodules,
-            dictionaries,
-            top_feats_to_ablate,
-        )
+    for T_effect, feats in top_feats_to_ablate.items():
+        test_accuracies[ablated_class_idx][T_effect] = defaultdict(list)
+        if verbose:
+            print(f"Running ablation for T_effect = {T_effect}")
+        test_acts_ablated = {}
+        for evaluated_class_idx in all_classes_list:
+            test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
+                test_bios[evaluated_class_idx],
+                model,
+                submodules,
+                dictionaries,
+                feats,
+            )
 
-    for class_idx in all_classes_list:
-        batch_test_acts, batch_test_labels = prepare_probe_data(test_acts_ablated, class_idx, batch_size_act_cache)
-        test_acc_probe = test_probe(batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True)
-        print(f'class {class_idx} test accuracy: {test_acc_probe}')
-        test_accuracies[ablated_class_idx][class_idx].append(test_acc_probe)
+        for evaluated_class_idx in all_classes_list:
+            batch_test_acts, batch_test_labels = prepare_probe_data(
+                test_acts_ablated, evaluated_class_idx, batch_size_act_cache
+            )
+            test_acc_probe = test_probe(
+                batch_test_acts,
+                batch_test_labels,
+                probes[evaluated_class_idx],
+                precomputed_acts=True,
+            )
+            if verbose:
+                print(
+                    f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {test_acc_probe}"
+                )
+            test_accuracies[ablated_class_idx][T_effect][evaluated_class_idx].append(test_acc_probe)
 
+        del test_acts_ablated
+        del batch_test_acts
+        del batch_test_labels
+        t.cuda.empty_cache()
+        gc.collect()
 
-plot_accuracy_comparison(test_accuracies)
+# %%
 
+plot_accuracy_comparison(test_accuracies, Ts_effect)

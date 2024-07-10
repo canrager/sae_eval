@@ -244,7 +244,7 @@ def get_acts(text):
 @t.no_grad()
 def get_all_activations(text_batches: list[list[str]], model) -> t.Tensor:
     all_acts_list_BD = []
-    for text_batch_BL in tqdm(text_batches, desc="Getting activations"):
+    for text_batch_BL in text_batches:
         with model.trace(text_batch_BL, **tracer_kwargs):
             attn_mask = model.input[1]["attention_mask"]
             acts_BLD = model.gpt_neox.layers[LAYER].output[0]
