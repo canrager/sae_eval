@@ -33,6 +33,7 @@ parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
 
 tracer_kwargs = dict(scan=DEBUGGING, validate=DEBUGGING)
+# TODO: Move this into main(). Will require looking at the get_acts() function.
 model = LanguageModel("EleutherAI/pythia-70m-deduped", device_map=DEVICE, dispatch=True)
 
 
@@ -404,8 +405,8 @@ def main():
 
         test_input_batches = batch_list(test_bios[profession], BATCH_SIZE)
 
-        all_train_acts[profession] = get_all_activations(train_input_batches)
-        all_test_acts[profession] = get_all_activations(test_input_batches)
+        all_train_acts[profession] = get_all_activations(train_input_batches, model)
+        all_test_acts[profession] = get_all_activations(test_input_batches, model)
 
         # For debugging
         # if i > 1:
