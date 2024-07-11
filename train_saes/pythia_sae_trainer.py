@@ -22,7 +22,9 @@ def get_args():
     parser.add_argument("--save_dir", type=str, required=True, help="where to store sweep")
     parser.add_argument("--no_wandb_logging", action="store_true", help="omit wandb logging")
     parser.add_argument("--dry_run", action="store_true", help="dry run sweep")
-    parser.add_argument("--layers", type=int, nargs='+', required=True, help="layers to train SAE on")
+    parser.add_argument(
+        "--layers", type=int, nargs="+", required=True, help="layers to train SAE on"
+    )
     args = parser.parse_args()
     return args
 
@@ -37,7 +39,7 @@ def run_sae_training(
 
     # model and data parameters
     model_name = "EleutherAI/pythia-70m-deduped"
-    dataset_name = '/share/data/datasets/pile/the-eye.eu/public/AI/pile/train/00.jsonl.zst'
+    dataset_name = "/share/data/datasets/pile/the-eye.eu/public/AI/pile/train/00.jsonl.zst"
     context_length = 64
 
     buffer_size = int(1e4)
@@ -95,41 +97,42 @@ def run_sae_training(
     for seed, initial_sparsity_penalty, expansion_factor in itertools.product(
         random_seeds, initial_sparsity_penalties, expansion_factors
     ):
-        trainer_configs.extend([
-            {
-                "trainer": StandardTrainer,
-                "dict_class": AutoEncoder,
-                "activation_dim": activation_dim,
-                "dict_size": expansion_factor * activation_dim,
-                "lr": learning_rate,
-                "l1_penalty": initial_sparsity_penalty,
-                "warmup_steps": warmup_steps,
-                "resample_steps": resample_steps,
-                "seed": seed,
-                "wandb_name": f"StandardTrainer-{model_name}-{submodule_name}",
-                "layer": layer,
-                "lm_name": model_name,
-                "device": device,
-                "submodule_name": submodule_name,
-            },
-            {
-                "trainer": TrainerTopK,
-                "dict_class": AutoEncoderTopK,
-                "activation_dim": activation_dim,
-                "dict_size": expansion_factor * activation_dim,
-                "k": ks[initial_sparsity_penalty],
-                "auxk_alpha": auxk_alpha,  # see Appendix A.2
-                "decay_start": decay_start,  # when does the lr decay start
-                "steps": steps,  # when when does training end
-                "seed": seed,
-                "device": DEVICE,
-                "layer": layer,
-                "lm_name": model_name,
-                "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
-                "submodule_name": submodule_name,
-            },
-
-        ])
+        trainer_configs.extend(
+            [
+                {
+                    "trainer": StandardTrainer,
+                    "dict_class": AutoEncoder,
+                    "activation_dim": activation_dim,
+                    "dict_size": expansion_factor * activation_dim,
+                    "lr": learning_rate,
+                    "l1_penalty": initial_sparsity_penalty,
+                    "warmup_steps": warmup_steps,
+                    "resample_steps": resample_steps,
+                    "seed": seed,
+                    "wandb_name": f"StandardTrainer-{model_name}-{submodule_name}",
+                    "layer": layer,
+                    "lm_name": model_name,
+                    "device": device,
+                    "submodule_name": submodule_name,
+                },
+                {
+                    "trainer": TrainerTopK,
+                    "dict_class": AutoEncoderTopK,
+                    "activation_dim": activation_dim,
+                    "dict_size": expansion_factor * activation_dim,
+                    "k": ks[initial_sparsity_penalty],
+                    "auxk_alpha": auxk_alpha,  # see Appendix A.2
+                    "decay_start": decay_start,  # when does the lr decay start
+                    "steps": steps,  # when when does training end
+                    "seed": seed,
+                    "device": DEVICE,
+                    "layer": layer,
+                    "lm_name": model_name,
+                    "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
+                    "submodule_name": submodule_name,
+                },
+            ]
+        )
 
     print(f"len trainer configs: {len(trainer_configs)}")
     save_dir = f"{save_dir}/{submodule_name}"
