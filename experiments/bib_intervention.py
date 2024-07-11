@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 import gc
-from collections import defaultdict
 import pickle
 import json
 from typing import Optional
@@ -228,55 +227,6 @@ def plot_feature_effects_above_threshold(nodes, threshold=0.05):
     plt.title("all_values")
     plt.show()
 
-
-# %%
-def plot_accuracy_comparison(test_accuracies: dict, T_effects: list):
-    # Get unique probe_idx values
-    for T_effect in T_effects:
-        probe_indices = list(test_accuracies[-1].keys())[:-1]
-
-        # Get ablated_classes values
-        ablated_class_indices = list(test_accuracies.keys())
-
-        # Set up the plot
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        # Set the width of each bar and the positions of the bars
-        width = 1 / (len(ablated_class_indices) + 1)
-        x = np.arange(len(probe_indices))
-
-        # Create bars for each class
-        for i, class_idx in enumerate(ablated_class_indices):
-            if class_idx == -1:
-                values = [test_accuracies[class_idx].get(idx, 0)[0] for idx in probe_indices]
-            else:
-                values = [
-                    test_accuracies[class_idx][T_effect].get(idx, 0)[0] for idx in probe_indices
-                ]
-
-            if class_idx == -1:
-                colors = "green"
-            else:
-                colors = ["orange" for _ in range(len(values))]
-                colors[i - 1] = "red"
-            ax.bar(x + i * width, values, width, color=colors)
-
-        # Customize the plot
-        ax.set_xlabel("Probe Index")
-        ax.set_ylabel("Test Accuracy")
-        ax.set_title(f"Probe accuracies for ablated models\n T_effect = {T_effect}")
-        ax.set_xticks(x + width / 2)
-        ax.set_xticklabels(probe_indices)
-        ax.legend(loc="lower right")
-
-        # Add some padding to the x-axis
-        plt.xlim(-width, len(probe_indices) - width / 2)
-
-        # Show the plot
-        plt.tight_layout()
-        plt.show()
-
-
 def get_probe_test_accuracy(
     probes: list[t.Tensor],
     all_class_list: list[int],
@@ -285,7 +235,7 @@ def get_probe_test_accuracy(
     verbose: bool,
 ):
     test_accuracies = {}
-    test_accuracies[-1] = defaultdict(list)
+    test_accuracies[-1] = {}
     for class_idx in all_class_list:
         batch_test_acts, batch_test_labels = prepare_probe_data(
             all_activations, class_idx, probe_batch_size
@@ -293,7 +243,7 @@ def get_probe_test_accuracy(
         test_acc_probe = test_probe(
             batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True
         )
-        test_accuracies[-1][class_idx].append(test_acc_probe)
+        test_accuracies[-1][class_idx] = test_acc_probe
         if verbose:
             print(f"class {class_idx} test accuracy: {test_acc_probe}")
     return test_accuracies
@@ -317,7 +267,7 @@ model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
 dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
-sweep_name = "_sweep0709"
+sweep_name = "_sweep0711"
 model_name = model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
@@ -327,7 +277,7 @@ test_set_size = 100
 probe_batch_size = 500
 
 # Attribution patching variables
-N_EVAL_BATCHES = 80
+N_EVAL_BATCHES = 10
 Ts_effect = [0.1, 0.01, 0.005, 0.001, 0.0005, 0.0001]
 batch_size_patching = 10
 
@@ -340,8 +290,7 @@ dataset, _ = load_and_prepare_dataset()
 train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
 
 probes = t.load("trained_bib_probes/probes_0705.pt")
-all_classes_list = list(probes.keys())[:20]
-
+all_classes_list = list(probes.keys())
 
 ### Get activations for original model, all classes
 print("Getting activations for original model")
@@ -402,7 +351,7 @@ for ae_path in ae_paths:
         gc.collect()
 
         for T_effect, feats in top_feats_to_ablate.items():
-            class_accuracies[ablated_class_idx][T_effect] = defaultdict(list)
+            class_accuracies[ablated_class_idx][T_effect] = {}
             if verbose:
                 print(f"Running ablation for T_effect = {T_effect}")
             test_acts_ablated = {}
@@ -429,9 +378,7 @@ for ae_path in ae_paths:
                     print(
                         f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {test_acc_probe}"
                     )
-                class_accuracies[ablated_class_idx][T_effect][evaluated_class_idx].append(
-                    test_acc_probe
-                )
+                class_accuracies[ablated_class_idx][T_effect][evaluated_class_idx] = test_acc_probe
 
             del test_acts_ablated
             del batch_test_acts
@@ -446,6 +393,52 @@ for ae_path in ae_paths:
     class_accuracies = utils.to_device(class_accuracies, "cpu")
     with open(ae_path + "class_accuracies.pkl", "wb") as f:
         pickle.dump(class_accuracies, f)
-    # %%
+# %%
 
-# plot_accuracy_comparison(class_accuracies, Ts_effect)
+def plot_accuracy_comparison(test_accuracies: dict, T_effects: list):
+    # Get unique probe_idx values
+    for T_effect in T_effects:
+        probe_indices = list(test_accuracies[-1].keys())
+
+        # Get ablated_classes values
+        ablated_class_indices = list(test_accuracies.keys())
+
+        # Set up the plot
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Set the width of each bar and the positions of the bars
+        width = 1 / (len(ablated_class_indices) + 1)
+        x = np.arange(len(probe_indices))
+
+        # Create bars for each class
+        for i, class_idx in enumerate(ablated_class_indices):
+            if class_idx == -1:
+                values = [test_accuracies[class_idx].get(idx, 0) for idx in probe_indices]
+            else:
+                values = [test_accuracies[class_idx][T_effect].get(idx, 0) for idx in probe_indices]
+
+            if class_idx == -1:
+                colors = "green"
+            else:
+                colors = ["orange" for _ in range(len(values))]
+                colors[i - 1] = "red"
+            ax.bar(x + i * width, values, width, color=colors)
+
+        # Customize the plot
+        ax.set_xlabel("Probe Index")
+        ax.set_ylabel("Test Accuracy")
+        ax.set_title(f"Probe accuracies for ablated models\n T_effect = {T_effect}")
+        ax.set_xticks(x + width / 2)
+        ax.set_xticklabels(probe_indices)
+        ax.legend(loc="lower right")
+
+        # Add some padding to the x-axis
+        plt.xlim(-width, len(probe_indices) - width / 2)
+
+        # Show the plot
+        plt.tight_layout()
+        plt.show()
+
+plot_accuracy_comparison(class_accuracies, Ts_effect)
+
+# %%
