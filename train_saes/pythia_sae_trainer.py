@@ -51,10 +51,10 @@ def run_sae_training(
     # sae training parameters
     # random_seeds = t.arange(10).tolist()
     random_seeds = [0]
-    initial_sparsity_penalties = [0.005, 0.01, 0.05]
+    initial_sparsity_penalties = [0.005, 0.01, 0.05, 0.1]
     ks = [20, 100, 200]
     ks = {p: ks[i] for i, p in enumerate(initial_sparsity_penalties)}
-    expansion_factors = [8, 16]
+    expansion_factors = [8, 32]
 
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
     save_steps = None
@@ -62,7 +62,7 @@ def run_sae_training(
     resample_steps = None
 
     # standard sae training parameters
-    learning_rate = 0.0001
+    learning_rates = [1e-3, 1e-4]
 
     # topk sae training parameters
     decay_start = 24000
@@ -95,8 +95,8 @@ def run_sae_training(
 
     # create the list of configs
     trainer_configs = []
-    for seed, initial_sparsity_penalty, expansion_factor in itertools.product(
-        random_seeds, initial_sparsity_penalties, expansion_factors
+    for seed, initial_sparsity_penalty, expansion_factor, learning_rate in itertools.product(
+        random_seeds, initial_sparsity_penalties, expansion_factors, learning_rates
     ):
         trainer_configs.extend(
             [
