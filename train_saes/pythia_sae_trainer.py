@@ -10,7 +10,7 @@ from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
 from dictionary_learning.trainers.top_k import TrainerTopK, AutoEncoderTopK
 from dictionary_learning.trainers.gdm import GatedSAETrainer
-from dictionary_learning.utils import zst_to_generator
+from dictionary_learning.utils import zst_to_generator, hf_dataset_to_generator
 from dictionary_learning.buffer import ActivationBuffer
 from dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder
 
@@ -51,7 +51,7 @@ def run_sae_training(
     # sae training parameters
     # random_seeds = t.arange(10).tolist()
     random_seeds = [0]
-    initial_sparsity_penalties = [0.005, 0.01, 0.05, 0.1]
+    initial_sparsity_penalties = [0.005, 0.01, 0.05]
     ks = [20, 100, 200]
     ks = {p: ks[i] for i, p in enumerate(initial_sparsity_penalties)}
     expansion_factors = [8, 32]
@@ -79,6 +79,7 @@ def run_sae_training(
     activation_dim = model.config.hidden_size
 
     generator = zst_to_generator(dataset_name)
+    # generator = hf_dataset_to_generator("monology/pile-uncopyrighted")
 
     activation_buffer = ActivationBuffer(
         generator,
