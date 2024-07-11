@@ -380,12 +380,9 @@ def main():
         t.cuda.empty_cache()
         gc.collect()
         print(f"Training probe for profession: {profession}")
-        train_input_batches = utils.batch_list(train_bios[profession], BATCH_SIZE)
 
-        test_input_batches = utils.batch_list(test_bios[profession], BATCH_SIZE)
-
-        all_train_acts[profession] = get_all_activations(train_input_batches, model)
-        all_test_acts[profession] = get_all_activations(test_input_batches, model)
+        all_train_acts[profession] = get_all_activations(train_bios[profession], model, BATCH_SIZE)
+        all_test_acts[profession] = get_all_activations(test_bios[profession], model, BATCH_SIZE)
 
         # For debugging
         # if i > 1:
