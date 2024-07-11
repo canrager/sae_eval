@@ -1,6 +1,7 @@
 import torch
 import json
 import os
+from typing import TypeAlias, Any
 
 from dictionary_learning import AutoEncoder, ActivationBuffer
 from dictionary_learning.dictionary import (
@@ -10,6 +11,8 @@ from dictionary_learning.dictionary import (
 )
 from dictionary_learning.trainers.top_k import AutoEncoderTopK
 from dictionary_learning.interp import examine_dimension
+
+submodule_alias: TypeAlias = Any
 
 
 def get_ae_group_paths(

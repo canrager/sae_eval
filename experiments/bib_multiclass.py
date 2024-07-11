@@ -344,7 +344,7 @@ def test_probe(
     probe: Probe,
     precomputed_acts: bool,
     get_acts: Optional[Callable] = None,
-):
+) -> float:
     if precomputed_acts is True:
         assert get_acts is None, "get_acts will not be used if precomputed_acts is True."
 

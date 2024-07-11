@@ -39,7 +39,6 @@ if DEBUGGING:
 else:
     tracer_kwargs = dict(scan=False, validate=False)
 
-
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
 
 # labels[0] = true labels (profession)
@@ -93,7 +92,7 @@ def get_effects_per_class(
     batch_size=10,
     patching_method="ig",
     steps=10,
-):
+) -> dict[utils.submodule_alias, t.Tensor]:
     probe = probes[class_idx]
     texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, batch_size)
     if n_batches is not None:
@@ -261,6 +260,7 @@ def plot_feature_effects_above_threshold(nodes, threshold=0.05):
     plt.scatter(range(len(all_values)), all_values)
     plt.title("all_values")
     plt.show()
+
 
 def get_probe_test_accuracy(
     probes: list[t.Tensor],
@@ -432,6 +432,7 @@ for ae_path in ae_paths:
         pickle.dump(class_accuracies, f)
 # %%
 
+
 def plot_accuracy_comparison(test_accuracies: dict, T_effects: list):
     # Get unique probe_idx values
     for T_effect in T_effects:
@@ -475,6 +476,7 @@ def plot_accuracy_comparison(test_accuracies: dict, T_effects: list):
         # Show the plot
         plt.tight_layout()
         plt.show()
+
 
 plot_accuracy_comparison(class_accuracies, Ts_effect)
 
