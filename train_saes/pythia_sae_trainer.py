@@ -9,9 +9,10 @@ import gc
 from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
 from dictionary_learning.trainers.top_k import TrainerTopK, AutoEncoderTopK
+from dictionary_learning.trainers.gdm import GatedSAETrainer
 from dictionary_learning.utils import zst_to_generator
 from dictionary_learning.buffer import ActivationBuffer
-from dictionary_learning.dictionary import AutoEncoder
+from dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder
 
 # %%
 DEVICE = "cuda:0"
@@ -125,10 +126,26 @@ def run_sae_training(
                     "decay_start": decay_start,  # when does the lr decay start
                     "steps": steps,  # when when does training end
                     "seed": seed,
-                    "device": DEVICE,
+                    "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
+                    "device": device,
                     "layer": layer,
                     "lm_name": model_name,
-                    "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
+                    "submodule_name": submodule_name,
+                },
+                {
+                    "trainer": GatedSAETrainer,
+                    "dict_class": GatedAutoEncoder,
+                    "activation_dim": activation_dim,
+                    "dict_size": expansion_factor * activation_dim,
+                    "lr": learning_rate,
+                    "l1_penalty": initial_sparsity_penalty,
+                    "warmup_steps": warmup_steps,
+                    "resample_steps": resample_steps,
+                    "seed": seed,
+                    "wandb_name": f"GatedSAETrainer-{model_name}-{submodule_name}",
+                    "device": device,
+                    "layer": layer,
+                    "lm_name": model_name,
                     "submodule_name": submodule_name,
                 },
             ]
