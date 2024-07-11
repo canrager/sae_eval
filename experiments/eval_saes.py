@@ -1,3 +1,4 @@
+import torch
 from nnsight import LanguageModel
 from datasets import load_dataset
 import json
@@ -15,6 +16,8 @@ else:
 
 DEVICE = "cuda"
 
+torch.set_grad_enabled(False)
+
 transcoder = False
 
 if transcoder:
@@ -22,22 +25,22 @@ if transcoder:
 else:
     io = "out"
 
-llm_batch_size = 16
+llm_batch_size = 200  # Approx 16GB VRAM on pythia70m with 128 context length
 buffer_size = 512
 context_length = 128
-sae_batch_size = 16
+sae_batch_size = 200
 n_inputs = 10000
 
 submodule_trainers = {
-    # 'resid_post_layer_3': {"trainer_ids" : list(range(10,12))},
-    "resid_post_layer_4": {"trainer_ids": list(range(10, 12, 2))},
+    "resid_post_layer_3": {"trainer_ids": None},
+    "resid_post_layer_4": {"trainer_ids": None},
 }
 
 model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
 dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
-sweep_name = "_sweep0709"
+sweep_name = "_sweep0711"
 model_name = model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
@@ -80,6 +83,14 @@ for ae_path in ae_paths:
     eval_results = evaluate(
         dictionary, activation_buffer, context_length, llm_batch_size, io=io, device=DEVICE
     )
+
+    hyperparameters = {
+        # TODO: Add batching so n_inputs is actually n_inputs
+        "n_inputs": sae_batch_size,
+        "context_length": context_length,
+    }
+    eval_results["hyperparameters"] = hyperparameters
+
     print(eval_results)
 
     output_filename = f"{ae_path}/eval_results.json"
