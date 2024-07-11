@@ -19,6 +19,8 @@ from typing import Callable, Optional
 from datasets import load_dataset
 from nnsight import LanguageModel
 
+import experiments.utils as utils
+
 # Configuration
 DEBUGGING = False
 DEVICE = "cuda:0"
@@ -143,10 +145,6 @@ def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
     return train_data, test_data
 
 
-def batch_list(input_list, batch_size):
-    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
-
-
 def get_train_test_data(dataset, train_set_size: int, test_set_size: int) -> tuple[dict, dict]:
     minimum_train_samples = train_set_size // 4
     minimum_test_samples = test_set_size // 4
@@ -177,8 +175,8 @@ def get_class_nonclass_samples(
     combined_labels = t.zeros(len(combined_samples), device=DEVICE)
     combined_labels[: len(class_samples)] = 1
 
-    batched_samples = batch_list(combined_samples, batch_size)
-    batched_labels = batch_list(combined_labels, batch_size)
+    batched_samples = utils.batch_list(combined_samples, batch_size)
+    batched_labels = utils.batch_list(combined_labels, batch_size)
 
     return batched_samples, batched_labels
 
@@ -401,9 +399,9 @@ def main():
         t.cuda.empty_cache()
         gc.collect()
         print(f"Training probe for profession: {profession}")
-        train_input_batches = batch_list(train_bios[profession], BATCH_SIZE)
+        train_input_batches = utils.batch_list(train_bios[profession], BATCH_SIZE)
 
-        test_input_batches = batch_list(test_bios[profession], BATCH_SIZE)
+        test_input_batches = utils.batch_list(test_bios[profession], BATCH_SIZE)
 
         all_train_acts[profession] = get_all_activations(train_input_batches, model)
         all_test_acts[profession] = get_all_activations(test_input_batches, model)

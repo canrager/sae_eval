@@ -152,6 +152,9 @@ def get_acts_ablated(text, model, submodules, dictionaries, to_ablate):
 
 # Get the output activations for the submodule where some saes are ablated
 def get_all_acts_ablated(text_batches: list[list[str]], model, submodules, dictionaries, to_ablate):
+
+    assert type(text_batches[0][0]) == str
+
     is_tuple = {}
     with t.no_grad(), model.trace("_"):
         for submodule in submodules:
@@ -325,11 +328,12 @@ model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 train_set_size = 500
 test_set_size = 100
 probe_batch_size = 500
+llm_batch_size = 50
 
 # Attribution patching variables
 N_EVAL_BATCHES = 80
 Ts_effect = [0.1, 0.01, 0.005, 0.001, 0.0005, 0.0001]
-batch_size_patching = 10
+patching_batch_size = 10
 
 ae_group_paths = utils.get_ae_group_paths(
     dictionaries_path, model_location, sweep_name, submodule_trainers
@@ -338,6 +342,9 @@ ae_paths = utils.get_ae_paths(ae_group_paths)
 
 dataset, _ = load_and_prepare_dataset()
 train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
+
+train_bios = utils.batch_dict_lists(train_bios, llm_batch_size)
+test_bios = utils.batch_dict_lists(test_bios, llm_batch_size)
 
 probes = t.load("trained_bib_probes/probes_0705.pt")
 all_classes_list = list(probes.keys())[:20]
@@ -383,7 +390,7 @@ for ae_path in ae_paths:
             ablated_class_idx,
             train_bios,
             N_EVAL_BATCHES,
-            batch_size=batch_size_patching,
+            batch_size=patching_batch_size,
             patching_method="attrib",
             steps=1,
         )

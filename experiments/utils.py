@@ -138,3 +138,15 @@ def get_submodule(model, model_name: str, submodule_str: str, layer: int):
             raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
 
     return submodule
+
+
+def batch_dict_lists(
+    input_dict: dict[int, list[str]], batch_size: int
+) -> dict[int, list[list[str]]]:
+    for key in input_dict.keys():
+        input_dict[key] = batch_list(input_dict[key], batch_size)
+    return input_dict
+
+
+def batch_list(input_list: list[str], batch_size: int) -> list[list[str]]:
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
