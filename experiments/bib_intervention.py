@@ -25,7 +25,6 @@ from dictionary_learning.utils import hf_dataset_to_generator
 from experiments.bib_multiclass import (
     load_and_prepare_dataset,
     get_train_test_data,
-    get_class_nonclass_samples,
     test_probe,
     prepare_probe_data,
     get_all_activations,
@@ -58,6 +57,30 @@ def metric_fn(model, labels=None, probe=None):
 
 
 # Attribution Patching
+
+
+def get_class_nonclass_samples(
+    data: dict, class_idx: int, batch_size: int
+) -> tuple[list, t.Tensor]:
+    """This is for getting equal number of text samples from the chosen class and all other classes.
+    We use this for attribution patching."""
+    class_samples = data[class_idx]
+    nonclass_samples = []
+
+    for profession in data:
+        if profession != class_idx:
+            nonclass_samples.extend(data[profession])
+
+    nonclass_samples = random.sample(nonclass_samples, len(class_samples))
+
+    combined_samples = class_samples + nonclass_samples
+    combined_labels = t.zeros(len(combined_samples), device=DEVICE)
+    combined_labels[: len(class_samples)] = 1
+
+    batched_samples = utils.batch_list(combined_samples, batch_size)
+    batched_labels = utils.batch_list(combined_labels, batch_size)
+
+    return batched_samples, batched_labels
 
 
 def get_effects_per_class(
@@ -151,8 +174,17 @@ def get_acts_ablated(text, model, submodules, dictionaries, to_ablate):
 
 
 # Get the output activations for the submodule where some saes are ablated
-def get_all_acts_ablated(text_batches: list[list[str]], model, submodules, dictionaries, to_ablate):
+@t.no_grad()
+def get_all_acts_ablated(
+    text_inputs: list[str],
+    model: LanguageModel,
+    submodules,
+    dictionaries,
+    to_ablate,
+    batch_size: int,
+):
 
+    text_batches = utils.batch_list(text_inputs, batch_size)
     assert type(text_batches[0][0]) == str
 
     is_tuple = {}
@@ -312,15 +344,15 @@ activation_dim = 512
 verbose = True
 
 submodule_trainers = {
-    # 'resid_post_layer_3': {"trainer_ids" : list(range(10,12))},
-    "resid_post_layer_4": {"trainer_ids": list(range(10, 12, 2))},
+    "resid_post_layer_3": {"trainer_ids": list(range(0, 12, 2))},
+    "resid_post_layer_4": {"trainer_ids": list(range(0, 12, 2))},
 }
 
 model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
 dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
-sweep_name = "_sweep0709"
+sweep_name = "_sweep0711"
 model_name = model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
@@ -343,9 +375,6 @@ ae_paths = utils.get_ae_paths(ae_group_paths)
 dataset, _ = load_and_prepare_dataset()
 train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
 
-train_bios = utils.batch_dict_lists(train_bios, llm_batch_size)
-test_bios = utils.batch_dict_lists(test_bios, llm_batch_size)
-
 probes = t.load("trained_bib_probes/probes_0705.pt")
 all_classes_list = list(probes.keys())[:20]
 
@@ -354,7 +383,7 @@ all_classes_list = list(probes.keys())[:20]
 print("Getting activations for original model")
 test_acts = {}
 for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated class"):
-    class_test_acts = get_all_activations(test_bios[class_idx], model)
+    class_test_acts = get_all_activations(test_bios[class_idx], model, llm_batch_size)
     test_acts[class_idx] = class_test_acts
 
 test_accuracies = get_probe_test_accuracy(
@@ -420,6 +449,7 @@ for ae_path in ae_paths:
                     submodules,
                     dictionaries,
                     feats,
+                    llm_batch_size,
                 )
 
             for evaluated_class_idx in all_classes_list:

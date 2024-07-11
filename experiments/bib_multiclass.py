@@ -157,30 +157,6 @@ def get_train_test_data(dataset, train_set_size: int, test_set_size: int) -> tup
     return train_bios, test_bios
 
 
-def get_class_nonclass_samples(
-    data: dict, class_idx: int, batch_size: int
-) -> tuple[list, t.Tensor]:
-    """This is for getting equal number of text samples from the chosen class and all other classes.
-    We use this for attribution patching."""
-    class_samples = data[class_idx]
-    nonclass_samples = []
-
-    for profession in data:
-        if profession != class_idx:
-            nonclass_samples.extend(data[profession])
-
-    nonclass_samples = random.sample(nonclass_samples, len(class_samples))
-
-    combined_samples = class_samples + nonclass_samples
-    combined_labels = t.zeros(len(combined_samples), device=DEVICE)
-    combined_labels[: len(class_samples)] = 1
-
-    batched_samples = utils.batch_list(combined_samples, batch_size)
-    batched_labels = utils.batch_list(combined_labels, batch_size)
-
-    return batched_samples, batched_labels
-
-
 def sample_from_classes(data_dict, chosen_class):
     total_samples = len(data_dict[chosen_class])
     all_classes = list(data_dict.keys())
@@ -241,7 +217,12 @@ def get_acts(text):
 
 
 @t.no_grad()
-def get_all_activations(text_batches: list[list[str]], model) -> t.Tensor:
+def get_all_activations(text_inputs: list[str], model: LanguageModel, batch_size: int) -> t.Tensor:
+
+    text_batches = utils.batch_list(text_inputs, batch_size)
+
+    assert type(text_batches[0][0]) == str
+
     all_acts_list_BD = []
     for text_batch_BL in text_batches:
         with model.trace(text_batch_BL, **tracer_kwargs):
