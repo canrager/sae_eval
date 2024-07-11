@@ -8,7 +8,7 @@ import gc
 
 from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
-from dictionary_learning.trainers.top_k import TopKTrainer, AutoEncoderTopK
+from dictionary_learning.trainers.top_k import TrainerTopK, AutoEncoderTopK
 from dictionary_learning.utils import zst_to_generator
 from dictionary_learning.buffer import ActivationBuffer
 from dictionary_learning.dictionary import AutoEncoder
@@ -22,7 +22,7 @@ def get_args():
     parser.add_argument("--save_dir", type=str, required=True, help="where to store sweep")
     parser.add_argument("--no_wandb_logging", action="store_true", help="omit wandb logging")
     parser.add_argument("--dry_run", action="store_true", help="dry run sweep")
-    parser.add_argument("--layer", type=int, required=True, help="layer to train SAE on")
+    parser.add_argument("--layers", type=int, nargs='+', required=True, help="layers to train SAE on")
     args = parser.parse_args()
     return args
 
@@ -38,7 +38,7 @@ def run_sae_training(
     # model and data parameters
     model_name = "EleutherAI/pythia-70m-deduped"
     dataset_name = '/share/data/datasets/pile/the-eye.eu/public/AI/pile/train/00.jsonl.zst'
-    context_length = 128
+    context_length = 64
 
     buffer_size = int(1e4)
     llm_batch_size = 64  # 256 for A100 GPU, 64 for 1080ti
@@ -51,7 +51,7 @@ def run_sae_training(
     initial_sparsity_penalties = [0.005, 0.01, 0.05]
     ks = [20, 100, 200]
     ks = {p: ks[i] for i, p in enumerate(initial_sparsity_penalties)}
-    expansion_factors = [16, 64]
+    expansion_factors = [8, 16]
 
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
     save_steps = None
@@ -71,7 +71,7 @@ def run_sae_training(
 
     model = LanguageModel(model_name, dispatch=True, device_map=DEVICE)
     submodule = model.gpt_neox.layers[layer]
-    submodule_name = f"resid{layer}"
+    submodule_name = f"resid_post_layer_{layer}"
     io = "out"
     activation_dim = model.config.hidden_size
 
@@ -110,9 +110,10 @@ def run_sae_training(
                 "layer": layer,
                 "lm_name": model_name,
                 "device": device,
+                "submodule_name": submodule_name,
             },
             {
-                "trainer": TopKTrainer,
+                "trainer": TrainerTopK,
                 "dict_class": AutoEncoderTopK,
                 "activation_dim": activation_dim,
                 "dict_size": expansion_factor * activation_dim,
@@ -125,12 +126,13 @@ def run_sae_training(
                 "layer": layer,
                 "lm_name": model_name,
                 "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
+                "submodule_name": submodule_name,
             },
 
         ])
 
     print(f"len trainer configs: {len(trainer_configs)}")
-    save_dir = f"{save_dir}/layer_{layer}"
+    save_dir = f"{save_dir}/{submodule_name}"
 
     if not dry_run:
         # actually run the sweep
@@ -146,10 +148,11 @@ def run_sae_training(
 
 if __name__ == "__main__":
     args = get_args()
-    run_sae_training(
-        layer=args.layer,
-        save_dir=args.save_dir,
-        device="cuda:0",
-        dry_run=args.dry_run,
-        no_wandb_logging=args.no_wandb_logging,
-    )
+    for layer in args.layers:
+        run_sae_training(
+            layer=layer,
+            save_dir=args.save_dir,
+            device="cuda:0",
+            dry_run=args.dry_run,
+            no_wandb_logging=args.no_wandb_logging,
+        )
