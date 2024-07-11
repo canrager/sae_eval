@@ -124,18 +124,17 @@ def get_submodule(model, model_name: str, submodule_str: str, layer: int):
     allowed_submodules = ["attention_out", "mlp_out", "resid_post"]
     allowed_model_names = ["EleutherAI/pythia-70m-deduped"]
 
-    if submodule_str not in allowed_submodules:
-        raise ValueError(f"submodule_str must be one of {allowed_submodules}")
-
     if model_name not in allowed_model_names:
         raise ValueError(f"model_name must be one of {allowed_model_names}")
 
     if model_name == "EleutherAI/pythia-70m-deduped":
-        if submodule_str == "attention_out":
+        if "attention_out" in submodule_str:
             submodule = model.gpt_neox.layers[layer].attention
-        elif submodule_str == "mlp_out":
+        elif "mlp_out" in submodule_str:
             submodule = model.gpt_neox.layers[layer].mlp
-        elif submodule_str == "resid_post":
+        elif "resid_post" in submodule_str:
             submodule = model.gpt_neox.layers[layer]
+        else:
+            raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
 
     return submodule
