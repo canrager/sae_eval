@@ -19,6 +19,8 @@ from typing import Callable, Optional
 from datasets import load_dataset
 from nnsight import LanguageModel
 
+import experiments.utils as utils
+
 # Configuration
 DEBUGGING = False
 DEVICE = "cuda:0"
@@ -143,10 +145,6 @@ def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
     return train_data, test_data
 
 
-def batch_list(input_list, batch_size):
-    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
-
-
 def get_train_test_data(dataset, train_set_size: int, test_set_size: int) -> tuple[dict, dict]:
     minimum_train_samples = train_set_size // 4
     minimum_test_samples = test_set_size // 4
@@ -157,30 +155,6 @@ def get_train_test_data(dataset, train_set_size: int, test_set_size: int) -> tup
     train_bios, test_bios = ensure_shared_keys(train_bios, test_bios)
 
     return train_bios, test_bios
-
-
-def get_class_nonclass_samples(
-    data: dict, class_idx: int, batch_size: int
-) -> tuple[list, t.Tensor]:
-    """This is for getting equal number of text samples from the chosen class and all other classes.
-    We use this for attribution patching."""
-    class_samples = data[class_idx]
-    nonclass_samples = []
-
-    for profession in data:
-        if profession != class_idx:
-            nonclass_samples.extend(data[profession])
-
-    nonclass_samples = random.sample(nonclass_samples, len(class_samples))
-
-    combined_samples = class_samples + nonclass_samples
-    combined_labels = t.zeros(len(combined_samples), device=DEVICE)
-    combined_labels[: len(class_samples)] = 1
-
-    batched_samples = batch_list(combined_samples, batch_size)
-    batched_labels = batch_list(combined_labels, batch_size)
-
-    return batched_samples, batched_labels
 
 
 def sample_from_classes(data_dict, chosen_class):
@@ -243,7 +217,12 @@ def get_acts(text):
 
 
 @t.no_grad()
-def get_all_activations(text_batches: list[list[str]], model) -> t.Tensor:
+def get_all_activations(text_inputs: list[str], model: LanguageModel, batch_size: int) -> t.Tensor:
+
+    text_batches = utils.batch_list(text_inputs, batch_size)
+
+    assert type(text_batches[0][0]) == str
+
     all_acts_list_BD = []
     for text_batch_BL in text_batches:
         with model.trace(text_batch_BL, **tracer_kwargs):
@@ -401,9 +380,9 @@ def main():
         t.cuda.empty_cache()
         gc.collect()
         print(f"Training probe for profession: {profession}")
-        train_input_batches = batch_list(train_bios[profession], BATCH_SIZE)
+        train_input_batches = utils.batch_list(train_bios[profession], BATCH_SIZE)
 
-        test_input_batches = batch_list(test_bios[profession], BATCH_SIZE)
+        test_input_batches = utils.batch_list(test_bios[profession], BATCH_SIZE)
 
         all_train_acts[profession] = get_all_activations(train_input_batches, model)
         all_test_acts[profession] = get_all_activations(test_input_batches, model)
