@@ -163,7 +163,10 @@ cython_debug/
 phenomena/vocab/*.json
 phenomena/circuits/*
 circuits/*
-nohup.out
+*.out
+*.sh
+**/wandb
 
 **/*_datasets/*
 **/*_probes/*
+**/trained_saes/*
