@@ -6,18 +6,26 @@ import numpy as np
 from tqdm import tqdm
 import gc
 from collections import defaultdict
-
-parent_dir = os.path.abspath("..")
-sys.path.append(parent_dir)
-
+import pickle
+import json
+from typing import Optional
 from datasets import load_dataset
 import random
 from nnsight import LanguageModel
 import torch as t
 from torch import nn
+
+parent_dir = os.path.abspath("..")
+sys.path.append(parent_dir)
+
 from attribution import patching_effect
 from dictionary_learning import AutoEncoder, ActivationBuffer
-from dictionary_learning.dictionary import IdentityDict
+from dictionary_learning.dictionary import (
+    IdentityDict,
+    GatedAutoEncoder,
+    AutoEncoderNew,
+)
+from dictionary_learning.trainers.top_k import AutoEncoderTopK
 from dictionary_learning.interp import examine_dimension
 from dictionary_learning.utils import hf_dataset_to_generator
 
@@ -39,52 +47,81 @@ else:
     tracer_kwargs = dict(scan=False, validate=False)
 
 
-# loading dictionaries
-def load_submodules_and_dictionaries(
-    model,
-    probe_layer,
-    activation_dim,
-    load_embed=True,
-    load_attn=True,
-    load_mlp=True,
-    load_resid=True,
-    DEVICE="cpu",
-):
-    dict_id = 10
-    expansion_factor = 64
-    dictionary_size = expansion_factor * activation_dim
+def get_submodule(model, model_name: str, submodule_str: str, layer: int):
+    allowed_submodules = ["attention_out", "mlp_out", "resid_post"]
+    allowed_model_names = ["EleutherAI/pythia-70m-deduped"]
 
-    submodules = []
-    dictionaries = {}
+    if submodule_str not in allowed_submodules:
+        raise ValueError(f"submodule_str must be one of {allowed_submodules}")
 
-    if load_embed:
-        submodules.append(model.gpt_neox.embed_in)
-        dictionaries[model.gpt_neox.embed_in] = AutoEncoder.from_pretrained(
-            f"../dictionary_learning/dictionaries/pythia-70m-deduped/embed/{dict_id}_{dictionary_size}/ae.pt",
-            device=DEVICE,
-        )
-    for i in range(probe_layer + 1):
-        if load_attn:
-            submodules.append(model.gpt_neox.layers[i].attention)
-            dictionaries[model.gpt_neox.layers[i].attention] = AutoEncoder.from_pretrained(
-                f"../dictionary_learning/dictionaries/pythia-70m-deduped/attn_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt",
-                device=DEVICE,
-            )
+    if model_name not in allowed_model_names:
+        raise ValueError(f"model_name must be one of {allowed_model_names}")
 
-        if load_mlp:
-            submodules.append(model.gpt_neox.layers[i].mlp)
-            dictionaries[model.gpt_neox.layers[i].mlp] = AutoEncoder.from_pretrained(
-                f"../dictionary_learning/dictionaries/pythia-70m-deduped/mlp_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt",
-                device=DEVICE,
-            )
+    if model_name == "EleutherAI/pythia-70m-deduped":
+        if submodule_str == "attention_out":
+            submodule = model.gpt_neox.layers[layer].attention
+        elif submodule_str == "mlp_out":
+            submodule = model.gpt_neox.layers[layer].mlp
+        elif submodule_str == "resid_post":
+            submodule = model.gpt_neox.layers[layer]
 
-        if load_resid:
-            submodules.append(model.gpt_neox.layers[i])
-            dictionaries[model.gpt_neox.layers[i]] = AutoEncoder.from_pretrained(
-                f"../dictionary_learning/dictionaries/pythia-70m-deduped/resid_out_layer{i}/{dict_id}_{dictionary_size}/ae.pt",
-                device=DEVICE,
-            )
-    return submodules, dictionaries
+    return submodule
+
+
+def load_dictionary(model, first_model_name: str, base_path: str, device: str):
+    print(f"Loading dictionary from {base_path}")
+    ae_path = f"{base_path}ae.pt"
+    config_path = f"{base_path}config.json"
+
+    with open(config_path, "r") as f:
+        config = json.load(f)
+
+    submodule_str = config["trainer"]["submodule_name"]
+    layer = config["trainer"]["layer"]
+    model_name = config["trainer"]["lm_name"]
+    dict_class = config["trainer"]["dict_class"]
+
+    assert (
+        model_name == first_model_name
+    ), f"Model name {model_name} does not match first model name {first_model_name}"
+
+    submodule = get_submodule(model, model_name, submodule_str, layer)
+
+    if dict_class == "AutoEncoder":
+        dictionary = AutoEncoder.from_pretrained(ae_path, device=device)
+    # elif dict_class == "IdentityDict":
+    #     dictionary = IdentityDict.from_pretrained(ae_path, device=device)
+    elif dict_class == "GatedAutoEncoder":
+        dictionary = GatedAutoEncoder.from_pretrained(ae_path, device=device)
+    elif dict_class == "AutoEncoderNew":
+        dictionary = AutoEncoderNew.from_pretrained(ae_path, device=device)
+    elif dict_class == "AutoEncoderTopK":
+        dictionary = AutoEncoderTopK.from_pretrained(ae_path, device=device)
+    else:
+        raise ValueError(f"Dictionary class {dict_class} not supported")
+
+    return submodule, dictionary, config
+
+
+def get_nested_folders(path: str) -> list[str]:
+    """
+    Recursively get a list of folders that contain an ae.pt file, starting the search from the given path
+    """
+    folder_names = []
+
+    for root, dirs, files in os.walk(path):
+        if "ae.pt" in files:
+            folder_names.append(root + "/")
+
+    return folder_names
+
+
+def check_for_empty_folders(ae_group_paths: list[str]) -> bool:
+    """So your run doesn't crash / do nothing interesting because folder 13 is empty."""
+    for ae_group_path in ae_group_paths:
+        if len(get_nested_folders(ae_group_path)) == 0:
+            raise ValueError(f"No folders found in {ae_group_path}")
+    return True
 
 
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
@@ -322,41 +359,122 @@ def plot_accuracy_comparison(test_accuracies: dict, T_effects: list):
         plt.show()
 
 
-plot_accuracy_comparison(test_accuracies, Ts_effect)
+def get_ae_group_paths(
+    dictionaries_path: str, model_location: str, sweep_name: str, submodule_trainers: dict
+) -> list[str]:
+    for submodule in submodule_trainers.keys():
+        submodule_trainers[submodule]["model_location"] = model_location
+        submodule_trainers[submodule]["sweep_name"] = sweep_name
+
+    ae_group_paths = []
+
+    for submodule in submodule_trainers.keys():
+        trainer_ids = submodule_trainers[submodule]["trainer_ids"]
+        model_location = submodule_trainers[submodule]["model_location"]
+        sweep_name = submodule_trainers[submodule]["sweep_name"]
+
+        base_filename = f"{dictionaries_path}/{model_location}{sweep_name}/{submodule}"
+
+        if trainer_ids is None:
+            ae_group_paths.append(base_filename)
+        else:
+            for trainer_id in trainer_ids:
+                ae_group_paths.append(f"{base_filename}/trainer_{trainer_id}")
+
+    check_for_empty_folders(ae_group_paths)
+
+    return ae_group_paths
+
+
+def get_ae_paths(ae_group_paths: list[str]) -> list[str]:
+    ae_paths = []
+    for ae_group_path in ae_group_paths:
+        ae_paths.extend(get_nested_folders(ae_group_path))
+    return ae_paths
+
+
+def get_probe_test_accuracy(
+    probes: list[t.Tensor],
+    all_class_list: list[int],
+    all_activations: dict[int, t.Tensor],
+    probe_batch_size: int,
+    verbose: bool,
+):
+    test_accuracies = {}
+    test_accuracies[-1] = defaultdict(list)
+    for class_idx in all_class_list:
+        batch_test_acts, batch_test_labels = prepare_probe_data(
+            all_activations, class_idx, probe_batch_size
+        )
+        test_acc_probe = test_probe(
+            batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True
+        )
+        test_accuracies[-1][class_idx].append(test_acc_probe)
+        if verbose:
+            print(f"class {class_idx} test accuracy: {test_acc_probe}")
+    return test_accuracies
+
+
+def to_device(data, device):
+    """
+    Recursively move tensors in a nested dictionary to CPU.
+    """
+    if isinstance(data, dict):
+        # If it's a dictionary, apply recursively to each value
+        return {key: to_device(value, device) for key, value in data.items()}
+    elif isinstance(data, list):
+        # If it's a list, apply recursively to each element
+        return [to_device(item, device) for item in data]
+    elif isinstance(data, t.Tensor):
+        # If it's a tensor, move it to CPU
+        return data.to(device)
+    else:
+        # If it's neither, return it as is
+        return data
 
 
 # %%
 # Load model and dictionaries
 DEVICE = "cuda:0"
+# TODO: improve scoping of probe layer int
 layer = 4  # model layer for attaching linear classification head
 SEED = 42
-model = LanguageModel("EleutherAI/pythia-70m-deduped", device_map=DEVICE, dispatch=True)
 activation_dim = 512
 verbose = True
 
-submodules, dictionaries = load_submodules_and_dictionaries(
-    model,
-    layer,
-    activation_dim,
-    load_embed=False,
-    load_attn=False,
-    load_mlp=False,
-    load_resid=True,
-    DEVICE=DEVICE,
-)
+submodule_trainers = {
+    # 'resid_post_layer_3': {"trainer_ids" : list(range(10,12))},
+    "resid_post_layer_4": {"trainer_ids": list(range(10, 12, 2))},
+}
 
+model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
+dictionaries_path = "../dictionary_learning/dictionaries"
+
+model_location = "pythia70m"
+sweep_name = "_sweep0709"
+model_name = model_name_lookup[model_location]
+model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
 # Load datset and probes
 train_set_size = 500
 test_set_size = 100
-batch_size_act_cache = 500
+probe_batch_size = 500
+
+# Attribution patching variables
+N_EVAL_BATCHES = 80
+Ts_effect = [0.1, 0.01, 0.005, 0.001, 0.0005, 0.0001]
+batch_size_patching = 10
+
+ae_group_paths = get_ae_group_paths(
+    dictionaries_path, model_location, sweep_name, submodule_trainers
+)
+ae_paths = get_ae_paths(ae_group_paths)
 
 dataset, _ = load_and_prepare_dataset()
 train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
-test_accuracies = {}  # class ablated, class probe accuracy
 
 probes = t.load("trained_bib_probes/probes_0705.pt")
-all_classes_list = list(probes.keys())[:4]
+all_classes_list = list(probes.keys())[:20]
 
 
 ### Get activations for original model, all classes
@@ -366,88 +484,103 @@ for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated 
     class_test_acts = get_all_activations(test_bios[class_idx], model)
     test_acts[class_idx] = class_test_acts
 
-test_accuracies[-1] = defaultdict(list)
-for class_idx in all_classes_list:
-    batch_test_acts, batch_test_labels = prepare_probe_data(
-        test_acts, class_idx, batch_size_act_cache
-    )
-    test_acc_probe = test_probe(
-        batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True
-    )
-    test_accuracies[-1][class_idx].append(test_acc_probe)
-    if verbose:
-        print(f"class {class_idx} test accuracy: {test_acc_probe}")
+test_accuracies = get_probe_test_accuracy(
+    probes, all_classes_list, test_acts, probe_batch_size, verbose
+)
 
 ### Get activations for ablated models
 # ablating the top features for each class
 print("Getting activations for ablated models")
 
-N_EVAL_BATCHES = 5
-Ts_effect = [0.1, 0.01, 0.005, 0.001]
-batch_size_patching = 10
+for ae_path in ae_paths:
+    submodules = []
+    dictionaries = {}
+    submodule, dictionary, config = load_dictionary(model, model_name, ae_path, DEVICE)
+    submodules.append(submodule)
+    dictionaries[submodule] = dictionary
+    dict_size = config["trainer"]["dict_size"]
 
-for ablated_class_idx in all_classes_list:
-    test_accuracies[ablated_class_idx] = {}
+    # ae_name_lookup is useful if we are using attribution patching on multiple submodules
+    ae_name_lookup = {submodule: ae_path}
 
-    nodes = get_effects_per_class(
-        model,
-        submodules,
-        dictionaries,
-        probes,
-        ablated_class_idx,
-        train_bios,
-        N_EVAL_BATCHES,
-        batch_size=batch_size_patching,
-        patching_method="attrib",
-        steps=1,
-    )
+    node_effects = {}
+    class_accuracies = test_accuracies.copy()
+    for ablated_class_idx in all_classes_list:
+        class_accuracies[ablated_class_idx] = {}
+        node_effects[ablated_class_idx] = {}
 
-    # plot_feature_effects_above_threshold(nodes, threshold=T_effect)
-    top_feats_to_ablate = {}
-    for T_effect in Ts_effect:
-        top_feats_to_ablate[T_effect] = select_significant_features(
-            submodules, nodes, activation_dim * 64, T_effect=T_effect, verbose=verbose
+        nodes = get_effects_per_class(
+            model,
+            submodules,
+            dictionaries,
+            probes,
+            ablated_class_idx,
+            train_bios,
+            N_EVAL_BATCHES,
+            batch_size=batch_size_patching,
+            patching_method="attrib",
+            steps=1,
         )
-    del nodes
-    t.cuda.empty_cache()
-    gc.collect()
+        for submodule in nodes:
+            submodule_ae_path = ae_name_lookup[submodule]
+            node_effects[ablated_class_idx][submodule_ae_path] = nodes[submodule]
 
-    for T_effect, feats in top_feats_to_ablate.items():
-        test_accuracies[ablated_class_idx][T_effect] = defaultdict(list)
-        if verbose:
-            print(f"Running ablation for T_effect = {T_effect}")
-        test_acts_ablated = {}
-        for evaluated_class_idx in all_classes_list:
-            test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
-                test_bios[evaluated_class_idx],
-                model,
-                submodules,
-                dictionaries,
-                feats,
+        # plot_feature_effects_above_threshold(nodes, threshold=T_effect)
+        top_feats_to_ablate = {}
+        for T_effect in Ts_effect:
+            top_feats_to_ablate[T_effect] = select_significant_features(
+                submodules, nodes, dict_size, T_effect=T_effect, verbose=verbose
             )
-
-        for evaluated_class_idx in all_classes_list:
-            batch_test_acts, batch_test_labels = prepare_probe_data(
-                test_acts_ablated, evaluated_class_idx, batch_size_act_cache
-            )
-            test_acc_probe = test_probe(
-                batch_test_acts,
-                batch_test_labels,
-                probes[evaluated_class_idx],
-                precomputed_acts=True,
-            )
-            if verbose:
-                print(
-                    f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {test_acc_probe}"
-                )
-            test_accuracies[ablated_class_idx][T_effect][evaluated_class_idx].append(test_acc_probe)
-
-        del test_acts_ablated
-        del batch_test_acts
-        del batch_test_labels
+        del nodes
         t.cuda.empty_cache()
         gc.collect()
 
-# %%
+        for T_effect, feats in top_feats_to_ablate.items():
+            class_accuracies[ablated_class_idx][T_effect] = defaultdict(list)
+            if verbose:
+                print(f"Running ablation for T_effect = {T_effect}")
+            test_acts_ablated = {}
+            for evaluated_class_idx in all_classes_list:
+                test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
+                    test_bios[evaluated_class_idx],
+                    model,
+                    submodules,
+                    dictionaries,
+                    feats,
+                )
 
-plot_accuracy_comparison(test_accuracies, Ts_effect)
+            for evaluated_class_idx in all_classes_list:
+                batch_test_acts, batch_test_labels = prepare_probe_data(
+                    test_acts_ablated, evaluated_class_idx, probe_batch_size
+                )
+                test_acc_probe = test_probe(
+                    batch_test_acts,
+                    batch_test_labels,
+                    probes[evaluated_class_idx],
+                    precomputed_acts=True,
+                )
+                if verbose:
+                    print(
+                        f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {test_acc_probe}"
+                    )
+                class_accuracies[ablated_class_idx][T_effect][evaluated_class_idx].append(
+                    test_acc_probe
+                )
+
+            del test_acts_ablated
+            del batch_test_acts
+            del batch_test_labels
+            t.cuda.empty_cache()
+            gc.collect()
+
+    node_effects = to_device(node_effects, "cpu")
+    print(node_effects)
+    with open(ae_path + "node_effects.pkl", "wb") as f:
+        pickle.dump(node_effects, f)
+
+    class_accuracies = to_device(class_accuracies, "cpu")
+    with open(ae_path + "class_accuracies.pkl", "wb") as f:
+        pickle.dump(class_accuracies, f)
+    # %%
+
+# plot_accuracy_comparison(class_accuracies, Ts_effect)
