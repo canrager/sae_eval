@@ -354,7 +354,7 @@ layer = 4  # model layer for attaching linear classification head
 SEED = 42
 activation_dim = 512
 verbose = False
-select_unique_features = True
+select_unique_features = False
 
 submodule_trainers = {
     "resid_post_layer_4": {"trainer_ids": [10]},
