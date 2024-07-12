@@ -154,3 +154,36 @@ def batch_dict_lists(
 
 def batch_list(input_list: list[str], batch_size: int) -> list[list[str]]:
     return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
+
+
+def get_ctx_length(ae_paths: list[str]) -> int:
+    first_ctx_len = None
+
+    for path in ae_paths:
+        config_path = os.path.join(path, "config.json")
+
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
+        ctx_len = config["buffer"]["ctx_len"]
+
+        if first_ctx_len is None:
+            first_ctx_len = ctx_len
+            print(f"Context length of the first path: {first_ctx_len}")
+        else:
+            assert (
+                ctx_len == first_ctx_len
+            ), f"Mismatch in ctx_len at {path}. Expected {first_ctx_len}, got {ctx_len}"
+
+    if first_ctx_len is None:
+        raise ValueError("No paths found.")
+    else:
+        print("All context lengths are the same.")
+    return first_ctx_len
+
+
+def trim_bios_to_context_length(bios_dict: dict[int, str], context_length: int) -> dict[int, str]:
+    trimmed_bios = {}
+    for key, bio_list in bios_dict.items():
+        trimmed_bios[key] = [bio[: context_length + 1] for bio in bio_list]
+    return trimmed_bios
