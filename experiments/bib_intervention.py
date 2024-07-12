@@ -374,16 +374,16 @@ probe_layer = class_probing.probe_layer_lookup[model_name]
 
 # Load datset and probes
 train_set_size = 500
-test_set_size = 100
+test_set_size = 500
 probe_batch_size = 500
-llm_batch_size = 50
+llm_batch_size = 125
 
 # Attribution patching variables
-N_EVAL_BATCHES = 10
-patching_batch_size = 10
+N_EVAL_BATCHES = 5
+patching_batch_size = 100
 
 # For select_significant_features()
-# T_effect = [0.1, 0.01, 0.005, 0.001, 0.0005, 0.0001]
+T_effects_all_classes = [0.1, 0.01, 0.005, 0.001]
 T_effects_all_classes = [0.001]
 
 # For select_unique_class_features()
