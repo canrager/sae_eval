@@ -298,8 +298,8 @@ model_name = model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
 # Load datset and probes
-train_set_size = 500
-test_set_size = 100
+train_set_size = 200
+test_set_size = 400
 probe_batch_size = 1000
 llm_batch_size = 200
 
@@ -337,8 +337,8 @@ test_accuracies = get_probe_test_accuracy(
 # %%
 ### Get activations for ablated models
 # ablating the top features for each class
-T_effects = [0.0001]
-T_max_sideeffect = 1
+T_effects = [0.001, 0.0005, 0.0001]
+T_max_sideeffect = 10
 
 
 def select_significant_features(
@@ -391,14 +391,15 @@ def select_unique_class_features(
                     sideeffect_features.extend(non_neglectable_feats[other_class_idx][submodule])
             sideeffect_features = set(sideeffect_features)
             if verbose:
+                print(f"significant features: {len(significant_feats[abl_class_idx][submodule])}")
                 print(f"sideeffect features: {len(sideeffect_features)}")
 
             # Add features above T_effect that are not in the blacklist
-            for feat_idx in significant_feats:
+            for feat_idx in significant_feats[abl_class_idx][submodule]:
                 if feat_idx not in sideeffect_features:
                     feats_above_T[abl_class_idx][submodule].append(feat_idx)
                     total_features_per_abl_class += 1
-        feats_above_T[abl_class_idx] = {submodule: n_hot(feats, activation_dim) for submodule, feats in feats_above_T[abl_class_idx].items()}
+            feats_above_T[abl_class_idx][submodule] = n_hot(feats_above_T[abl_class_idx][submodule], activation_dim)
         if verbose:
             print(f'T_effect {T_effect}, class {abl_class_idx}, all submodules, #unique features: {total_features_per_abl_class}')
 
@@ -497,7 +498,6 @@ for ae_path in ae_paths:
         # plot_feature_effects_above_threshold(nodes, threshold=T_effect)
         for T_effect in T_effects:
             feats = unique_feats[T_effect][ablated_class_idx]
-            print(f'feats: {feats}')
 
             class_accuracies[ablated_class_idx][T_effect] = {}
             if verbose:

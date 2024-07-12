@@ -354,7 +354,7 @@ layer = 4  # model layer for attaching linear classification head
 SEED = 42
 activation_dim = 512
 verbose = False
-select_unique_features = False
+select_unique_features = True
 
 submodule_trainers = {
     "resid_post_layer_4": {"trainer_ids": [10]},
@@ -364,7 +364,7 @@ model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
 dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
-sweep_name = "_sweep0709"
+sweep_name = "_sweep0711"
 model_name = model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
@@ -373,8 +373,8 @@ probe_test_set_size = 1000
 probe_layer = class_probing.probe_layer_lookup[model_name]
 
 # Load datset and probes
-train_set_size = 500
-test_set_size = 100
+train_set_size = 1000
+test_set_size = 1000
 probe_batch_size = 500
 llm_batch_size = 50
 
@@ -387,8 +387,8 @@ patching_batch_size = 10
 T_effects_all_classes = [0.001]
 
 # For select_unique_class_features()
-T_effects_unique_class = [0.0001]
-T_max_sideeffect = 1
+T_effects_unique_class = [1e-4, 1e-8]
+T_max_sideeffect = 5e-3
 
 ae_group_paths = utils.get_ae_group_paths(
     dictionaries_path, model_location, sweep_name, submodule_trainers
@@ -419,7 +419,7 @@ if not os.path.exists(probe_path):
     )
 
 probes = t.load(probe_path)
-all_classes_list = list(probes.keys())[:5]
+all_classes_list = list(probes.keys())
 
 ### Get activations for original model, all classes
 print("Getting activations for original model")
@@ -465,7 +465,7 @@ for ae_path in ae_paths:
             N_EVAL_BATCHES,
             batch_size=patching_batch_size,
             patching_method="attrib",
-            steps=1,
+            steps=10,
         )
 
     node_effects_cpu = utils.to_device(node_effects, "cpu")
@@ -544,3 +544,5 @@ for ae_path in ae_paths:
     class_accuracies = utils.to_device(class_accuracies, "cpu")
     with open(ae_path + "class_accuracies.pkl", "wb") as f:
         pickle.dump(class_accuracies, f)
+
+# %%
