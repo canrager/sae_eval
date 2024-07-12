@@ -291,11 +291,10 @@ DEVICE = "cuda:0"
 layer = 4  # model layer for attaching linear classification head
 SEED = 42
 activation_dim = 512
-verbose = True
+verbose = False
 
 submodule_trainers = {
-    "resid_post_layer_3": {"trainer_ids": list(range(0, 12, 2))},
-    "resid_post_layer_4": {"trainer_ids": list(range(0, 12, 2))},
+    "resid_post_layer_4": {"trainer_ids": [10]},
 }
 
 model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
@@ -314,7 +313,8 @@ llm_batch_size = 50
 
 # Attribution patching variables
 N_EVAL_BATCHES = 10
-Ts_effect = [0.1, 0.01, 0.005, 0.001, 0.0005, 0.0001]
+# Ts_effect = [0.1, 0.01, 0.005, 0.001, 0.0005, 0.0001]
+Ts_effect = [0.001]
 patching_batch_size = 10
 
 ae_group_paths = utils.get_ae_group_paths(
@@ -326,7 +326,7 @@ dataset, _ = load_and_prepare_dataset()
 train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
 
 probes = t.load("trained_bib_probes/probes_0705.pt")
-all_classes_list = list(probes.keys())
+all_classes_list = list(probes.keys())[:5]
 
 ### Get activations for original model, all classes
 print("Getting activations for original model")
@@ -338,12 +338,13 @@ for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated 
 test_accuracies = get_probe_test_accuracy(
     probes, all_classes_list, test_acts, probe_batch_size, verbose
 )
-
+# %%
 ### Get activations for ablated models
 # ablating the top features for each class
 print("Getting activations for ablated models")
 
 for ae_path in ae_paths:
+    print(f"Running ablation for {ae_path}")
     submodules = []
     dictionaries = {}
     submodule, dictionary, config = utils.load_dictionary(model, model_name, ae_path, DEVICE)
@@ -356,6 +357,7 @@ for ae_path in ae_paths:
 
     node_effects = {}
     class_accuracies = test_accuracies.copy()
+
     for ablated_class_idx in all_classes_list:
         class_accuracies[ablated_class_idx] = {}
         node_effects[ablated_class_idx] = {}
@@ -376,17 +378,24 @@ for ae_path in ae_paths:
             submodule_ae_path = ae_name_lookup[submodule]
             node_effects[ablated_class_idx][submodule_ae_path] = nodes[submodule]
 
+    node_effects = utils.to_device(node_effects, "cpu")
+    with open(ae_path + "node_effects.pkl", "wb") as f:
+        pickle.dump(node_effects, f)
+    node_effects = utils.to_device(node_effects, DEVICE)
+
+    for ablated_class_idx in all_classes_list:
+        print(f"evaluating class {ablated_class_idx}")
+        nodes = {}
+        for submodule in submodules:
+            nodes[submodule] = node_effects[ablated_class_idx][ae_name_lookup[submodule]]
+
         # plot_feature_effects_above_threshold(nodes, threshold=T_effect)
         top_feats_to_ablate = {}
         for T_effect in Ts_effect:
-            top_feats_to_ablate[T_effect] = select_significant_features(
+            feats = select_significant_features(
                 submodules, nodes, dict_size, T_effect=T_effect, verbose=verbose
             )
-        del nodes
-        t.cuda.empty_cache()
-        gc.collect()
 
-        for T_effect, feats in top_feats_to_ablate.items():
             class_accuracies[ablated_class_idx][T_effect] = {}
             if verbose:
                 print(f"Running ablation for T_effect = {T_effect}")
@@ -423,61 +432,6 @@ for ae_path in ae_paths:
             t.cuda.empty_cache()
             gc.collect()
 
-    node_effects = utils.to_device(node_effects, "cpu")
-    with open(ae_path + "node_effects.pkl", "wb") as f:
-        pickle.dump(node_effects, f)
-
     class_accuracies = utils.to_device(class_accuracies, "cpu")
     with open(ae_path + "class_accuracies.pkl", "wb") as f:
         pickle.dump(class_accuracies, f)
-# %%
-
-
-def plot_accuracy_comparison(test_accuracies: dict, T_effects: list):
-    # Get unique probe_idx values
-    for T_effect in T_effects:
-        probe_indices = list(test_accuracies[-1].keys())
-
-        # Get ablated_classes values
-        ablated_class_indices = list(test_accuracies.keys())
-
-        # Set up the plot
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        # Set the width of each bar and the positions of the bars
-        width = 1 / (len(ablated_class_indices) + 1)
-        x = np.arange(len(probe_indices))
-
-        # Create bars for each class
-        for i, class_idx in enumerate(ablated_class_indices):
-            if class_idx == -1:
-                values = [test_accuracies[class_idx].get(idx, 0) for idx in probe_indices]
-            else:
-                values = [test_accuracies[class_idx][T_effect].get(idx, 0) for idx in probe_indices]
-
-            if class_idx == -1:
-                colors = "green"
-            else:
-                colors = ["orange" for _ in range(len(values))]
-                colors[i - 1] = "red"
-            ax.bar(x + i * width, values, width, color=colors)
-
-        # Customize the plot
-        ax.set_xlabel("Probe Index")
-        ax.set_ylabel("Test Accuracy")
-        ax.set_title(f"Probe accuracies for ablated models\n T_effect = {T_effect}")
-        ax.set_xticks(x + width / 2)
-        ax.set_xticklabels(probe_indices)
-        ax.legend(loc="lower right")
-
-        # Add some padding to the x-axis
-        plt.xlim(-width, len(probe_indices) - width / 2)
-
-        # Show the plot
-        plt.tight_layout()
-        plt.show()
-
-
-plot_accuracy_comparison(class_accuracies, Ts_effect)
-
-# %%
