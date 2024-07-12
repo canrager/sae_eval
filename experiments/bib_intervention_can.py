@@ -338,7 +338,7 @@ for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated 
 test_accuracies = get_probe_test_accuracy(
     probes, all_classes_list, test_acts, probe_batch_size, verbose
 )
-#%%
+# %%
 ### Get activations for ablated models
 # ablating the top features for each class
 print("Getting activations for ablated models")
@@ -378,14 +378,13 @@ for ae_path in ae_paths:
             submodule_ae_path = ae_name_lookup[submodule]
             node_effects[ablated_class_idx][submodule_ae_path] = nodes[submodule]
 
-    node_effects_cpu = utils.to_device(node_effects, "cpu")
+    node_effects = utils.to_device(node_effects, "cpu")
     with open(ae_path + "node_effects.pkl", "wb") as f:
-        pickle.dump(node_effects_cpu, f)
-    del node_effects_cpu
-    gc.collect()
+        pickle.dump(node_effects, f)
+    node_effects = utils.to_device(node_effects, DEVICE)
 
     for ablated_class_idx in all_classes_list:
-        print(f'evaluating class {ablated_class_idx}')
+        print(f"evaluating class {ablated_class_idx}")
         nodes = {}
         for submodule in submodules:
             nodes[submodule] = node_effects[ablated_class_idx][ae_name_lookup[submodule]]
@@ -396,7 +395,7 @@ for ae_path in ae_paths:
             feats = select_significant_features(
                 submodules, nodes, dict_size, T_effect=T_effect, verbose=verbose
             )
-            
+
             class_accuracies[ablated_class_idx][T_effect] = {}
             if verbose:
                 print(f"Running ablation for T_effect = {T_effect}")
@@ -433,8 +432,6 @@ for ae_path in ae_paths:
             t.cuda.empty_cache()
             gc.collect()
 
-
-
-class_accuracies = utils.to_device(class_accuracies, "cpu")
-with open(ae_path + "class_accuracies.pkl", "wb") as f:
-    pickle.dump(class_accuracies, f)
+    class_accuracies = utils.to_device(class_accuracies, "cpu")
+    with open(ae_path + "class_accuracies.pkl", "wb") as f:
+        pickle.dump(class_accuracies, f)
