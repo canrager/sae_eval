@@ -408,10 +408,6 @@ def train_probes(
         raise ValueError(f"Model {llm_model_name} not supported.")
 
     dataset, df = load_and_prepare_dataset()
-    # plot_label_distribution(df)
-
-    train_set_size = 5000
-    test_set_size = 1000
 
     train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
     train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
