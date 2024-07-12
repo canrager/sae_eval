@@ -51,20 +51,21 @@ def get_ae_paths(ae_group_paths: list[str]) -> list[str]:
 
 def to_device(data, device):
     """
-    Recursively move tensors in a nested dictionary to CPU.
+    Recursively move tensors in a nested dictionary to desired device.
     """
-    if isinstance(data, dict):
-        # If it's a dictionary, apply recursively to each value
-        return {key: to_device(value, device) for key, value in data.items()}
-    elif isinstance(data, list):
-        # If it's a list, apply recursively to each element
-        return [to_device(item, device) for item in data]
-    elif isinstance(data, torch.Tensor):
-        # If it's a tensor, move it to CPU
-        return data.to(device)
-    else:
-        # If it's neither, return it as is
-        return data
+    with torch.no_grad():
+        if isinstance(data, dict):
+            # If it's a dictionary, apply recursively to each value
+            return {key: to_device(value, device) for key, value in data.items()}
+        elif isinstance(data, list):
+            # If it's a list, apply recursively to each element
+            return [to_device(item, device) for item in data]
+        elif isinstance(data, torch.Tensor):
+            # If it's a tensor, move it to CPU
+            return data.to(device)
+        else:
+            # If it's neither, return it as is
+            return data
 
 
 def get_nested_folders(path: str) -> list[str]:
