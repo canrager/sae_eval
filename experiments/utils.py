@@ -89,8 +89,9 @@ def check_for_empty_folders(ae_group_paths: list[str]) -> bool:
     return True
 
 
-def load_dictionary(model, first_model_name: str, base_path: str, device: str):
-    print(f"Loading dictionary from {base_path}")
+def load_dictionary(model, first_model_name: str, base_path: str, device: str, verbose: bool = True):
+    if verbose:
+        print(f"Loading dictionary from {base_path}")
     ae_path = f"{base_path}ae.pt"
     config_path = f"{base_path}config.json"
 
