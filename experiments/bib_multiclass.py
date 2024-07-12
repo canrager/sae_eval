@@ -23,20 +23,13 @@ import experiments.utils as utils
 
 # Configuration
 DEBUGGING = False
-DEVICE = "cuda:0"
 SEED = 42
-BATCH_SIZE = 128
-ACTIVATION_DIM = 512
-LAYER = 4
-MIN_SAMPLES_PER_GROUP = 1024
 
 # Set up paths and model
 parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
 
 tracer_kwargs = dict(scan=DEBUGGING, validate=DEBUGGING)
-# TODO: Move this into main(). Will require looking at the get_acts() function.
-model = LanguageModel("EleutherAI/pythia-70m-deduped", device_map=DEVICE, dispatch=True)
 
 
 # Load and prepare dataset
@@ -174,7 +167,7 @@ def sample_from_classes(data_dict, chosen_class):
     return sampled_data
 
 
-def create_labeled_dataset(data_dict, chosen_class, batch_size):
+def create_labeled_dataset(data_dict: dict, chosen_class: int, batch_size: int, device: str):
     in_class_data = data_dict[chosen_class]
     other_class_data = sample_from_classes(data_dict, chosen_class)
 
@@ -188,7 +181,7 @@ def create_labeled_dataset(data_dict, chosen_class, batch_size):
         bio_texts[i : i + batch_size] for i in range(0, len(combined_dataset), batch_size)
     ]
     label_batches = [
-        t.tensor(bio_labels[i : i + batch_size], device=DEVICE)
+        t.tensor(bio_labels[i : i + batch_size], device=device)
         for i in range(0, len(combined_dataset), batch_size)
     ]
 
@@ -217,7 +210,9 @@ def get_acts(text):
 
 
 @t.no_grad()
-def get_all_activations(text_inputs: list[str], model: LanguageModel, batch_size: int) -> t.Tensor:
+def get_all_activations(
+    text_inputs: list[str], model: LanguageModel, batch_size: int, layer: int
+) -> t.Tensor:
 
     text_batches = utils.batch_list(text_inputs, batch_size)
 
@@ -227,7 +222,7 @@ def get_all_activations(text_inputs: list[str], model: LanguageModel, batch_size
     for text_batch_BL in text_batches:
         with model.trace(text_batch_BL, **tracer_kwargs):
             attn_mask = model.input[1]["attention_mask"]
-            acts_BLD = model.gpt_neox.layers[LAYER].output[0]
+            acts_BLD = model.gpt_neox.layers[layer].output[0]
             acts_BLD = acts_BLD * attn_mask[:, :, None]
             acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]
             acts_BD = acts_BD.save()
@@ -241,6 +236,7 @@ def prepare_probe_data(
     all_activations: dict[int, t.Tensor],
     class_idx: int,
     batch_size: int,
+    device: str,
 ) -> tuple[t.Tensor, t.Tensor]:
     positive_acts = all_activations[class_idx]
 
@@ -262,7 +258,7 @@ def prepare_probe_data(
 
     # Combine positive and negative samples
     combined_acts = t.cat([positive_acts, selected_negative_acts])
-    combined_labels = t.zeros(len(combined_acts), device=DEVICE)
+    combined_labels = t.zeros(len(combined_acts), device=device)
     combined_labels[num_positive:] = 1
 
     # Shuffle the combined data
@@ -291,9 +287,10 @@ def train_probe(
     test_label_batches: list[t.Tensor],
     get_acts: Callable,
     precomputed_acts: bool,
+    dim: int,
+    epochs: int,
+    device: str,
     lr: float = 1e-2,
-    epochs: int = 1,
-    dim: int = ACTIVATION_DIM,
     seed: int = SEED,
 ):
     """input_batches can be a list of tensors or strings. If strings, get_acts must be provided."""
@@ -304,7 +301,7 @@ def train_probe(
         assert precomputed_acts == True
 
     t.manual_seed(seed)
-    probe = Probe(dim).to(DEVICE)
+    probe = Probe(dim).to(device)
     optimizer = t.optim.AdamW(probe.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
 
@@ -317,7 +314,7 @@ def train_probe(
             else:
                 acts_BD = get_acts(inputs)
             logits_B = probe(acts_BD)
-            loss = criterion(logits_B, t.tensor(labels, device=DEVICE, dtype=t.float32))
+            loss = criterion(logits_B, t.tensor(labels, device=device, dtype=t.float32))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -361,8 +358,55 @@ def test_probe(
         return t.cat(corrects).mean().item()
 
 
+def get_probe_test_accuracy(
+    probes: list[t.Tensor],
+    all_class_list: list[int],
+    all_activations: dict[int, t.Tensor],
+    probe_batch_size: int,
+    verbose: bool,
+    device: str,
+):
+    test_accuracies = {}
+    test_accuracies[-1] = {}
+    for class_idx in all_class_list:
+        batch_test_acts, batch_test_labels = prepare_probe_data(
+            all_activations, class_idx, probe_batch_size, device
+        )
+        test_acc_probe = test_probe(
+            batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True
+        )
+        test_accuracies[-1][class_idx] = test_acc_probe
+        if verbose:
+            print(f"class {class_idx} test accuracy: {test_acc_probe}")
+    return test_accuracies
+
+
+probe_layer_lookup = {
+    "EleutherAI/pythia-70m-deduped": 4,
+}
+
+
 # Main execution
-def main():
+def train_probes(
+    train_set_size: int,
+    test_set_size: int,
+    context_length: int,
+    probe_batch_size: int,
+    llm_batch_size: int,
+    device: str,
+    llm_model_name: str = "EleutherAI/pythia-70m-deduped",
+    epochs: int = 10,
+):
+
+    # TODO: I think there may be a scoping issue with model and get_acts(), but we currently aren't using get_acts()
+    model = LanguageModel(llm_model_name, device_map=device, dispatch=True)
+
+    if llm_model_name == "EleutherAI/pythia-70m-deduped":
+        d_model = 512
+        probe_layer = probe_layer_lookup[llm_model_name]
+    else:
+        raise ValueError(f"Model {llm_model_name} not supported.")
+
     dataset, df = load_and_prepare_dataset()
     # plot_label_distribution(df)
 
@@ -370,6 +414,8 @@ def main():
     test_set_size = 1000
 
     train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
+    train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
+    test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
 
     probes, losses = {}, {}
 
@@ -377,12 +423,14 @@ def main():
     all_test_acts = {}
 
     for i, profession in enumerate(train_bios.keys()):
-        t.cuda.empty_cache()
-        gc.collect()
-        print(f"Training probe for profession: {profession}")
+        print(f"Collecting activations for profession: {profession}")
 
-        all_train_acts[profession] = get_all_activations(train_bios[profession], model, BATCH_SIZE)
-        all_test_acts[profession] = get_all_activations(test_bios[profession], model, BATCH_SIZE)
+        all_train_acts[profession] = get_all_activations(
+            train_bios[profession], model, llm_batch_size, probe_layer
+        )
+        all_test_acts[profession] = get_all_activations(
+            test_bios[profession], model, llm_batch_size, probe_layer
+        )
 
         # For debugging
         # if i > 1:
@@ -390,12 +438,14 @@ def main():
 
     t.set_grad_enabled(True)
 
-    probe_batch_size = 32
-
     for profession in all_train_acts.keys():
-        train_acts, train_labels = prepare_probe_data(all_train_acts, profession, probe_batch_size)
+        train_acts, train_labels = prepare_probe_data(
+            all_train_acts, profession, probe_batch_size, device
+        )
 
-        test_acts, test_labels = prepare_probe_data(all_test_acts, profession, probe_batch_size)
+        test_acts, test_labels = prepare_probe_data(
+            all_test_acts, profession, probe_batch_size, device
+        )
 
         probe, loss = train_probe(
             train_acts,
@@ -404,17 +454,28 @@ def main():
             test_labels,
             get_acts,
             precomputed_acts=True,
-            epochs=10,
+            epochs=epochs,
+            dim=d_model,
+            device=device,
         )
 
         probes[profession] = probe
         losses[profession] = loss
 
     os.makedirs("trained_bib_probes", exist_ok=True)
-    t.save(probes, "trained_bib_probes/probes_0705.pt")
-    t.save(losses, "trained_bib_probes/losses_0705.pt")
+    t.save(probes, f"trained_bib_probes/probes_ctx_len_{context_length}.pt")
+    t.save(losses, f"trained_bib_probes/losses_ctx_len_{context_length}.pt")
 
 
 if __name__ == "__main__":
-    main()
+    train_probes(
+        train_set_size=10000,
+        test_set_size=1000,
+        context_length=64,
+        probe_batch_size=50,
+        llm_batch_size=4,
+        llm_model_name="EleutherAI/pythia-70m-deduped",
+        epochs=10,
+        device="cuda",
+    )
 # %%
