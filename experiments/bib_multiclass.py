@@ -383,6 +383,7 @@ def get_probe_test_accuracy(
 
 probe_layer_lookup = {
     "EleutherAI/pythia-70m-deduped": 4,
+    "EleutherAI/pythia-160m-deduped": 10,
 }
 
 
@@ -403,6 +404,9 @@ def train_probes(
 
     if llm_model_name == "EleutherAI/pythia-70m-deduped":
         d_model = 512
+        probe_layer = probe_layer_lookup[llm_model_name]
+    elif llm_model_name == "EleutherAI/pythia-160m-deduped":
+        d_model = 768
         probe_layer = probe_layer_lookup[llm_model_name]
     else:
         raise ValueError(f"Model {llm_model_name} not supported.")

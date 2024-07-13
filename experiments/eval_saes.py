@@ -4,6 +4,7 @@ from datasets import load_dataset
 import json
 
 import experiments.utils as utils
+import experiments.bib_intervention as bib_intervention
 from dictionary_learning.buffer import ActivationBuffer
 from dictionary_learning.evaluation import evaluate
 
@@ -36,12 +37,11 @@ submodule_trainers = {
     "resid_post_layer_4": {"trainer_ids": None},
 }
 
-model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
 dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
 sweep_name = "_sweep0711"
-model_name = model_name_lookup[model_location]
+model_name = bib_intervention.model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
 ae_group_paths = utils.get_ae_group_paths(

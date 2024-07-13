@@ -460,7 +460,10 @@ submodule_trainers = {
     "resid_post_layer_4": {"trainer_ids": [10]},
 }
 
-model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
+model_name_lookup = {
+    "pythia70m": "EleutherAI/pythia-70m-deduped",
+    "pythia160m": "EleutherAI/pythia-160m-deduped",
+}
 dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
