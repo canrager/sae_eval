@@ -14,6 +14,7 @@ from nnsight import LanguageModel
 import torch as t
 from torch import nn
 from collections import defaultdict
+from enum import Enum
 
 parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
@@ -40,6 +41,13 @@ if DEBUGGING:
     tracer_kwargs = dict(scan=True, validate=True)
 else:
     tracer_kwargs = dict(scan=False, validate=False)
+
+
+class FeatureSelection(Enum):
+    unique = 1
+    above_threshold = 2
+    top_n = 3
+
 
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
 
@@ -229,26 +237,23 @@ def n_hot(feats, dim):
 
 
 def select_significant_features(
-    node_effects: dict[int, dict[utils.submodule_alias, float]],
-    activation_dim: int,
+    node_effects: dict[int, dict[utils.submodule_alias, t.Tensor]],
+    dict_size: int,
     T_effect: float = 0.001,
     verbose: bool = True,
     convert_to_n_hot: bool = True,
-):
+) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
     feats_above_T = {}
+
     for abl_class_idx in node_effects.keys():
         total_features_per_abl_class = 0
-        feats_above_T[abl_class_idx] = defaultdict(list)
+        feats_above_T[abl_class_idx] = {}
         for submodule in node_effects[abl_class_idx].keys():
-            # TODO: Warning about .nonzero() and bools
-            for feat_idx in (node_effects[abl_class_idx][submodule] > T_effect).nonzero():
-                feats_above_T[abl_class_idx][submodule].append(feat_idx.item())
-                total_features_per_abl_class += 1
-        if convert_to_n_hot:
-            feats_above_T[abl_class_idx] = {
-                submodule: n_hot(feats, activation_dim)
-                for submodule, feats in feats_above_T[abl_class_idx].items()
-            }
+            feats_above_T[abl_class_idx][submodule] = (
+                node_effects[abl_class_idx][submodule] > T_effect
+            )
+            total_features_per_abl_class += feats_above_T[abl_class_idx][submodule].sum().item()
+
         if verbose:
             print(
                 f"T_effect {T_effect}, class {abl_class_idx}, all submodules, #significant features: {total_features_per_abl_class}"
@@ -257,18 +262,44 @@ def select_significant_features(
     return feats_above_T
 
 
+def select_top_n_features(
+    node_effects: dict[int, dict[utils.submodule_alias, t.Tensor]],
+    n: int,
+) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
+    top_n_features = {}
+
+    for abl_class_idx, submodules in node_effects.items():
+        top_n_features[abl_class_idx] = {}
+
+        for submodule, effects in submodules.items():
+            assert (
+                n <= effects.numel()
+            ), f"n ({n}) must not be larger than the number of features ({effects.numel()}) for ablation class {abl_class_idx}, submodule {submodule}"
+
+            # Get the indices of the top N effects
+            _, top_indices = t.topk(effects, n)
+
+            # Create a boolean mask tensor
+            mask = t.zeros_like(effects, dtype=t.bool)
+            mask[top_indices] = True
+
+            top_n_features[abl_class_idx][submodule] = mask
+
+    return top_n_features
+
+
 def select_unique_class_features(
-    node_effects: dict[int, dict[utils.submodule_alias, float]],
-    activation_dim: int,
+    node_effects: dict[int, dict[utils.submodule_alias, t.Tensor]],
+    dict_size: int,
     T_effect: float = 0.001,
     T_max_sideeffect: float = 0.000001,
     verbose: bool = True,
-):
+) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
     non_neglectable_feats = select_significant_features(
-        node_effects, activation_dim, T_max_sideeffect, convert_to_n_hot=False, verbose=True
+        node_effects, dict_size, T_max_sideeffect, convert_to_n_hot=False, verbose=True
     )
     significant_feats = select_significant_features(
-        node_effects, activation_dim, T_effect, convert_to_n_hot=False, verbose=True
+        node_effects, dict_size, T_effect, convert_to_n_hot=False, verbose=True
     )
 
     feats_above_T = {}
@@ -291,7 +322,7 @@ def select_unique_class_features(
                     feats_above_T[abl_class_idx][submodule].append(feat_idx)
                     total_features_per_abl_class += 1
         feats_above_T[abl_class_idx] = {
-            submodule: n_hot(feats, activation_dim)
+            submodule: n_hot(feats, dict_size)
             for submodule, feats in feats_above_T[abl_class_idx].items()
         }
         if verbose:
@@ -325,9 +356,40 @@ def select_unique_class_features(
         print(f"total ablation features: {total_features}")
 
     top_feats_to_ablate = {
-        submodule: n_hot(feats, activation_dim) for submodule, feats in top_feats_to_ablate.items()
+        submodule: n_hot(feats, dict_size) for submodule, feats in top_feats_to_ablate.items()
     }
     return top_feats_to_ablate
+
+
+def select_features(
+    selection_method: FeatureSelection,
+    node_effects: dict,
+    dict_size: int,
+    T_effects: list[float],
+    T_max_sideeffect: float,
+    verbose: bool = False,
+) -> dict[float, dict[int, dict[utils.submodule_alias, t.Tensor]]]:
+    unique_feats = {}
+    if selection_method == FeatureSelection.unique:
+        for T_effect in T_effects:
+            unique_feats[T_effect] = select_unique_class_features(
+                node_effects,
+                dict_size,
+                T_effect=T_effect,
+                T_max_sideeffect=T_max_sideeffect,
+                verbose=verbose,
+            )
+    elif selection_method == FeatureSelection.above_threshold:
+        for T_effect in T_effects:
+            unique_feats[T_effect] = select_significant_features(
+                node_effects, dict_size, T_effect=T_effect, verbose=verbose
+            )
+    elif selection_method == FeatureSelection.top_n:
+        raise NotImplementedError("top_n not implemented yet")
+    else:
+        raise ValueError("Invalid selection method")
+
+    return unique_feats
 
 
 ## Plotting functions
@@ -356,6 +418,9 @@ activation_dim = 512
 verbose = False
 select_unique_features = True
 
+
+selection_method = FeatureSelection.above_threshold
+
 submodule_trainers = {
     "resid_post_layer_4": {"trainer_ids": [10]},
 }
@@ -364,7 +429,7 @@ model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
 dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
-sweep_name = "_sweep0711"
+sweep_name = "_sweep0709"
 model_name = model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
@@ -375,19 +440,28 @@ probe_layer = class_probing.probe_layer_lookup[model_name]
 # Load datset and probes
 train_set_size = 1000
 test_set_size = 1000
-probe_batch_size = 500
+probe_batch_size = 50
 llm_batch_size = 10
 
 # Attribution patching variables
-N_EVAL_BATCHES = 5
+N_EVAL_BATCHES = 4
 patching_batch_size = 10
 
-# For select_significant_features()
+top_n_features = [5, 10, 20, 50, 100, 500]
 T_effects_all_classes = [0.1, 0.01, 0.005, 0.001]
-T_effects_all_classes = [0.001]
-
-# For select_unique_class_features()
+# T_effects_all_classes = [0.001]
 T_effects_unique_class = [1e-4, 1e-8]
+
+if selection_method == FeatureSelection.top_n:
+    T_effects = top_n_features
+elif selection_method == FeatureSelection.above_threshold:
+    T_effects = T_effects_all_classes
+elif selection_method == FeatureSelection.unique:
+    T_effects = T_effects_unique_class
+else:
+    raise ValueError("Invalid selection method")
+
+
 T_max_sideeffect = 5e-3
 
 ae_group_paths = utils.get_ae_group_paths(
@@ -395,6 +469,7 @@ ae_group_paths = utils.get_ae_group_paths(
 )
 ae_paths = utils.get_ae_paths(ae_group_paths)
 
+# TODO: experiment with different context lengths
 context_length = utils.get_ctx_length(ae_paths)
 
 dataset, _ = load_and_prepare_dataset()
@@ -419,7 +494,7 @@ if not os.path.exists(probe_path):
     )
 
 probes = t.load(probe_path)
-all_classes_list = list(probes.keys())
+all_classes_list = list(probes.keys())[:3]
 
 ### Get activations for original model, all classes
 print("Getting activations for original model")
@@ -480,23 +555,9 @@ for ae_path in ae_paths:
     del node_effects_cpu
     gc.collect()
 
-    unique_feats = {}
-    if select_unique_features:
-        T_effects = T_effects_unique_class
-        for T_effect in T_effects:
-            unique_feats[T_effect] = select_unique_class_features(
-                node_effects,
-                dict_size,
-                T_effect=T_effect,
-                T_max_sideeffect=T_max_sideeffect,
-                verbose=verbose,
-            )
-    else:
-        T_effects = T_effects_all_classes
-        for T_effect in T_effects:
-            unique_feats[T_effect] = select_significant_features(
-                node_effects, dict_size, T_effect=T_effect, verbose=verbose
-            )
+    unique_feats = select_features(
+        selection_method, node_effects, dict_size, T_effects, T_max_sideeffect, verbose=verbose
+    )
 
     for ablated_class_idx in all_classes_list:
         class_accuracies[ablated_class_idx] = {}
