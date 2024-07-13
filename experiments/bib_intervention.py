@@ -243,6 +243,39 @@ def select_significant_features(
     verbose: bool = True,
     convert_to_n_hot: bool = True,
 ) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
+    """There's a bug somewhere in here if the T_effect is too high, it will return an empty dict."""
+    feats_above_T = {}
+
+    for abl_class_idx in node_effects.keys():
+        total_features_per_abl_class = 0
+        feats_above_T[abl_class_idx] = defaultdict(list)
+        for submodule in node_effects[abl_class_idx].keys():
+            # TODO: Warning about .nonzero() and bools
+            for feat_idx in (node_effects[abl_class_idx][submodule] > T_effect).nonzero():
+                feats_above_T[abl_class_idx][submodule].append(feat_idx.item())
+                total_features_per_abl_class += 1
+        if convert_to_n_hot:
+            feats_above_T[abl_class_idx] = {
+                submodule: n_hot(feats, activation_dim)
+                for submodule, feats in feats_above_T[abl_class_idx].items()
+            }
+        if verbose:
+            print(
+                f"T_effect {T_effect}, class {abl_class_idx}, all submodules, #significant features: {total_features_per_abl_class}"
+            )
+
+    return feats_above_T
+
+
+def select_significant_features2(
+    node_effects: dict[int, dict[utils.submodule_alias, t.Tensor]],
+    dict_size: int,
+    T_effect: float = 0.001,
+    verbose: bool = True,
+    convert_to_n_hot: bool = True,
+) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
+    """This function is more idiomatic pytorch and doesn't have the bug of returning an empty dict."""
+    # TODO: Switch over to this function, or maybe use the other one for the unique class features.
     feats_above_T = {}
 
     for abl_class_idx in node_effects.keys():
@@ -385,7 +418,8 @@ def select_features(
                 node_effects, dict_size, T_effect=T_effect, verbose=verbose
             )
     elif selection_method == FeatureSelection.top_n:
-        raise NotImplementedError("top_n not implemented yet")
+        for T_effect in T_effects:
+            unique_feats[T_effect] = select_top_n_features(node_effects, T_effect)
     else:
         raise ValueError("Invalid selection method")
 
@@ -420,6 +454,7 @@ select_unique_features = True
 
 
 selection_method = FeatureSelection.above_threshold
+selection_method = FeatureSelection.top_n
 
 submodule_trainers = {
     "resid_post_layer_4": {"trainer_ids": [10]},
@@ -441,11 +476,11 @@ probe_layer = class_probing.probe_layer_lookup[model_name]
 train_set_size = 1000
 test_set_size = 1000
 probe_batch_size = 50
-llm_batch_size = 10
+llm_batch_size = 250
 
 # Attribution patching variables
 N_EVAL_BATCHES = 4
-patching_batch_size = 10
+patching_batch_size = 250
 
 top_n_features = [5, 10, 20, 50, 100, 500]
 T_effects_all_classes = [0.1, 0.01, 0.005, 0.001]
