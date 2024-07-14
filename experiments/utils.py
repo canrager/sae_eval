@@ -134,10 +134,9 @@ def load_dictionary(
 
 def get_submodule(model, model_name: str, submodule_str: str, layer: int):
     allowed_submodules = ["attention_out", "mlp_out", "resid_post"]
-    allowed_model_names = ["EleutherAI/pythia-70m-deduped"]
 
-    if model_name not in allowed_model_names:
-        raise ValueError(f"model_name must be one of {allowed_model_names}")
+    if model_name not in model_name_lookup.values():
+        raise ValueError(f"model_name must be one of {model_name_lookup.values()}")
 
     if model_name == "EleutherAI/pythia-70m-deduped":
         if "attention_out" in submodule_str:
