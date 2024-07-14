@@ -19,6 +19,11 @@ model_name_lookup = {
     "pythia160m": "EleutherAI/pythia-160m-deduped",
 }
 
+model_type_lookup = {
+    "EleutherAI/pythia-70m-deduped": "pythia",
+    "EleutherAI/pythia-160m-deduped": "pythia",
+}
+
 
 def get_ae_group_paths(
     dictionaries_path: str, model_location: str, sweep_name: str, submodule_trainers: dict
@@ -138,7 +143,9 @@ def get_submodule(model, model_name: str, submodule_str: str, layer: int):
     if model_name not in model_name_lookup.values():
         raise ValueError(f"model_name must be one of {model_name_lookup.values()}")
 
-    if model_name == "EleutherAI/pythia-70m-deduped":
+    model_type = model_type_lookup[model_name]
+
+    if model_type == "pythia":
         if "attention_out" in submodule_str:
             submodule = model.gpt_neox.layers[layer].attention
         elif "mlp_out" in submodule_str:
