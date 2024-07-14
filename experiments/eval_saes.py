@@ -4,7 +4,6 @@ from datasets import load_dataset
 import json
 
 import experiments.utils as utils
-import experiments.bib_intervention as bib_intervention
 from dictionary_learning.buffer import ActivationBuffer
 from dictionary_learning.evaluation import evaluate
 
@@ -28,6 +27,7 @@ else:
 
 llm_batch_size = 200  # Approx 16GB VRAM on pythia70m with 128 context length
 buffer_size = 512
+# TODO: Don't hardcode context length
 context_length = 128
 sae_batch_size = 200
 n_inputs = 10000
@@ -41,7 +41,7 @@ dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
 sweep_name = "_sweep0711"
-model_name = bib_intervention.model_name_lookup[model_location]
+model_name = utils.model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
 ae_group_paths = utils.get_ae_group_paths(

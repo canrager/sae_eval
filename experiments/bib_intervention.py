@@ -460,15 +460,11 @@ submodule_trainers = {
     "resid_post_layer_4": {"trainer_ids": [10]},
 }
 
-model_name_lookup = {
-    "pythia70m": "EleutherAI/pythia-70m-deduped",
-    "pythia160m": "EleutherAI/pythia-160m-deduped",
-}
 dictionaries_path = "../dictionary_learning/dictionaries"
 
 model_location = "pythia70m"
 sweep_name = "_sweep0709"
-model_name = model_name_lookup[model_location]
+model_name = utils.model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
 probe_train_set_size = 5000

@@ -14,6 +14,11 @@ from dictionary_learning.interp import examine_dimension
 
 submodule_alias: TypeAlias = Any
 
+model_name_lookup = {
+    "pythia70m": "EleutherAI/pythia-70m-deduped",
+    "pythia160m": "EleutherAI/pythia-160m-deduped",
+}
+
 
 def get_ae_group_paths(
     dictionaries_path: str, model_location: str, sweep_name: str, submodule_trainers: dict
@@ -89,7 +94,9 @@ def check_for_empty_folders(ae_group_paths: list[str]) -> bool:
     return True
 
 
-def load_dictionary(model, first_model_name: str, base_path: str, device: str, verbose: bool = True):
+def load_dictionary(
+    model, first_model_name: str, base_path: str, device: str, verbose: bool = True
+):
     if verbose:
         print(f"Loading dictionary from {base_path}")
     ae_path = f"{base_path}ae.pt"
