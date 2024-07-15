@@ -20,6 +20,7 @@ from datasets import load_dataset
 from nnsight import LanguageModel
 
 import experiments.utils as utils
+from experiments.utils import submodule_alias
 
 # Configuration
 DEBUGGING = False
@@ -211,9 +212,9 @@ def get_acts(text):
 
 @t.no_grad()
 def get_all_activations(
-    text_inputs: list[str], model: LanguageModel, batch_size: int, layer: int
+    text_inputs: list[str], model: LanguageModel, submodule: submodule_alias, batch_size: int, layer: int
 ) -> t.Tensor:
-
+    
     text_batches = utils.batch_list(text_inputs, batch_size)
 
     assert type(text_batches[0][0]) == str
@@ -222,13 +223,16 @@ def get_all_activations(
     for text_batch_BL in text_batches:
         with model.trace(text_batch_BL, **tracer_kwargs):
             attn_mask = model.input[1]["attention_mask"]
-            acts_BLD = model.gpt_neox.layers[layer].output[0]
+            # acts_BLD = submodule.output[0]
+            acts_BLD = submodule.output
+
             acts_BLD = acts_BLD * attn_mask[:, :, None]
             acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]
             acts_BD = acts_BD.save()
         all_acts_list_BD.append(acts_BD.value)
 
     all_acts_bD = t.cat(all_acts_list_BD, dim=0)
+    print(f'shape of all_acts_bD: {all_acts_bD.shape}')
     return all_acts_bD
 
 
@@ -383,6 +387,7 @@ def get_probe_test_accuracy(
 
 probe_layer_lookup = {
     "EleutherAI/pythia-70m-deduped": 4,
+    "google/gemma-2b": 12,
 }
 
 
@@ -400,10 +405,16 @@ def train_probes(
 
     # TODO: I think there may be a scoping issue with model and get_acts(), but we currently aren't using get_acts()
     model = LanguageModel(llm_model_name, device_map=device, dispatch=True)
+    # save_path = f"trained_bib_probes/probe_{llm_model_name}"
 
     if llm_model_name == "EleutherAI/pythia-70m-deduped":
         d_model = 512
         probe_layer = probe_layer_lookup[llm_model_name]
+    elif llm_model_name == "google/gemma-2b":
+        d_model = 2048
+        probe_layer = probe_layer_lookup[llm_model_name]
+        submodule_name = "resid_post"
+        submodule = utils.get_submodule(model, llm_model_name, submodule_name, probe_layer)
     else:
         raise ValueError(f"Model {llm_model_name} not supported.")
 
@@ -459,8 +470,8 @@ def train_probes(
         losses[profession] = loss
 
     os.makedirs("trained_bib_probes", exist_ok=True)
-    t.save(probes, f"trained_bib_probes/probes_ctx_len_{context_length}.pt")
-    t.save(losses, f"trained_bib_probes/losses_ctx_len_{context_length}.pt")
+    t.save(probes, f"trained_bib_probes/probes_{llm_model_name}_ctx_len_{context_length}.pt")
+    t.save(losses, f"trained_bib_probes/losses_{llm_model_name}ctx_len_{context_length}.pt")
 
 
 if __name__ == "__main__":
@@ -470,7 +481,7 @@ if __name__ == "__main__":
         context_length=64,
         probe_batch_size=50,
         llm_batch_size=4,
-        llm_model_name="EleutherAI/pythia-70m-deduped",
+        llm_model_name="google/gemma-2b",
         epochs=10,
         device="cuda",
     )

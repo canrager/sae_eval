@@ -125,9 +125,10 @@ def load_dictionary(model, first_model_name: str, base_path: str, device: str, v
     return submodule, dictionary, config
 
 
-def get_submodule(model, model_name: str, submodule_str: str, layer: int):
+def get_submodule(model, submodule_str: str, layer: int):
+    model_name = model.config._name_or_path
     allowed_submodules = ["attention_out", "mlp_out", "resid_post"]
-    allowed_model_names = ["EleutherAI/pythia-70m-deduped"]
+    allowed_model_names = ["EleutherAI/pythia-70m-deduped", 'google/gemma-2b']
 
     if model_name not in allowed_model_names:
         raise ValueError(f"model_name must be one of {allowed_model_names}")
@@ -139,6 +140,15 @@ def get_submodule(model, model_name: str, submodule_str: str, layer: int):
             submodule = model.gpt_neox.layers[layer].mlp
         elif "resid_post" in submodule_str:
             submodule = model.gpt_neox.layers[layer]
+        else:
+            raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
+    elif model_name == 'google/gemma-2b':
+        if "attention_out" in submodule_str:
+            submodule = model.model.layers[layer].self_attn
+        elif "mlp_out" in submodule_str:
+            submodule = model.model.layers[layer].mlp
+        elif "resid_post" in submodule_str:
+            submodule = model.model.layers[layer]
         else:
             raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
 

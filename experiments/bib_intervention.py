@@ -221,8 +221,8 @@ def get_all_acts_ablated(
 
 
 # putting feats_to_ablate in a more useful format
-def n_hot(feats, dim):
-    out = t.zeros(dim, dtype=t.bool, device=DEVICE)
+def n_hot(feats, dim, device = 'cpu'):
+    out = t.zeros(dim, dtype=t.bool, device=device)
     for feat in feats:
         out[feat] = True
     return out
@@ -234,6 +234,7 @@ def select_significant_features(
     T_effect: float = 0.001,
     verbose: bool = True,
     convert_to_n_hot: bool = True,
+    device: str = "cpu",
 ):
     feats_above_T = {}
     for abl_class_idx in node_effects.keys():
@@ -246,7 +247,7 @@ def select_significant_features(
                 total_features_per_abl_class += 1
         if convert_to_n_hot:
             feats_above_T[abl_class_idx] = {
-                submodule: n_hot(feats, activation_dim)
+                submodule: n_hot(feats, activation_dim, device)
                 for submodule, feats in feats_above_T[abl_class_idx].items()
             }
         if verbose:
@@ -263,6 +264,7 @@ def select_unique_class_features(
     T_effect: float = 0.001,
     T_max_sideeffect: float = 0.000001,
     verbose: bool = True,
+    device: str = "cpu",
 ):
     non_neglectable_feats = select_significant_features(
         node_effects, activation_dim, T_max_sideeffect, convert_to_n_hot=False, verbose=True
@@ -291,7 +293,7 @@ def select_unique_class_features(
                     feats_above_T[abl_class_idx][submodule].append(feat_idx)
                     total_features_per_abl_class += 1
         feats_above_T[abl_class_idx] = {
-            submodule: n_hot(feats, activation_dim)
+            submodule: n_hot(feats, activation_dim, device)
             for submodule, feats in feats_above_T[abl_class_idx].items()
         }
         if verbose:
@@ -300,34 +302,6 @@ def select_unique_class_features(
             )
 
     return feats_above_T
-
-    top_feats_to_ablate = {}
-    total_features = 0
-    for submodule in submodules:
-        sideeffect_features = []
-        for other_submodule in submodules:
-            if other_submodule != submodule:
-                print(non_neglectable_effects[other_submodule])
-                print(len(non_neglectable_effects[other_submodule]))
-                sideeffect_features.extend(non_neglectable_effects[other_submodule])
-        print(len(sideeffect_features))
-        sideeffect_features = set(sideeffect_features)
-        if verbose:
-            print(f"sideeffect features: {len(sideeffect_features)}")
-
-        # Get the top features to ablate for this submodule
-        top_feats_to_ablate[submodule] = []
-        for feat in significant_effects[submodule]:
-            if feat not in sideeffect_features:
-                top_feats_to_ablate[submodule].append(feat)
-                total_features += 1
-    if verbose:
-        print(f"total ablation features: {total_features}")
-
-    top_feats_to_ablate = {
-        submodule: n_hot(feats, activation_dim) for submodule, feats in top_feats_to_ablate.items()
-    }
-    return top_feats_to_ablate
 
 
 ## Plotting functions
@@ -345,7 +319,7 @@ def plot_feature_effects_above_threshold(nodes, threshold=0.05):
     plt.title("all_values")
     plt.show()
 
-
+# if __name__ == "__main__":
 # %%
 # Load model and dictionaries
 DEVICE = "cuda:0"
@@ -367,6 +341,7 @@ model_location = "pythia70m"
 sweep_name = "_sweep0711"
 model_name = model_name_lookup[model_location]
 model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
+submodule = utils.get_submodule(model, list(submodule_trainers.keys())[0], layer)
 
 probe_train_set_size = 5000
 probe_test_set_size = 1000
@@ -387,7 +362,7 @@ T_effects_all_classes = [0.1, 0.01, 0.005, 0.001]
 T_effects_all_classes = [0.001]
 
 # For select_unique_class_features()
-T_effects_unique_class = [1e-4, 1e-8]
+T_effects_unique_class = [1e-2, 5e-3, 1e-8]
 T_max_sideeffect = 5e-3
 
 ae_group_paths = utils.get_ae_group_paths(
@@ -425,7 +400,7 @@ all_classes_list = list(probes.keys())
 print("Getting activations for original model")
 test_acts = {}
 for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated class"):
-    class_test_acts = get_all_activations(test_bios[class_idx], model, llm_batch_size, probe_layer)
+    class_test_acts = get_all_activations(test_bios[class_idx], model, submodule, llm_batch_size, probe_layer)
     test_acts[class_idx] = class_test_acts
 
 test_accuracies = class_probing.get_probe_test_accuracy(
@@ -490,6 +465,7 @@ for ae_path in ae_paths:
                 T_effect=T_effect,
                 T_max_sideeffect=T_max_sideeffect,
                 verbose=verbose,
+                device=DEVICE,
             )
     else:
         T_effects = T_effects_all_classes
@@ -548,5 +524,3 @@ for ae_path in ae_paths:
     class_accuracies = utils.to_device(class_accuracies, "cpu")
     with open(ae_path + "class_accuracies.pkl", "wb") as f:
         pickle.dump(class_accuracies, f)
-
-# %%

@@ -8,7 +8,7 @@ import gc
 
 from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
-from dictionary_learning.trainers.top_k import TopKTrainer, AutoEncoderTopK
+from dictionary_learning.trainers.top_k import TrainerTopK, AutoEncoderTopK
 from dictionary_learning.utils import zst_to_generator
 from dictionary_learning.buffer import ActivationBuffer
 from dictionary_learning.dictionary import AutoEncoder
