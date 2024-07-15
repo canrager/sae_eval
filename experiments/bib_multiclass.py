@@ -7,6 +7,7 @@ import gc
 from collections import defaultdict
 import einops
 import math
+import numpy as np
 
 import torch as t
 from torch import nn
@@ -115,7 +116,11 @@ def get_balanced_dataset(dataset, min_samples_per_group: int, train: bool, rando
 
     balanced_df = pd.concat(balanced_df_list).reset_index(drop=True)
     grouped = balanced_df.groupby("profession")["hard_text"].apply(list)
-    return {label: shuffle(texts) for label, texts in grouped.items()}
+    # return {label: shuffle(texts) for label, texts in grouped.items()}
+
+    # Use NumPy's random number generator for shuffling
+    rng = np.random.default_rng(random_seed)
+    return {label: rng.permutation(texts).tolist() for label, texts in grouped.items()}
 
 
 def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
@@ -292,7 +297,7 @@ def train_probe(
     device: str,
     lr: float = 1e-2,
     seed: int = SEED,
-):
+) -> tuple[Probe, float]:
     """input_batches can be a list of tensors or strings. If strings, get_acts must be provided."""
 
     if type(train_input_batches[0]) == str or type(test_input_batches[0]) == str:
@@ -300,12 +305,10 @@ def train_probe(
     elif type(train_input_batches[0]) == t.Tensor or type(test_input_batches[0]) == t.Tensor:
         assert precomputed_acts == True
 
-    t.manual_seed(seed)
     probe = Probe(dim).to(device)
     optimizer = t.optim.AdamW(probe.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
 
-    losses = t.zeros(epochs, len(train_input_batches))
     for epoch in range(epochs):
         batch_idx = 0
         for inputs, labels in zip(train_input_batches, train_label_batches):
@@ -318,7 +321,6 @@ def train_probe(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            losses[epoch, batch_idx] = loss
             batch_idx += 1
         print(f"\nEpoch {epoch + 1}/{epochs} Loss: {loss.item()}")
 
@@ -332,7 +334,7 @@ def train_probe(
             test_input_batches, test_label_batches, probe, get_acts, precomputed_acts
         )
         print(f"Test Accuracy: {test_accuracy}")
-    return probe, losses
+    return probe, test_accuracy
 
 
 def test_probe(
@@ -397,7 +399,13 @@ def train_probes(
     device: str,
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
     epochs: int = 10,
-):
+    save_results: bool = True,
+    seed: int = SEED,
+) -> dict[int, float]:
+
+    t.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
     # TODO: I think there may be a scoping issue with model and get_acts(), but we currently aren't using get_acts()
     model = LanguageModel(llm_model_name, device_map=device, dispatch=True)
@@ -417,7 +425,7 @@ def train_probes(
     train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
     test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
 
-    probes, losses = {}, {}
+    probes, test_accuracies = {}, {}
 
     all_train_acts = {}
     all_test_acts = {}
@@ -447,7 +455,7 @@ def train_probes(
             all_test_acts, profession, probe_batch_size, device
         )
 
-        probe, loss = train_probe(
+        probe, test_accuracy = train_probe(
             train_acts,
             train_labels,
             test_acts,
@@ -460,22 +468,26 @@ def train_probes(
         )
 
         probes[profession] = probe
-        losses[profession] = loss
+        test_accuracies[profession] = test_accuracy
 
-    os.makedirs("trained_bib_probes", exist_ok=True)
-    t.save(probes, f"trained_bib_probes/probes_ctx_len_{context_length}.pt")
-    t.save(losses, f"trained_bib_probes/losses_ctx_len_{context_length}.pt")
+    if save_results:
+        os.makedirs("trained_bib_probes", exist_ok=True)
+        t.save(probes, f"trained_bib_probes/probes_ctx_len_{context_length}.pt")
+
+    return test_accuracies
 
 
 if __name__ == "__main__":
-    train_probes(
-        train_set_size=10000,
+    test_accuracies = train_probes(
+        train_set_size=1000,
         test_set_size=1000,
-        context_length=64,
+        context_length=128,
         probe_batch_size=50,
-        llm_batch_size=4,
+        llm_batch_size=20,
         llm_model_name="EleutherAI/pythia-70m-deduped",
         epochs=10,
         device="cuda",
+        seed=SEED,
     )
+    print(test_accuracies)
 # %%
