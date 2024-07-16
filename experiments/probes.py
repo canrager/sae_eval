@@ -317,7 +317,7 @@ def train_probe(
             else:
                 acts_BD = get_acts(inputs)
             logits_B = probe(acts_BD)
-            loss = criterion(logits_B, t.tensor(labels, device=device, dtype=t.float32))
+            loss = criterion(logits_B, labels.clone().detach().to(device=device, dtype=t.float32))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
