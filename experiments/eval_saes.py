@@ -23,7 +23,6 @@ def eval_saes(
     n_inputs: int,
     context_length: int,
     llm_batch_size: int,
-    sae_batch_size: int,
     device: str,
     transcoder: bool = False,
 ) -> dict:
@@ -58,7 +57,7 @@ def eval_saes(
             n_ctxs=buffer_size,
             ctx_len=context_length,
             refresh_batch_size=llm_batch_size,
-            out_batch_size=sae_batch_size,
+            out_batch_size=llm_batch_size,
             io=io,
             d_submodule=activation_dim,
             device=device,
@@ -70,7 +69,7 @@ def eval_saes(
 
         hyperparameters = {
             # TODO: Add batching so n_inputs is actually n_inputs
-            "n_inputs": sae_batch_size,
+            "n_inputs": llm_batch_size,
             "context_length": context_length,
         }
         eval_results["hyperparameters"] = hyperparameters
@@ -88,10 +87,9 @@ def eval_saes(
 if __name__ == "__main__":
     DEVICE = "cuda"
 
-    llm_batch_size = 10  # Approx 16GB VRAM on pythia70m with 128 context length
+    llm_batch_size = 10  # Approx 1.5GB VRAM on pythia70m with 128 context length
     # TODO: Don't hardcode context length
     context_length = 128
-    sae_batch_size = 20
     n_inputs = 10000
 
     submodule_trainers = {"resid_post_layer_3": {"trainer_ids": [0]}}
@@ -115,7 +113,6 @@ if __name__ == "__main__":
         n_inputs,
         context_length,
         llm_batch_size,
-        sae_batch_size,
         DEVICE,
     )
 

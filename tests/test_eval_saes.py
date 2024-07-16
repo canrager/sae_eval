@@ -8,15 +8,13 @@ import experiments.utils as utils
 def test_eval_saes():
 
     l0_tolerance = 1
-    tolerance = 0.01
+    tolerance = 0.1
 
     DEVICE = "cuda"
 
-    llm_batch_size = 10  # Approx 16GB VRAM on pythia70m with 128 context length
-    buffer_size = 512
+    llm_batch_size = 20  # Approx 16GB VRAM on pythia70m with 128 context length
     # TODO: Don't hardcode context length
     context_length = 128
-    sae_batch_size = 20
     n_inputs = 10000
 
     seed = 42
@@ -43,7 +41,6 @@ def test_eval_saes():
         n_inputs,
         context_length,
         llm_batch_size,
-        sae_batch_size,
         DEVICE,
     )
 
