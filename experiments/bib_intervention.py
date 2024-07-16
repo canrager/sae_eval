@@ -694,31 +694,29 @@ if __name__ == "__main__":
 
     T_max_sideeffect = 5e-3
 
-    submodule_trainers = {
-        "resid_post_layer_4": {"trainer_ids": [10]},
-    }
-
     dictionaries_path = "../dictionary_learning/dictionaries"
     probes_dir = "trained_bib_probes"
 
-    sweep_name = "pythia70m_sweep0709"
+    ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
-    run_interventions(
-        submodule_trainers,
-        sweep_name,
-        dictionaries_path,
-        probes_dir,
-        selection_method,
-        probe_train_set_size,
-        probe_test_set_size,
-        train_set_size,
-        test_set_size,
-        probe_batch_size,
-        llm_batch_size,
-        n_eval_batches,
-        patching_batch_size,
-        T_effects,
-        T_max_sideeffect,
-        num_classes,
-        random_seed,
-    )
+    for sweep_name, submodule_trainers in ae_sweep_paths.items():
+
+        run_interventions(
+            submodule_trainers,
+            sweep_name,
+            dictionaries_path,
+            probes_dir,
+            selection_method,
+            probe_train_set_size,
+            probe_test_set_size,
+            train_set_size,
+            test_set_size,
+            probe_batch_size,
+            llm_batch_size,
+            n_eval_batches,
+            patching_batch_size,
+            T_effects,
+            T_max_sideeffect,
+            num_classes,
+            random_seed,
+        )

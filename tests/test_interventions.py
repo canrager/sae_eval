@@ -65,58 +65,57 @@ def test_run_interventions():
 
     T_max_sideeffect = 5e-3
 
-    submodule_trainers = {"resid_post_layer_3": {"trainer_ids": [0]}}
-
     dictionaries_path = "dictionary_learning/dictionaries"
-
-    sweep_name = "pythia70m_test_sae"
-
     probes_dir = "experiments/trained_bib_probes"
 
-    bib_intervention.run_interventions(
-        submodule_trainers,
-        sweep_name,
-        dictionaries_path,
-        probes_dir,
-        selection_method,
-        probe_train_set_size,
-        probe_test_set_size,
-        train_set_size,
-        test_set_size,
-        probe_batch_size,
-        llm_batch_size,
-        n_eval_batches,
-        patching_batch_size,
-        T_effects,
-        T_max_sideeffect,
-        num_classes,
-        seed,
-    )
+    ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
-    ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
-    ae_paths = utils.get_ae_paths(ae_group_paths)
+    for sweep_name, submodule_trainers in ae_sweep_paths.items():
 
-    output_filename = f"{ae_paths[0]}/class_accuracies.pkl"
+        bib_intervention.run_interventions(
+            submodule_trainers,
+            sweep_name,
+            dictionaries_path,
+            probes_dir,
+            selection_method,
+            probe_train_set_size,
+            probe_test_set_size,
+            train_set_size,
+            test_set_size,
+            probe_batch_size,
+            llm_batch_size,
+            n_eval_batches,
+            patching_batch_size,
+            T_effects,
+            T_max_sideeffect,
+            num_classes,
+            seed,
+        )
 
-    with open(output_filename, "rb") as f:
-        class_accuracies = pickle.load(f)
+        ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
+        ae_paths = utils.get_ae_paths(ae_group_paths)
 
-    tolerance = 0.01
+        output_filename = f"{ae_paths[0]}/class_accuracies.pkl"
 
-    expected_results = {
-        -1: {0: 0.7620000243186951, 1: 0.7700000405311584, 2: 0.8100000619888306},
-        0: {
-            5: {0: 0.7220000624656677, 1: 0.8030000329017639, 2: 0.8110000491142273},
-            500: {0: 0.5640000104904175, 1: 0.7080000042915344, 2: 0.7730000615119934},
-        },
-        1: {
-            5: {0: 0.7570000290870667, 1: 0.7520000338554382, 2: 0.8070000410079956},
-            500: {0: 0.7590000629425049, 1: 0.5130000114440918, 2: 0.7880000472068787},
-        },
-        2: {
-            5: {0: 0.7470000386238098, 1: 0.7800000309944153, 2: 0.8090000152587891},
-            500: {0: 0.6980000138282776, 1: 0.6950000524520874, 2: 0.6080000400543213},
-        },
-    }
+        with open(output_filename, "rb") as f:
+            class_accuracies = pickle.load(f)
 
-    compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
+        tolerance = 0.01
+
+        expected_results = {
+            -1: {0: 0.7620000243186951, 1: 0.7700000405311584, 2: 0.8100000619888306},
+            0: {
+                5: {0: 0.7220000624656677, 1: 0.8030000329017639, 2: 0.8110000491142273},
+                500: {0: 0.5640000104904175, 1: 0.7080000042915344, 2: 0.7730000615119934},
+            },
+            1: {
+                5: {0: 0.7570000290870667, 1: 0.7520000338554382, 2: 0.8070000410079956},
+                500: {0: 0.7590000629425049, 1: 0.5130000114440918, 2: 0.7880000472068787},
+            },
+            2: {
+                5: {0: 0.7470000386238098, 1: 0.7800000309944153, 2: 0.8090000152587891},
+                500: {0: 0.6980000138282776, 1: 0.6950000524520874, 2: 0.6080000400543213},
+            },
+        }
+
+        compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)

@@ -1,7 +1,7 @@
 import torch
 import json
 import os
-from typing import TypeAlias, Any
+from typing import TypeAlias, Any, Optional
 
 from dictionary_learning import AutoEncoder, ActivationBuffer
 from dictionary_learning.dictionary import (
@@ -61,16 +61,16 @@ class ModelEvalConfig:
 
 
 def get_ae_group_paths(
-    dictionaries_path: str, sweep_name: str, submodule_trainers: dict
+    dictionaries_path: str, sweep_name: str, submodule_trainers: Optional[dict]
 ) -> list[str]:
-    for submodule in submodule_trainers.keys():
-        submodule_trainers[submodule]["sweep_name"] = sweep_name
+
+    if submodule_trainers is None:
+        return [f"{dictionaries_path}/{sweep_name}"]
 
     ae_group_paths = []
 
     for submodule in submodule_trainers.keys():
         trainer_ids = submodule_trainers[submodule]["trainer_ids"]
-        sweep_name = submodule_trainers[submodule]["sweep_name"]
 
         base_filename = f"{dictionaries_path}/{sweep_name}/{submodule}"
 
