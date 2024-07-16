@@ -19,7 +19,6 @@ else:
 @torch.no_grad()
 def eval_saes(
     model: LanguageModel,
-    model_name: str,
     ae_paths: list[str],
     n_inputs: int,
     context_length: int,
@@ -54,7 +53,7 @@ def eval_saes(
                 print(f"Skipping {ae_path} as eval results already exist")
                 continue
 
-        submodule, dictionary, config = utils.load_dictionary(model, model_name, ae_path, device)
+        submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
 
         activation_dim = config["trainer"]["activation_dim"]
 
@@ -117,7 +116,6 @@ if __name__ == "__main__":
 
     eval_results = eval_saes(
         model,
-        model_name,
         ae_paths,
         n_inputs,
         context_length,

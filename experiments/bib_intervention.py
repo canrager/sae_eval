@@ -471,18 +471,13 @@ def run_interventions(
     T_max_sideeffect: float,
     max_classes: int,
     random_seed: int,
+    device: str = "cuda",
+    verbose: bool = False,
 ):
     t.manual_seed(random_seed)
 
-    # Load model and dictionaries
-    DEVICE = "cuda:0"
-    # TODO: improve scoping of probe layer int
-    layer = 4  # model layer for attaching linear classification head
-    activation_dim = 512
-    verbose = False
-
     model_name = utils.model_name_lookup[model_location]
-    model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
+    model = LanguageModel(model_name, device_map=device, dispatch=True)
 
     # probe_layer = probes.probe_layer_lookup[model_name]
     probe_layer = 4
@@ -507,12 +502,11 @@ def run_interventions(
     # This will only run eval_saes on autoencoders that don't yet have a eval_results.json file
     eval_saes.eval_saes(
         model,
-        model_name,
         ae_paths,
         eval_saes_n_inputs,
         context_length,
         llm_batch_size,
-        DEVICE,
+        device,
         overwrite_prev_results=False,
     )
 
@@ -526,7 +520,7 @@ def run_interventions(
             context_length=context_length,
             probe_batch_size=probe_batch_size,
             llm_batch_size=llm_batch_size,
-            device=DEVICE,
+            device=device,
             probe_dir=probes_dir,
             llm_model_name=model_name,
             epochs=10,
@@ -547,7 +541,7 @@ def run_interventions(
         test_acts[class_idx] = class_test_acts
 
     test_accuracies = probe_training.get_probe_test_accuracy(
-        probes, all_classes_list, test_acts, probe_batch_size, verbose, device=DEVICE
+        probes, all_classes_list, test_acts, probe_batch_size, verbose, device=device
     )
 
     # %%
@@ -559,7 +553,7 @@ def run_interventions(
         print(f"Running ablation for {ae_path}")
         submodules = []
         dictionaries = {}
-        submodule, dictionary, config = utils.load_dictionary(model, model_name, ae_path, DEVICE)
+        submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
         submodules.append(submodule)
         dictionaries[submodule] = dictionary
         dict_size = config["trainer"]["dict_size"]
@@ -583,7 +577,7 @@ def run_interventions(
                 train_bios,
                 random_seed,
                 probe_layer,
-                DEVICE,
+                device,
                 n_eval_batches,
                 batch_size=patching_batch_size,
                 patching_method="attrib",
@@ -634,7 +628,7 @@ def run_interventions(
 
                 for evaluated_class_idx in all_classes_list:
                     batch_test_acts, batch_test_labels = prepare_probe_data(
-                        test_acts_ablated, evaluated_class_idx, probe_batch_size, device=DEVICE
+                        test_acts_ablated, evaluated_class_idx, probe_batch_size, device=device
                     )
                     test_acc_probe = test_probe(
                         batch_test_acts,

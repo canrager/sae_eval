@@ -36,7 +36,6 @@ def test_eval_saes():
 
     eval_results = eval_saes.eval_saes(
         model,
-        model_name,
         ae_paths,
         n_inputs,
         context_length,
