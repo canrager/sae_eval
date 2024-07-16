@@ -1,7 +1,7 @@
 import torch
 import json
 import os
-from typing import TypeAlias, Any
+from typing import TypeAlias, Any, Optional
 
 from dictionary_learning import AutoEncoder, ActivationBuffer
 from dictionary_learning.dictionary import (
@@ -15,21 +15,64 @@ from dictionary_learning.interp import examine_dimension
 submodule_alias: TypeAlias = Any
 
 
+# Activation dim technically isn't needed as it can be accessed from HuggingFace model config.
+# The key to access it changes between model architecures, so we would have to add that key per architecure plus some logic.
+class ModelEvalConfig:
+    CONFIGS = {
+        "pythia70m": {
+            "full_model_name": "EleutherAI/pythia-70m-deduped",
+            "activation_dim": 512,
+            "probe_layer": 4,
+        },
+        "pythia160m": {
+            "full_model_name": "EleutherAI/pythia-160m-deduped",
+            "activation_dim": 768,
+            "probe_layer": 10,
+        },
+    }
+
+    def __init__(self, model_name):
+        config = self.CONFIGS.get(model_name)
+        if config is None:
+            raise ValueError(f"Unknown model: {model_name}")
+
+        self.model_name = model_name
+        self.full_model_name = config["full_model_name"]
+        self.activation_dim = config["activation_dim"]
+        self.probe_layer = config["probe_layer"]
+
+    @classmethod
+    def from_sweep_name(cls, sweep_name):
+        matching_configs = [
+            model_name for model_name in cls.CONFIGS.keys() if model_name in sweep_name
+        ]
+        if len(matching_configs) != 1:
+            raise ValueError(
+                f"Expected exactly one matching model for sweep {sweep_name}, found {len(matching_configs)}"
+            )
+        return cls(matching_configs[0])
+
+    @classmethod
+    def from_full_model_name(cls, full_model_name):
+        for model_name, config in cls.CONFIGS.items():
+            if config["full_model_name"] == full_model_name:
+                return cls(model_name)
+        raise ValueError(f"Unknown full model name: {full_model_name}")
+
+
 def get_ae_group_paths(
-    dictionaries_path: str, model_location: str, sweep_name: str, submodule_trainers: dict
+    dictionaries_path: str, sweep_name: str, submodule_trainers: Optional[dict]
 ) -> list[str]:
-    for submodule in submodule_trainers.keys():
-        submodule_trainers[submodule]["model_location"] = model_location
-        submodule_trainers[submodule]["sweep_name"] = sweep_name
+
+    if submodule_trainers is None:
+        return [f"{dictionaries_path}/{sweep_name}"]
 
     ae_group_paths = []
 
     for submodule in submodule_trainers.keys():
         trainer_ids = submodule_trainers[submodule]["trainer_ids"]
-        model_location = submodule_trainers[submodule]["model_location"]
-        sweep_name = submodule_trainers[submodule]["sweep_name"]
 
-        base_filename = f"{dictionaries_path}/{model_location}{sweep_name}/{submodule}"
+        base_filename = f"{dictionaries_path}/{sweep_name}/{submodule}"
 
         if trainer_ids is None:
             ae_group_paths.append(base_filename)
@@ -89,7 +132,7 @@ def check_for_empty_folders(ae_group_paths: list[str]) -> bool:
     return True
 
 
-def load_dictionary(model, first_model_name: str, base_path: str, device: str, verbose: bool = True):
+def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
     if verbose:
         print(f"Loading dictionary from {base_path}")
     ae_path = f"{base_path}ae.pt"
@@ -102,6 +145,9 @@ def load_dictionary(model, first_model_name: str, base_path: str, device: str, v
     layer = config["trainer"]["layer"]
     model_name = config["trainer"]["lm_name"]
     dict_class = config["trainer"]["dict_class"]
+
+    first_model_name = model.config._name_or_path
+    assert type(first_model_name) == str, "Model name must be a string"
 
     assert (
         model_name == first_model_name
@@ -126,14 +172,13 @@ def load_dictionary(model, first_model_name: str, base_path: str, device: str, v
 
 
 def get_submodule(model, submodule_str: str, layer: int):
-    model_name = model.config._name_or_path
     allowed_submodules = ["attention_out", "mlp_out", "resid_post"]
-    allowed_model_names = ["EleutherAI/pythia-70m-deduped", 'google/gemma-2b']
 
-    if model_name not in allowed_model_names:
-        raise ValueError(f"model_name must be one of {allowed_model_names}")
+    model_architecture = model.config.architectures[0]
 
-    if model_name == "EleutherAI/pythia-70m-deduped":
+    assert type(model_architecture) == str, "Model architecture must be a string"
+
+    if model_architecture == "GPTNeoXForCausalLM":
         if "attention_out" in submodule_str:
             submodule = model.gpt_neox.layers[layer].attention
         elif "mlp_out" in submodule_str:
@@ -142,15 +187,8 @@ def get_submodule(model, submodule_str: str, layer: int):
             submodule = model.gpt_neox.layers[layer]
         else:
             raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
-    elif model_name == 'google/gemma-2b':
-        if "attention_out" in submodule_str:
-            submodule = model.model.layers[layer].self_attn
-        elif "mlp_out" in submodule_str:
-            submodule = model.model.layers[layer].mlp
-        elif "resid_post" in submodule_str:
-            submodule = model.model.layers[layer]
-        else:
-            raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
+    else:
+        raise ValueError(f"Model architecture {model_architecture} not supported")
 
     return submodule
 

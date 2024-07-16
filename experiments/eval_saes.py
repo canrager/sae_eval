@@ -2,6 +2,7 @@ import torch
 from nnsight import LanguageModel
 from datasets import load_dataset
 import json
+import os
 
 import experiments.utils as utils
 from dictionary_learning.buffer import ActivationBuffer
@@ -14,85 +15,111 @@ if DEBUGGING:
 else:
     tracer_kwargs = dict(scan=False, validate=False)
 
-DEVICE = "cuda"
 
-torch.set_grad_enabled(False)
+@torch.no_grad()
+def eval_saes(
+    model: LanguageModel,
+    ae_paths: list[str],
+    n_inputs: int,
+    context_length: int,
+    llm_batch_size: int,
+    device: str,
+    overwrite_prev_results: bool = False,
+    transcoder: bool = False,
+) -> dict:
 
-transcoder = False
+    buffer_size = min(512, n_inputs)
 
-if transcoder:
-    io = "in_and_out"
-else:
-    io = "out"
+    if transcoder:
+        io = "in_and_out"
+    else:
+        io = "out"
 
-llm_batch_size = 200  # Approx 16GB VRAM on pythia70m with 128 context length
-buffer_size = 512
-context_length = 128
-sae_batch_size = 200
-n_inputs = 10000
+    pile_dataset = load_dataset("NeelNanda/pile-10k", streaming=False)
 
-submodule_trainers = {
-    "resid_post_layer_3": {"trainer_ids": None},
-    "resid_post_layer_4": {"trainer_ids": None},
-}
+    input_strings = []
 
-model_name_lookup = {"pythia70m": "EleutherAI/pythia-70m-deduped"}
-dictionaries_path = "../dictionary_learning/dictionaries"
+    for i, example in enumerate(pile_dataset["train"]["text"]):
+        if i == n_inputs:
+            break
+        input_strings.append(example[:context_length])
 
-model_location = "pythia70m"
-sweep_name = "_sweep0711"
-model_name = model_name_lookup[model_location]
-model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
+    eval_results = {}
 
-ae_group_paths = utils.get_ae_group_paths(
-    dictionaries_path, model_location, sweep_name, submodule_trainers
-)
-ae_paths = utils.get_ae_paths(ae_group_paths)
+    for ae_path in ae_paths:
+        output_filename = f"{ae_path}/eval_results.json"
+        if not overwrite_prev_results:
+            if os.path.exists(output_filename):
+                print(f"Skipping {ae_path} as eval results already exist")
+                continue
 
-# pile_dataset = load_dataset("monology/pile-uncopyrighted", streaming=True)
-pile_dataset = load_dataset("NeelNanda/pile-10k", streaming=False)
+        submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
 
-input_strings = []
+        activation_dim = config["trainer"]["activation_dim"]
 
-for i, example in enumerate(pile_dataset["train"]["text"]):
-    if i == n_inputs:
-        break
-    input_strings.append(example[:context_length])
+        activation_buffer_data = iter(input_strings)
+
+        activation_buffer = ActivationBuffer(
+            activation_buffer_data,
+            model,
+            submodule,
+            n_ctxs=buffer_size,
+            ctx_len=context_length,
+            refresh_batch_size=llm_batch_size,
+            out_batch_size=llm_batch_size,
+            io=io,
+            d_submodule=activation_dim,
+            device=device,
+        )
+
+        eval_results = evaluate(
+            dictionary, activation_buffer, context_length, llm_batch_size, io=io, device=device
+        )
+
+        hyperparameters = {
+            # TODO: Add batching so n_inputs is actually n_inputs
+            "n_inputs": llm_batch_size,
+            "context_length": context_length,
+        }
+        eval_results["hyperparameters"] = hyperparameters
+
+        print(eval_results)
+
+        with open(output_filename, "w") as f:
+            json.dump(eval_results, f)
+
+    # return the final eval_results for testing purposes
+    return eval_results
 
 
-for ae_path in ae_paths:
-    submodule, dictionary, config = utils.load_dictionary(model, model_name, ae_path, DEVICE)
+if __name__ == "__main__":
+    DEVICE = "cuda"
 
-    activation_dim = config["trainer"]["activation_dim"]
+    llm_batch_size = 10  # Approx 1.5GB VRAM on pythia70m with 128 context length
+    # TODO: Don't hardcode context length
+    context_length = 128
+    n_inputs = 10000
 
-    activation_buffer_data = iter(input_strings)
+    submodule_trainers = {"resid_post_layer_3": {"trainer_ids": [0]}}
 
-    activation_buffer = ActivationBuffer(
-        activation_buffer_data,
+    dictionaries_path = "../dictionary_learning/dictionaries"
+
+    sweep_name = "pythia70m_test_sae"
+    model_eval_config = utils.ModelEvalConfig.from_sweep_name(sweep_name)
+    model_name = model_eval_config.full_model_name
+
+    model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
+
+    ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
+    ae_paths = utils.get_ae_paths(ae_group_paths)
+
+    eval_results = eval_saes(
         model,
-        submodule,
-        n_ctxs=buffer_size,
-        ctx_len=context_length,
-        refresh_batch_size=llm_batch_size,
-        out_batch_size=sae_batch_size,
-        io=io,
-        d_submodule=activation_dim,
-        device=DEVICE,
+        ae_paths,
+        n_inputs,
+        context_length,
+        llm_batch_size,
+        DEVICE,
     )
 
-    eval_results = evaluate(
-        dictionary, activation_buffer, context_length, llm_batch_size, io=io, device=DEVICE
-    )
-
-    hyperparameters = {
-        # TODO: Add batching so n_inputs is actually n_inputs
-        "n_inputs": sae_batch_size,
-        "context_length": context_length,
-    }
-    eval_results["hyperparameters"] = hyperparameters
-
-    print(eval_results)
-
-    output_filename = f"{ae_path}/eval_results.json"
-    with open(output_filename, "w") as f:
-        json.dump(eval_results, f)
+    print(f"Final eval results: {eval_results}")

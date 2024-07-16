@@ -7,6 +7,8 @@ import gc
 from collections import defaultdict
 import einops
 import math
+import numpy as np
+import pickle
 
 import torch as t
 from torch import nn
@@ -20,7 +22,6 @@ from datasets import load_dataset
 from nnsight import LanguageModel
 
 import experiments.utils as utils
-from experiments.utils import submodule_alias
 
 # Configuration
 DEBUGGING = False
@@ -116,7 +117,11 @@ def get_balanced_dataset(dataset, min_samples_per_group: int, train: bool, rando
 
     balanced_df = pd.concat(balanced_df_list).reset_index(drop=True)
     grouped = balanced_df.groupby("profession")["hard_text"].apply(list)
-    return {label: shuffle(texts) for label, texts in grouped.items()}
+    # return {label: shuffle(texts) for label, texts in grouped.items()}
+
+    # Use NumPy's random number generator for shuffling
+    rng = np.random.default_rng(random_seed)
+    return {label: rng.permutation(texts).tolist() for label, texts in grouped.items()}
 
 
 def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
@@ -212,9 +217,9 @@ def get_acts(text):
 
 @t.no_grad()
 def get_all_activations(
-    text_inputs: list[str], model: LanguageModel, submodule: submodule_alias, batch_size: int, layer: int
+    text_inputs: list[str], model: LanguageModel, batch_size: int, layer: int
 ) -> t.Tensor:
-    
+
     text_batches = utils.batch_list(text_inputs, batch_size)
 
     assert type(text_batches[0][0]) == str
@@ -223,16 +228,13 @@ def get_all_activations(
     for text_batch_BL in text_batches:
         with model.trace(text_batch_BL, **tracer_kwargs):
             attn_mask = model.input[1]["attention_mask"]
-            acts_BLD = submodule.output[0]
-            # acts_BLD = submodule.output
-
+            acts_BLD = model.gpt_neox.layers[layer].output[0]
             acts_BLD = acts_BLD * attn_mask[:, :, None]
             acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]
             acts_BD = acts_BD.save()
         all_acts_list_BD.append(acts_BD.value)
 
     all_acts_bD = t.cat(all_acts_list_BD, dim=0)
-    print(f'shape of all_acts_bD: {all_acts_bD.shape}')
     return all_acts_bD
 
 
@@ -296,7 +298,7 @@ def train_probe(
     device: str,
     lr: float = 1e-2,
     seed: int = SEED,
-):
+) -> tuple[Probe, float]:
     """input_batches can be a list of tensors or strings. If strings, get_acts must be provided."""
 
     if type(train_input_batches[0]) == str or type(test_input_batches[0]) == str:
@@ -304,12 +306,10 @@ def train_probe(
     elif type(train_input_batches[0]) == t.Tensor or type(test_input_batches[0]) == t.Tensor:
         assert precomputed_acts == True
 
-    t.manual_seed(seed)
     probe = Probe(dim).to(device)
     optimizer = t.optim.AdamW(probe.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
 
-    losses = t.zeros(epochs, len(train_input_batches))
     for epoch in range(epochs):
         batch_idx = 0
         for inputs, labels in zip(train_input_batches, train_label_batches):
@@ -318,11 +318,10 @@ def train_probe(
             else:
                 acts_BD = get_acts(inputs)
             logits_B = probe(acts_BD)
-            loss = criterion(logits_B, t.tensor(labels, device=device, dtype=t.float32))
+            loss = criterion(logits_B, labels.clone().detach().to(device=device, dtype=t.float32))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            losses[epoch, batch_idx] = loss
             batch_idx += 1
         print(f"\nEpoch {epoch + 1}/{epochs} Loss: {loss.item()}")
 
@@ -336,7 +335,7 @@ def train_probe(
             test_input_batches, test_label_batches, probe, get_acts, precomputed_acts
         )
         print(f"Test Accuracy: {test_accuracy}")
-    return probe, losses
+    return probe, test_accuracy
 
 
 def test_probe(
@@ -385,12 +384,6 @@ def get_probe_test_accuracy(
     return test_accuracies
 
 
-probe_layer_lookup = {
-    "EleutherAI/pythia-70m-deduped": 4,
-    "google/gemma-2b": 12,
-}
-
-
 # Main execution
 def train_probes(
     train_set_size: int,
@@ -399,24 +392,23 @@ def train_probes(
     probe_batch_size: int,
     llm_batch_size: int,
     device: str,
+    probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
     epochs: int = 10,
-):
+    save_results: bool = True,
+    seed: int = SEED,
+) -> dict[int, float]:
+
+    t.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
     # TODO: I think there may be a scoping issue with model and get_acts(), but we currently aren't using get_acts()
     model = LanguageModel(llm_model_name, device_map=device, dispatch=True)
-    # save_path = f"trained_bib_probes/probe_{llm_model_name}"
 
-    if llm_model_name == "EleutherAI/pythia-70m-deduped":
-        d_model = 512
-        probe_layer = probe_layer_lookup[llm_model_name]
-    elif llm_model_name == "google/gemma-2b":
-        d_model = 2048
-        probe_layer = probe_layer_lookup[llm_model_name]
-        submodule_name = "resid_post"
-        submodule = utils.get_submodule(model, llm_model_name, submodule_name, probe_layer)
-    else:
-        raise ValueError(f"Model {llm_model_name} not supported.")
+    model_eval_config = utils.ModelEvalConfig.from_full_model_name(llm_model_name)
+    d_model = model_eval_config.activation_dim
+    probe_layer = model_eval_config.probe_layer
 
     dataset, df = load_and_prepare_dataset()
 
@@ -424,7 +416,7 @@ def train_probes(
     train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
     test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
 
-    probes, losses = {}, {}
+    probes, test_accuracies = {}, {}
 
     all_train_acts = {}
     all_test_acts = {}
@@ -454,7 +446,7 @@ def train_probes(
             all_test_acts, profession, probe_batch_size, device
         )
 
-        probe, loss = train_probe(
+        probe, test_accuracy = train_probe(
             train_acts,
             train_labels,
             test_acts,
@@ -467,22 +459,32 @@ def train_probes(
         )
 
         probes[profession] = probe
-        losses[profession] = loss
+        test_accuracies[profession] = test_accuracy
 
-    os.makedirs("trained_bib_probes", exist_ok=True)
-    t.save(probes, f"trained_bib_probes/probes_{llm_model_name}_ctx_len_{context_length}.pt")
-    t.save(losses, f"trained_bib_probes/losses_{llm_model_name}ctx_len_{context_length}.pt")
+    if save_results:
+        only_model_name = llm_model_name.split("/")[-1]
+        os.makedirs(f"{probe_dir}", exist_ok=True)
+        os.makedirs(f"{probe_dir}/{only_model_name}", exist_ok=True)
+
+        probe_output_filename = f"{probe_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
+
+        with open(probe_output_filename, "wb") as f:
+            pickle.dump(probes, f)
+
+    return test_accuracies
 
 
 if __name__ == "__main__":
-    train_probes(
-        train_set_size=10000,
+    test_accuracies = train_probes(
+        train_set_size=1000,
         test_set_size=1000,
-        context_length=64,
+        context_length=128,
         probe_batch_size=50,
-        llm_batch_size=4,
-        llm_model_name="google/gemma-2b",
+        llm_batch_size=20,
+        llm_model_name="EleutherAI/pythia-70m-deduped",
         epochs=10,
         device="cuda",
+        seed=SEED,
     )
+    print(test_accuracies)
 # %%
