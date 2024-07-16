@@ -22,7 +22,7 @@ sys.path.append(parent_dir)
 from attribution import patching_effect
 from dictionary_learning.interp import examine_dimension
 from dictionary_learning.utils import hf_dataset_to_generator
-import experiments.probes as class_probing
+import experiments.probes as probes
 
 from experiments.probes import (
     load_and_prepare_dataset,
@@ -469,7 +469,7 @@ model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
 probe_train_set_size = 5000
 probe_test_set_size = 1000
-probe_layer = class_probing.probe_layer_lookup[model_name]
+probe_layer = probes.probe_layer_lookup[model_name]
 
 # Load datset and probes
 train_set_size = 1000
@@ -516,7 +516,7 @@ probe_path = f"trained_bib_probes/probes_ctx_len_{context_length}.pt"
 
 if not os.path.exists(probe_path):
     print("Probes not found, training probes")
-    probes = class_probing.train_probes(
+    probes = probes.train_probes(
         train_set_size=probe_train_set_size,
         test_set_size=probe_test_set_size,
         context_length=context_length,
@@ -538,7 +538,7 @@ for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated 
     class_test_acts = get_all_activations(test_bios[class_idx], model, llm_batch_size, probe_layer)
     test_acts[class_idx] = class_test_acts
 
-test_accuracies = class_probing.get_probe_test_accuracy(
+test_accuracies = probes.get_probe_test_accuracy(
     probes, all_classes_list, test_acts, probe_batch_size, verbose, device=DEVICE
 )
 # %%
