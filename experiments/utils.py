@@ -14,23 +14,18 @@ from dictionary_learning.interp import examine_dimension
 
 submodule_alias: TypeAlias = Any
 
-model_name_lookup = {
-    "pythia70m": "EleutherAI/pythia-70m-deduped",
-    "pythia160m": "EleutherAI/pythia-160m-deduped",
-}
 
-
-class ModelConfig:
+# Activation dim technically isn't needed as it can be accessed from HuggingFace model config.
+# The key to access it changes between model architecures, so we would have to add that key per architecure plus some logic.
+class ModelEvalConfig:
     CONFIGS = {
         "pythia70m": {
-            "full_name": "EleutherAI/pythia-70m-deduped",
-            "model_family": "pythia",
+            "full_model_name": "EleutherAI/pythia-70m-deduped",
             "activation_dim": 512,
             "probe_layer": 4,
         },
         "pythia160m": {
-            "full_name": "EleutherAI/pythia-160m-deduped",
-            "model_family": "pythia",
+            "full_model_name": "EleutherAI/pythia-160m-deduped",
             "activation_dim": 768,
             "probe_layer": 10,
         },
@@ -42,8 +37,7 @@ class ModelConfig:
             raise ValueError(f"Unknown model: {model_name}")
 
         self.model_name = model_name
-        self.full_name = config["full_name"]
-        self.model_family = config["model_family"]
+        self.full_model_name = config["full_model_name"]
         self.activation_dim = config["activation_dim"]
         self.probe_layer = config["probe_layer"]
 

@@ -476,7 +476,10 @@ def run_interventions(
 ):
     t.manual_seed(random_seed)
 
-    model_name = utils.model_name_lookup[model_location]
+    full_sweep_name = model_location + sweep_name
+    model_eval_config = utils.ModelEvalConfig.from_sweep_name(full_sweep_name)
+    model_name = model_eval_config.full_model_name
+
     model = LanguageModel(model_name, device_map=device, dispatch=True)
 
     # probe_layer = probes.probe_layer_lookup[model_name]
