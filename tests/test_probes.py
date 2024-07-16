@@ -1,4 +1,4 @@
-import experiments.probes as probes
+import experiments.probe_training as probe_training
 
 
 def test_probing():
@@ -6,7 +6,7 @@ def test_probing():
     # If encountering errors, increase tolerance
     tolerance = 0.01
 
-    test_accuracies = probes.train_probes(
+    test_accuracies = probe_training.train_probes(
         train_set_size=1000,
         test_set_size=1000,
         context_length=128,
