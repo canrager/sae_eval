@@ -8,6 +8,7 @@ from collections import defaultdict
 import einops
 import math
 import numpy as np
+import pickle
 
 import torch as t
 from torch import nn
@@ -397,6 +398,7 @@ def train_probes(
     probe_batch_size: int,
     llm_batch_size: int,
     device: str,
+    probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
     epochs: int = 10,
     save_results: bool = True,
@@ -471,8 +473,12 @@ def train_probes(
         test_accuracies[profession] = test_accuracy
 
     if save_results:
-        os.makedirs("trained_bib_probes", exist_ok=True)
-        t.save(probes, f"trained_bib_probes/probes_ctx_len_{context_length}.pt")
+        os.makedirs(f"{probe_dir}", exist_ok=True)
+
+        probe_output_filename = f"{probe_dir}/probes_ctx_len_{context_length}.pkl"
+
+        with open(probe_output_filename, "wb") as f:
+            pickle.dump(probes, f)
 
     return test_accuracies
 
