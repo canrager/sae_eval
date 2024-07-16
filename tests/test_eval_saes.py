@@ -42,6 +42,7 @@ def test_eval_saes():
         context_length,
         llm_batch_size,
         DEVICE,
+        overwrite_prev_results=True,
     )
 
     expected_l0 = 80.80000305175781

@@ -2,6 +2,7 @@ import torch
 from nnsight import LanguageModel
 from datasets import load_dataset
 import json
+import os
 
 import experiments.utils as utils
 from dictionary_learning.buffer import ActivationBuffer
@@ -24,6 +25,7 @@ def eval_saes(
     context_length: int,
     llm_batch_size: int,
     device: str,
+    overwrite_prev_results: bool = False,
     transcoder: bool = False,
 ) -> dict:
 
@@ -43,7 +45,15 @@ def eval_saes(
             break
         input_strings.append(example[:context_length])
 
+    eval_results = {}
+
     for ae_path in ae_paths:
+        output_filename = f"{ae_path}/eval_results.json"
+        if not overwrite_prev_results:
+            if os.path.exists(output_filename):
+                print(f"Skipping {ae_path} as eval results already exist")
+                continue
+
         submodule, dictionary, config = utils.load_dictionary(model, model_name, ae_path, device)
 
         activation_dim = config["trainer"]["activation_dim"]
@@ -76,7 +86,6 @@ def eval_saes(
 
         print(eval_results)
 
-        output_filename = f"{ae_path}/eval_results.json"
         with open(output_filename, "w") as f:
             json.dump(eval_results, f)
 
