@@ -508,7 +508,8 @@ def run_interventions(
         overwrite_prev_results=False,
     )
 
-    probe_path = f"{probes_dir}/probes_ctx_len_{context_length}.pkl"
+    only_model_name = model_name.split("/")[-1]
+    probe_path = f"{probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
 
     if not os.path.exists(probe_path):
         print("Probes not found, training probes")

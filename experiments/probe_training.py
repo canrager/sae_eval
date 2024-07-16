@@ -462,9 +462,11 @@ def train_probes(
         test_accuracies[profession] = test_accuracy
 
     if save_results:
+        only_model_name = llm_model_name.split("/")[-1]
         os.makedirs(f"{probe_dir}", exist_ok=True)
+        os.makedirs(f"{probe_dir}/{only_model_name}", exist_ok=True)
 
-        probe_output_filename = f"{probe_dir}/probes_ctx_len_{context_length}.pkl"
+        probe_output_filename = f"{probe_dir}/{only_model_name}probes_ctx_len_{context_length}.pkl"
 
         with open(probe_output_filename, "wb") as f:
             pickle.dump(probes, f)
