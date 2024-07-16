@@ -661,7 +661,7 @@ if __name__ == "__main__":
     selection_method = FeatureSelection.top_n
 
     random_seed = random.randint(0, 1000)
-    num_classes = 3
+    num_classes = 5
 
     probe_train_set_size = 5000
     probe_test_set_size = 1000
@@ -670,15 +670,16 @@ if __name__ == "__main__":
     train_set_size = 1000
     test_set_size = 1000
     probe_batch_size = 50
-    # llm_batch_size = 250
-    llm_batch_size = 10
+    llm_batch_size = 125
+    # llm_batch_size = 10
 
     # Attribution patching variables
     n_eval_batches = 4
-    patching_batch_size = 5
+    patching_batch_size = 50
+    # patching_batch_size = 5
 
     top_n_features = [5, 10, 20, 50, 100, 500]
-    top_n_features = [5]
+    top_n_features = [5, 500]
     T_effects_all_classes = [0.1, 0.01, 0.005, 0.001]
     # T_effects_all_classes = [0.001]
     T_effects_unique_class = [1e-4, 1e-8]
@@ -697,6 +698,13 @@ if __name__ == "__main__":
     dictionaries_path = "../dictionary_learning/dictionaries"
     probes_dir = "trained_bib_probes"
 
+    # Example of sweeping over all SAEs in a sweep
+    ae_sweep_paths = {"pythia70m_test_sae": None}
+
+    # Example of sweeping over all SAEs in a submodule
+    ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": None}}
+
+    # Example of sweeping over a single SAE
     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
