@@ -223,8 +223,8 @@ def get_all_activations(
     for text_batch_BL in text_batches:
         with model.trace(text_batch_BL, **tracer_kwargs):
             attn_mask = model.input[1]["attention_mask"]
-            # acts_BLD = submodule.output[0]
-            acts_BLD = submodule.output
+            acts_BLD = submodule.output[0]
+            # acts_BLD = submodule.output
 
             acts_BLD = acts_BLD * attn_mask[:, :, None]
             acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]

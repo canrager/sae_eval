@@ -107,7 +107,7 @@ def load_dictionary(model, first_model_name: str, base_path: str, device: str, v
         model_name == first_model_name
     ), f"Model name {model_name} does not match first model name {first_model_name}"
 
-    submodule = get_submodule(model, model_name, submodule_str, layer)
+    submodule = get_submodule(model, submodule_str, layer)
 
     if dict_class == "AutoEncoder":
         dictionary = AutoEncoder.from_pretrained(ae_path, device=device)
