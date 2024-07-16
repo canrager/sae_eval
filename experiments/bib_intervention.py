@@ -454,7 +454,6 @@ def plot_feature_effects_above_threshold(nodes, threshold=0.05):
 
 def run_interventions(
     submodule_trainers: dict,
-    model_location: str,
     sweep_name: str,
     dictionaries_path: str,
     probes_dir: str,
@@ -476,18 +475,14 @@ def run_interventions(
 ):
     t.manual_seed(random_seed)
 
-    full_sweep_name = model_location + sweep_name
-    model_eval_config = utils.ModelEvalConfig.from_sweep_name(full_sweep_name)
+    model_eval_config = utils.ModelEvalConfig.from_sweep_name(sweep_name)
     model_name = model_eval_config.full_model_name
 
     model = LanguageModel(model_name, device_map=device, dispatch=True)
 
-    # probe_layer = probes.probe_layer_lookup[model_name]
-    probe_layer = 4
+    probe_layer = model_eval_config.probe_layer
 
-    ae_group_paths = utils.get_ae_group_paths(
-        dictionaries_path, model_location, sweep_name, submodule_trainers
-    )
+    ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
     ae_paths = utils.get_ae_paths(ae_group_paths)
 
     # TODO: experiment with different context lengths
@@ -706,12 +701,10 @@ if __name__ == "__main__":
     dictionaries_path = "../dictionary_learning/dictionaries"
     probes_dir = "trained_bib_probes"
 
-    model_location = "pythia70m"
-    sweep_name = "_sweep0709"
+    sweep_name = "pythia70m_sweep0709"
 
     run_interventions(
         submodule_trainers,
-        model_location,
         sweep_name,
         dictionaries_path,
         probes_dir,

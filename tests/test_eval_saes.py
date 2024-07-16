@@ -24,18 +24,13 @@ def test_eval_saes():
 
     dictionaries_path = "dictionary_learning/dictionaries"
 
-    model_location = "pythia70m"
-    sweep_name = "_test_sae"
-
-    full_sweep_name = "pythia70m_test_sae"
-    model_eval_config = utils.ModelEvalConfig.from_sweep_name(full_sweep_name)
+    sweep_name = "pythia70m_test_sae"
+    model_eval_config = utils.ModelEvalConfig.from_sweep_name(sweep_name)
     model_name = model_eval_config.full_model_name
 
     model = LanguageModel(model_name, device_map=DEVICE, dispatch=True)
 
-    ae_group_paths = utils.get_ae_group_paths(
-        dictionaries_path, model_location, sweep_name, submodule_trainers
-    )
+    ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
     ae_paths = utils.get_ae_paths(ae_group_paths)
 
     eval_results = eval_saes.eval_saes(

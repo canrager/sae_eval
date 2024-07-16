@@ -69,14 +69,12 @@ def test_run_interventions():
 
     dictionaries_path = "dictionary_learning/dictionaries"
 
-    model_location = "pythia70m"
-    sweep_name = "_test_sae"
+    sweep_name = "pythia70m_test_sae"
 
     probes_dir = "experiments/trained_bib_probes"
 
     bib_intervention.run_interventions(
         submodule_trainers,
-        model_location,
         sweep_name,
         dictionaries_path,
         probes_dir,
@@ -95,9 +93,7 @@ def test_run_interventions():
         seed,
     )
 
-    ae_group_paths = utils.get_ae_group_paths(
-        dictionaries_path, model_location, sweep_name, submodule_trainers
-    )
+    ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
     ae_paths = utils.get_ae_paths(ae_group_paths)
 
     output_filename = f"{ae_paths[0]}/class_accuracies.pkl"
