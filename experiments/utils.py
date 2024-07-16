@@ -52,6 +52,13 @@ class ModelEvalConfig:
             )
         return cls(matching_configs[0])
 
+    @classmethod
+    def from_full_model_name(cls, full_model_name):
+        for model_name, config in cls.CONFIGS.items():
+            if config["full_model_name"] == full_model_name:
+                return cls(model_name)
+        raise ValueError(f"Unknown full model name: {full_model_name}")
+
 
 def get_ae_group_paths(
     dictionaries_path: str, model_location: str, sweep_name: str, submodule_trainers: dict

@@ -384,12 +384,6 @@ def get_probe_test_accuracy(
     return test_accuracies
 
 
-probe_layer_lookup = {
-    "EleutherAI/pythia-70m-deduped": 4,
-    "EleutherAI/pythia-160m-deduped": 10,
-}
-
-
 # Main execution
 def train_probes(
     train_set_size: int,
@@ -412,14 +406,9 @@ def train_probes(
     # TODO: I think there may be a scoping issue with model and get_acts(), but we currently aren't using get_acts()
     model = LanguageModel(llm_model_name, device_map=device, dispatch=True)
 
-    if llm_model_name == "EleutherAI/pythia-70m-deduped":
-        d_model = 512
-        probe_layer = probe_layer_lookup[llm_model_name]
-    elif llm_model_name == "EleutherAI/pythia-160m-deduped":
-        d_model = 768
-        probe_layer = probe_layer_lookup[llm_model_name]
-    else:
-        raise ValueError(f"Model {llm_model_name} not supported.")
+    model_eval_config = utils.ModelEvalConfig.from_full_model_name(llm_model_name)
+    d_model = model_eval_config.activation_dim
+    probe_layer = model_eval_config.probe_layer
 
     dataset, df = load_and_prepare_dataset()
 
