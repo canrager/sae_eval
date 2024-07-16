@@ -22,9 +22,9 @@ sys.path.append(parent_dir)
 from attribution import patching_effect
 from dictionary_learning.interp import examine_dimension
 from dictionary_learning.utils import hf_dataset_to_generator
-import experiments.bib_multiclass as class_probing
+import experiments.probes as class_probing
 
-from experiments.bib_multiclass import (
+from experiments.probes import (
     load_and_prepare_dataset,
     get_train_test_data,
     test_probe,
@@ -526,6 +526,7 @@ if not os.path.exists(probe_path):
         llm_model_name=model_name,
         epochs=10,
     )
+
 
 probes = t.load(probe_path)
 all_classes_list = list(probes.keys())[:3]
