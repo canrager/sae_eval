@@ -495,7 +495,7 @@ def run_interventions(
     test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
 
     # TODO: Add batching so n_inputs is actually n_inputs
-    eval_saes_n_inputs = llm_batch_size * 10
+    eval_saes_n_inputs = 10000
 
     # This will only run eval_saes on autoencoders that don't yet have a eval_results.json file
     eval_saes.eval_saes(
@@ -706,6 +706,10 @@ if __name__ == "__main__":
 
     # Example of sweeping over a single SAE
     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
+
+    # This will look for any empty folders in any ae_path and raise an error if it finds any
+    for sweep_name, submodule_trainers in ae_sweep_paths.items():
+        ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
 
