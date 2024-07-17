@@ -102,6 +102,8 @@ def test_run_interventions():
 
         tolerance = 0.01
 
+        print(class_accuracies)
+
         expected_results = {
             -1: {0: 0.7620000243186951, 1: 0.7700000405311584, 2: 0.8100000619888306},
             0: {

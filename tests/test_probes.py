@@ -39,6 +39,8 @@ def test_probing():
         26: 0.7570000290870667,
     }
 
+    print(test_accuracies)
+
     for class_idx in expected_accuracies:
 
         difference = abs(test_accuracies[class_idx] - expected_accuracies[class_idx])
