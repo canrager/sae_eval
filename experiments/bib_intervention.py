@@ -96,7 +96,7 @@ def get_class_samples(
     We use this for attribution patching."""
     class_samples = data[class_idx]
 
-    class_labels = t.ones(len(class_samples), device=device)
+    class_labels = t.zeros(len(class_samples), device=device)
 
     batched_samples = utils.batch_list(class_samples, batch_size)
     batched_labels = utils.batch_list(class_labels, batch_size)
@@ -454,6 +454,11 @@ def run_interventions(
 
     model_eval_config = utils.ModelEvalConfig.from_sweep_name(sweep_name)
     model_name = model_eval_config.full_model_name
+
+    # TODO: Better way to do this, maybe using d_model and context_length?
+    if "160m" in model_name:
+        llm_batch_size //= 2
+        patching_batch_size //= 2
 
     model = LanguageModel(model_name, device_map=device, dispatch=True)
 
