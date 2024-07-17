@@ -647,14 +647,15 @@ if __name__ == "__main__":
     # Load datset and probes
     train_set_size = 1000
     test_set_size = 1000
-    probe_batch_size = 50
+    probe_batch_size = 500
     llm_batch_size = 125
     # llm_batch_size = 10
 
     # Attribution patching variables
-    n_eval_batches = 4
-    patching_batch_size = 50
+    patching_batch_size = 100
     # patching_batch_size = 5
+
+    n_eval_batches = train_set_size // patching_batch_size
 
     top_n_features = [5, 10, 20, 50, 100, 500]
     top_n_features = [5, 500]
