@@ -645,7 +645,7 @@ if __name__ == "__main__":
     probe_test_set_size = 1000
 
     # Load datset and probes
-    train_set_size = 1000
+    train_set_size = 2000
     test_set_size = 1000
     probe_batch_size = 500
     llm_batch_size = 125
@@ -677,8 +677,9 @@ if __name__ == "__main__":
     dictionaries_path = "../dictionary_learning/dictionaries"
     probes_dir = "trained_bib_probes"
 
-    dictionaries_path = "dictionary_learning/dictionaries"
-    probes_dir = "experiments/trained_bib_probes"
+    # Use for debugging / any time you need to run from root dir
+    # dictionaries_path = "dictionary_learning/dictionaries"
+    # probes_dir = "experiments/trained_bib_probes"
 
     # Example of sweeping over all SAEs in a sweep
     ae_sweep_paths = {"pythia70m_test_sae": None}
