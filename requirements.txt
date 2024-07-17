@@ -1,17 +1,17 @@
-circuitsvis>=1.43.2
-datasets>=2.18.0
-einops>=0.7.0
-graphviz>=0.20.1
-matplotlib>=3.8.3
-nnsight>=0.2.9
-numpy>=1.26.4
-pandas>=2.2.1
-plotly>=5.18.0
-torch>=2.1.2
-torchtyping>=0.1.4
-tqdm>=4.66.1
-umap>=0.1.1
-zstandard>=0.22.0
+circuitsvis>=1.43.2 #1.41.0
+datasets>=2.18.0 #2.19.1
+einops>=0.7.0 #0.8.0
+graphviz>=0.20.1 #0.20.3
+matplotlib>=3.8.3 #3.8.4
+nnsight>=0.2.9 #0.2.19
+numpy>=1.26.4 #1.26.4
+pandas>=2.2.1 #2.2.2
+plotly>=5.18.0 #5.22.0
+torch>=2.1.2 #2.3.0
+torchtyping>=0.1.4 #0.1.4
+tqdm>=4.66.1 #4.66.4
+umap>=0.1.1 #0.1.1
+zstandard>=0.22.0 #0.22.0
 
 # New requirements
 scikit-learn>=1.5.1
