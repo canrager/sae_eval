@@ -51,6 +51,7 @@ class FeatureSelection(Enum):
 
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
 
+
 def metric_fn(model, labels, probe, probe_act_submodule):
     attn_mask = model.input[1]["attention_mask"]
     acts = probe_act_submodule.output[0]
@@ -525,21 +526,21 @@ def run_interventions(
         for ablated_class_idx in all_classes_list:
             node_effects[ablated_class_idx] = {}
 
-        node_effects[ablated_class_idx] = get_effects_per_class(
-            model,
-            submodules,
-            dictionaries,
-            probes,
-            probe_act_submodule,
-            ablated_class_idx,
-            train_bios,
-            random_seed,
-            device,
-            n_eval_batches,
-            batch_size=patching_batch_size,
-            patching_method="attrib",
-            steps=10,
-        )
+            node_effects[ablated_class_idx] = get_effects_per_class(
+                model,
+                submodules,
+                dictionaries,
+                probes,
+                probe_act_submodule,
+                ablated_class_idx,
+                train_bios,
+                random_seed,
+                device,
+                n_eval_batches,
+                batch_size=patching_batch_size,
+                patching_method="attrib",
+                steps=10,
+            )
 
         node_effects_cpu = utils.to_device(node_effects, "cpu")
         # Replace submodule keys with submodule_ae_path
@@ -597,7 +598,9 @@ def run_interventions(
                         print(
                             f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {test_acc_probe}"
                         )
-                    class_accuracies[ablated_class_idx][T_effect][evaluated_class_idx] = test_acc_probe
+                    class_accuracies[ablated_class_idx][T_effect][
+                        evaluated_class_idx
+                    ] = test_acc_probe
 
                 del test_acts_ablated
                 del batch_test_acts
@@ -654,6 +657,9 @@ if __name__ == "__main__":
 
     dictionaries_path = "../dictionary_learning/dictionaries"
     probes_dir = "trained_bib_probes"
+
+    dictionaries_path = "dictionary_learning/dictionaries"
+    probes_dir = "experiments/trained_bib_probes"
 
     # Example of sweeping over all SAEs in a sweep
     ae_sweep_paths = {"pythia70m_test_sae": None}
