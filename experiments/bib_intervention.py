@@ -105,19 +105,19 @@ def get_class_samples(
 
 
 def get_effects_per_class(
-    model,
-    submodules,
-    dictionaries,
+    model: LanguageModel,
+    submodules: list[utils.submodule_alias],
+    dictionaries: dict[utils.submodule_alias, nn.Module],
     probes,
-    probe_act_submodule,
-    class_idx,
+    probe_act_submodule: utils.submodule_alias,
+    class_idx: int,
     train_bios,
     seed: int,
     device: str,
-    n_batches=None,
-    batch_size=10,
-    patching_method="ig",
-    steps=10,
+    n_batches: Optional[int] = None,
+    batch_size: int = 10,
+    patching_method: str = "ig",
+    steps: int = 10,  # only used for ig
 ) -> dict[utils.submodule_alias, t.Tensor]:
     """
     Probe_act_submodule is the submodule where the probe is attached, usually resid_post
@@ -131,6 +131,8 @@ def get_effects_per_class(
         if len(texts_train) > n_batches:
             texts_train = texts_train[:n_batches]
             labels_train = labels_train[:n_batches]
+    else:
+        n_batches = len(texts_train)
 
     running_total = 0
     running_nodes = None
