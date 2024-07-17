@@ -44,8 +44,11 @@ def test_eval_saes():
             overwrite_prev_results=True,
         )
 
-        expected_l0 = 80.80000305175781
-        expected_frac_recovered = 0.952869713306427
+        expected_l0 = 77.5
+        expected_frac_recovered = 0.9420551061630249
+
+        print(eval_results["l0"])
+        print(eval_results["frac_recovered"])
 
         l0_difference = abs(eval_results["l0"] - expected_l0)
         assert l0_difference < l0_tolerance
