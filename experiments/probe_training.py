@@ -174,6 +174,7 @@ def sample_from_classes(data_dict, chosen_class):
 
 
 def create_labeled_dataset(data_dict: dict, chosen_class: int, batch_size: int, device: str):
+    """0 = in class"""
     in_class_data = data_dict[chosen_class]
     other_class_data = sample_from_classes(data_dict, chosen_class)
 

@@ -65,7 +65,7 @@ def metric_fn(model, labels, probe, probe_act_submodule):
 
 
 def get_class_nonclass_samples(
-    data: dict, class_idx: int, batch_size: int, device: str, seed: int
+    data: dict, class_idx: int, batch_size: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
@@ -79,12 +79,27 @@ def get_class_nonclass_samples(
     nonclass_samples = random.sample(nonclass_samples, len(class_samples))
 
     combined_samples = class_samples + nonclass_samples
-    combined_labels = t.zeros(len(combined_samples), device=device)
-    combined_labels = t.zeros(len(combined_samples), device=device)
-    combined_labels[: len(class_samples)] = 1
+    combined_labels = t.ones(len(combined_samples), device=device)
+    combined_labels = t.ones(len(combined_samples), device=device)
+    combined_labels[: len(class_samples)] = 0
 
     batched_samples = utils.batch_list(combined_samples, batch_size)
     batched_labels = utils.batch_list(combined_labels, batch_size)
+
+    return batched_samples, batched_labels
+
+
+def get_class_samples(
+    data: dict, class_idx: int, batch_size: int, device: str
+) -> tuple[list, t.Tensor]:
+    """This is for getting equal number of text samples from the chosen class and all other classes.
+    We use this for attribution patching."""
+    class_samples = data[class_idx]
+
+    class_labels = t.ones(len(class_samples), device=device)
+
+    batched_samples = utils.batch_list(class_samples, batch_size)
+    batched_labels = utils.batch_list(class_labels, batch_size)
 
     return batched_samples, batched_labels
 
@@ -108,9 +123,10 @@ def get_effects_per_class(
     Probe_act_submodule is the submodule where the probe is attached, usually resid_post
     """
     probe = probes[class_idx]
-    texts_train, labels_train = get_class_nonclass_samples(
-        train_bios, class_idx, batch_size, device, seed
-    )
+    # texts_train, labels_train = get_class_nonclass_samples(
+    #     train_bios, class_idx, batch_size, device, seed
+    # )
+    texts_train, labels_train = get_class_samples(train_bios, class_idx, batch_size, device)
     if n_batches is not None:
         if len(texts_train) > n_batches:
             texts_train = texts_train[:n_batches]
