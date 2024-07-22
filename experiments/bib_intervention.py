@@ -65,7 +65,7 @@ def metric_fn(model, labels, probe, probe_act_submodule):
 
 
 def get_class_nonclass_samples(
-    data: dict, class_idx: int, batch_size: int, device: str
+    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
@@ -90,7 +90,7 @@ def get_class_nonclass_samples(
 
 
 def get_class_samples(
-    data: dict, class_idx: int, batch_size: int, device: str
+    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
@@ -107,7 +107,7 @@ def get_class_samples(
 
 
 def get_paired_class_samples(
-    data: dict, class_idx: int, batch_size: int, device: str
+    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
