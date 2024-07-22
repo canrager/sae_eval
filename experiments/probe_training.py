@@ -272,17 +272,24 @@ def prepare_probe_data(
     batch_size: int,
     device: str,
 ) -> tuple[t.Tensor, t.Tensor]:
+    """If class_idx is negative, there is a paired class idx in utils.py."""
     positive_acts = all_activations[class_idx]
 
     num_positive = len(positive_acts)
 
-    # Collect all negative class activations and labels
-    negative_acts = []
-    for idx, acts in all_activations.items():
-        if idx != class_idx:
-            negative_acts.append(acts)
+    if class_idx >= 0:
+        # Collect all negative class activations and labels
+        negative_acts = []
+        for idx, acts in all_activations.items():
+            if idx != class_idx:
+                negative_acts.append(acts)
 
-    negative_acts = t.cat(negative_acts)
+        negative_acts = t.cat(negative_acts)
+    else:
+        if class_idx not in utils.PAIRED_CLASS_KEYS:
+            raise ValueError(f"Class index {class_idx} is not a valid class index.")
+
+        negative_acts = all_activations[utils.PAIRED_CLASS_KEYS[class_idx]]
 
     # Randomly select num_positive samples from negative class
     indices = t.randperm(len(negative_acts))[:num_positive]
@@ -304,7 +311,7 @@ def prepare_probe_data(
 
     # Reshape into lists of tensors with specified batch_size
     num_samples = len(shuffled_acts)
-    num_batches = (num_samples + batch_size - 1) // batch_size
+    num_batches = num_samples // batch_size
 
     batched_acts = [
         shuffled_acts[i * batch_size : (i + 1) * batch_size] for i in range(num_batches)
