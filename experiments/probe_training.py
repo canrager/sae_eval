@@ -94,8 +94,24 @@ def plot_label_distribution(df):
     plt.show()
 
 
+def add_gender_classes(balanced_data: dict, df: pd.DataFrame, random_seed: int) -> dict:
+    # TODO: Experiment with more professions
+    male_texts = df[(df["profession"] == 0) & (df["gender"] == 0)]["hard_text"].tolist()
+    female_texts = df[(df["profession"] == 0) & (df["gender"] == 1)]["hard_text"].tolist()
+
+    min_count = min(len(male_texts), len(female_texts))
+    rng = np.random.default_rng(random_seed)
+
+    balanced_data[-2] = rng.permutation(male_texts[:min_count]).tolist()
+    balanced_data[-3] = rng.permutation(female_texts[:min_count]).tolist()
+
+    return balanced_data
+
+
 # Dataset balancing and preparation
-def get_balanced_dataset(dataset, min_samples_per_group: int, train: bool, random_seed: int = SEED):
+def get_balanced_dataset(
+    dataset, min_samples_per_group: int, train: bool, include_gender: bool, random_seed: int = SEED
+):
     df = pd.DataFrame(dataset["train" if train else "test"])
     balanced_df_list = []
 
@@ -121,7 +137,12 @@ def get_balanced_dataset(dataset, min_samples_per_group: int, train: bool, rando
 
     # Use NumPy's random number generator for shuffling
     rng = np.random.default_rng(random_seed)
-    return {label: rng.permutation(texts).tolist() for label, texts in grouped.items()}
+    balanced_data = {label: rng.permutation(texts).tolist() for label, texts in grouped.items()}
+
+    if include_gender:
+        balanced_data = add_gender_classes(balanced_data, df, random_seed)
+
+    return balanced_data
 
 
 def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
@@ -144,12 +165,18 @@ def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
     return train_data, test_data
 
 
-def get_train_test_data(dataset, train_set_size: int, test_set_size: int) -> tuple[dict, dict]:
+def get_train_test_data(
+    dataset, train_set_size: int, test_set_size: int, include_gender: bool
+) -> tuple[dict, dict]:
     minimum_train_samples = train_set_size // 4
     minimum_test_samples = test_set_size // 4
 
-    train_bios = get_balanced_dataset(dataset, minimum_train_samples, train=True)
-    test_bios = get_balanced_dataset(dataset, minimum_test_samples, train=False)
+    train_bios = get_balanced_dataset(
+        dataset, minimum_train_samples, train=True, include_gender=include_gender
+    )
+    test_bios = get_balanced_dataset(
+        dataset, minimum_test_samples, train=False, include_gender=include_gender
+    )
 
     train_bios, test_bios = ensure_shared_keys(train_bios, test_bios)
 
@@ -400,6 +427,7 @@ def train_probes(
     epochs: int = 10,
     save_results: bool = True,
     seed: int = SEED,
+    include_gender: bool = False,
 ) -> dict[int, float]:
 
     t.manual_seed(seed)
@@ -415,7 +443,9 @@ def train_probes(
 
     dataset, df = load_and_prepare_dataset()
 
-    train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
+    train_bios, test_bios = get_train_test_data(
+        dataset, train_set_size, test_set_size, include_gender
+    )
     train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
     test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
 
@@ -488,6 +518,7 @@ if __name__ == "__main__":
         epochs=10,
         device="cuda",
         seed=SEED,
+        include_gender=True,
     )
     print(test_accuracies)
 # %%
