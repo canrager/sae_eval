@@ -265,8 +265,10 @@ def prepare_probe_data(
 
     # Combine positive and negative samples
     combined_acts = t.cat([positive_acts, selected_negative_acts])
-    combined_labels = t.zeros(len(combined_acts), device=device)
-    combined_labels[num_positive:] = 1
+
+    combined_labels = t.empty(len(combined_acts), dtype=t.int, device=device)
+    combined_labels[:num_positive] = utils.POSITIVE_CLASS_LABEL
+    combined_labels[num_positive:] = utils.NEGATIVE_CLASS_LABEL
 
     # Shuffle the combined data
     shuffle_indices = t.randperm(len(combined_acts))

@@ -14,6 +14,10 @@ from dictionary_learning.interp import examine_dimension
 
 submodule_alias: TypeAlias = Any
 
+PAIRED_CLASS_KEYS = {-2: -3, -3: -2}
+POSITIVE_CLASS_LABEL = 0
+NEGATIVE_CLASS_LABEL = 1
+
 
 # Activation dim technically isn't needed as it can be accessed from HuggingFace model config.
 # The key to access it changes between model architecures, so we would have to add that key per architecure plus some logic.

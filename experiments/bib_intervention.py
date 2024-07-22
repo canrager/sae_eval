@@ -79,9 +79,9 @@ def get_class_nonclass_samples(
     nonclass_samples = random.sample(nonclass_samples, len(class_samples))
 
     combined_samples = class_samples + nonclass_samples
-    combined_labels = t.ones(len(combined_samples), device=device)
-    combined_labels = t.ones(len(combined_samples), device=device)
-    combined_labels[: len(class_samples)] = 0
+    combined_labels = t.empty(len(combined_samples), dtype=t.int, device=device)
+    combined_labels[: len(class_samples)] = utils.POSITIVE_CLASS_LABEL
+    combined_labels[len(class_samples) :] = utils.NEGATIVE_CLASS_LABEL
 
     batched_samples = utils.batch_list(combined_samples, batch_size)
     batched_labels = utils.batch_list(combined_labels, batch_size)
@@ -96,7 +96,9 @@ def get_class_samples(
     We use this for attribution patching."""
     class_samples = data[class_idx]
 
-    class_labels = t.zeros(len(class_samples), device=device)
+    class_labels = t.full(
+        (len(class_samples),), utils.POSITIVE_CLASS_LABEL, dtype=t.int, device=device
+    )
 
     batched_samples = utils.batch_list(class_samples, batch_size)
     batched_labels = utils.batch_list(class_labels, batch_size)
