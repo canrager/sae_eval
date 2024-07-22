@@ -90,6 +90,7 @@ def test_run_interventions():
             T_max_sideeffect,
             num_classes,
             seed,
+            include_gender=True,
         )
 
         ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
