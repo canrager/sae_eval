@@ -271,9 +271,26 @@ def prepare_probe_data(
     class_idx: int,
     batch_size: int,
     device: str,
-) -> tuple[t.Tensor, t.Tensor]:
+    single_class: bool = False,
+) -> tuple[list[t.Tensor], list[t.Tensor]]:
     """If class_idx is negative, there is a paired class idx in utils.py."""
     positive_acts = all_activations[class_idx]
+
+    if single_class and class_idx >= 0:
+
+        positive_labels = t.full(
+            (len(positive_acts),), utils.POSITIVE_CLASS_LABEL, dtype=t.int, device=device
+        )
+        num_samples = len(positive_acts)
+        num_batches = num_samples // batch_size
+        batched_acts = [
+            positive_acts[i * batch_size : (i + 1) * batch_size] for i in range(num_batches)
+        ]
+        batched_labels = [
+            positive_labels[i * batch_size : (i + 1) * batch_size] for i in range(num_batches)
+        ]
+
+        return batched_acts, batched_labels
 
     num_positive = len(positive_acts)
 
