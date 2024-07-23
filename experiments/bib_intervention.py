@@ -15,6 +15,7 @@ import torch as t
 from torch import nn
 from collections import defaultdict
 from enum import Enum
+import time
 
 parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
@@ -485,6 +486,8 @@ def run_interventions(
     verbose: bool = False,
 ):
     t.manual_seed(random_seed)
+    random.seed(random_seed)
+    np.random.seed(random_seed)
 
     model_eval_config = utils.ModelEvalConfig.from_sweep_name(sweep_name)
     model_name = model_eval_config.full_model_name
@@ -549,7 +552,7 @@ def run_interventions(
     with open(probe_path, "rb") as f:
         probes = pickle.load(f)
 
-    all_classes_list = list(probes.keys())[:max_classes]
+    all_classes_list = sorted(list(probes.keys()))[:max_classes]
 
     ### Get activations for original model, all classes
     print("Getting activations for original model")
@@ -647,7 +650,11 @@ def run_interventions(
 
                 for evaluated_class_idx in all_classes_list:
                     batch_test_acts, batch_test_labels = prepare_probe_data(
-                        test_acts_ablated, evaluated_class_idx, probe_batch_size, device=device
+                        test_acts_ablated,
+                        evaluated_class_idx,
+                        probe_batch_size,
+                        device=device,
+                        single_class=False,
                     )
                     test_acc_probe = test_probe(
                         batch_test_acts,
@@ -707,7 +714,7 @@ if __name__ == "__main__":
     n_eval_batches = train_set_size // patching_batch_size
 
     top_n_features = [5, 10, 20, 50, 100, 500]
-    top_n_features = [5, 500]
+    top_n_features = [10, 50, 500]
     T_effects_all_classes = [0.1, 0.01, 0.005, 0.001]
     # T_effects_all_classes = [0.001]
     T_effects_unique_class = [1e-4, 1e-8]
@@ -734,14 +741,27 @@ if __name__ == "__main__":
     ae_sweep_paths = {"pythia70m_test_sae": None}
 
     # Example of sweeping over all SAEs in a submodule
-    ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": None}}
+    ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": None}}}
 
     # Example of sweeping over a single SAE
     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
+    ae_sweep_paths = {"pythia70m_sweep_standard_ctx128_0712": None}
+
+    ae_sweep_paths = {
+        "pythia70m_sweep_standard_ctx128_0712": {"resid_post_layer_3": {"trainer_ids": None}}
+    }
+    ae_sweep_paths = {
+        "pythia70m_sweep_standard_ctx128_0712": {
+            "resid_post_layer_3": {"trainer_ids": [1, 7, 11, 18]}
+        }
+    }
+
     # This will look for any empty folders in any ae_path and raise an error if it finds any
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
         ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
+
+    start_time = time.time()
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
 
@@ -765,3 +785,7 @@ if __name__ == "__main__":
             random_seed,
             include_gender=include_gender,
         )
+
+    end_time = time.time()
+
+    print(f"Time taken: {end_time - start_time} seconds")
