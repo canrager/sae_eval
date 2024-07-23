@@ -14,7 +14,7 @@ from dictionary_learning.interp import examine_dimension
 
 submodule_alias: TypeAlias = Any
 
-PAIRED_CLASS_KEYS = {-2: -3, -3: -2}
+PAIRED_CLASS_KEYS = {-2: -3, -3: -2, -4: -5, -5: -4}
 POSITIVE_CLASS_LABEL = 0
 NEGATIVE_CLASS_LABEL = 1
 
