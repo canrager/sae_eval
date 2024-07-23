@@ -105,6 +105,13 @@ def add_gender_classes(balanced_data: dict, df: pd.DataFrame, random_seed: int) 
     balanced_data[-2] = rng.permutation(male_texts[:min_count]).tolist()
     balanced_data[-3] = rng.permutation(female_texts[:min_count]).tolist()
 
+    # TODO: Next step
+    # All should be balanced
+    # balanced_data[-2] = male professors and nurses
+    # balanced_data[-3] = female professors and nurses
+    # balanced_data[-4] = male and female professors
+    # balanced_data[-5] = male and female nurses
+
     return balanced_data
 
 
