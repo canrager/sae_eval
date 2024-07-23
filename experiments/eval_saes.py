@@ -105,6 +105,12 @@ if __name__ == "__main__":
     dictionaries_path = "../dictionary_learning/dictionaries"
 
     sweep_name = "pythia70m_test_sae"
+
+    # Current recommended way to generate graphs. You can copy paste ae_sweep_paths directly from bib_intervention.py
+    ae_sweep_paths = {"pythia70m_sweep_standard_ctx128_0712": None}
+    sweep_name = list(ae_sweep_paths.keys())[0]
+    submodule_trainers = ae_sweep_paths[sweep_name]
+
     model_eval_config = utils.ModelEvalConfig.from_sweep_name(sweep_name)
     model_name = model_eval_config.full_model_name
 
