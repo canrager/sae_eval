@@ -59,7 +59,7 @@ def metric_fn(model, labels, probe, probe_act_submodule):
     acts = acts * attn_mask[:, :, None]
     acts = acts.sum(1) / attn_mask.sum(1)[:, None]
 
-    return t.where(labels == 0, probe(acts), -probe(acts))
+    return t.where(labels == utils.POSITIVE_CLASS_LABEL, probe(acts), -probe(acts))
 
 
 # Attribution Patching
