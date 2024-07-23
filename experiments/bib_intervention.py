@@ -65,7 +65,7 @@ def metric_fn(model, labels, probe, probe_act_submodule):
 
 
 def get_class_nonclass_samples(
-    data: dict, class_idx: int, batch_size: int, device: str
+    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
@@ -79,9 +79,9 @@ def get_class_nonclass_samples(
     nonclass_samples = random.sample(nonclass_samples, len(class_samples))
 
     combined_samples = class_samples + nonclass_samples
-    combined_labels = t.ones(len(combined_samples), device=device)
-    combined_labels = t.ones(len(combined_samples), device=device)
-    combined_labels[: len(class_samples)] = 0
+    combined_labels = t.empty(len(combined_samples), dtype=t.int, device=device)
+    combined_labels[: len(class_samples)] = utils.POSITIVE_CLASS_LABEL
+    combined_labels[len(class_samples) :] = utils.NEGATIVE_CLASS_LABEL
 
     batched_samples = utils.batch_list(combined_samples, batch_size)
     batched_labels = utils.batch_list(combined_labels, batch_size)
@@ -90,16 +90,43 @@ def get_class_nonclass_samples(
 
 
 def get_class_samples(
-    data: dict, class_idx: int, batch_size: int, device: str
+    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
     class_samples = data[class_idx]
 
-    class_labels = t.zeros(len(class_samples), device=device)
+    class_labels = t.full(
+        (len(class_samples),), utils.POSITIVE_CLASS_LABEL, dtype=t.int, device=device
+    )
 
     batched_samples = utils.batch_list(class_samples, batch_size)
     batched_labels = utils.batch_list(class_labels, batch_size)
+
+    return batched_samples, batched_labels
+
+
+def get_paired_class_samples(
+    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
+) -> tuple[list, t.Tensor]:
+    """This is for getting equal number of text samples from the chosen class and all other classes.
+    We use this for attribution patching."""
+
+    if class_idx not in utils.PAIRED_CLASS_KEYS:
+        raise ValueError(f"Class {class_idx} not in PAIRED_CLASS_KEYS")
+
+    class_samples = data[class_idx]
+    paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
+    paired_class_samples = data[paired_class_idx]
+
+    combined_samples = class_samples + paired_class_samples
+
+    combined_labels = t.empty(len(combined_samples), dtype=t.int, device=device)
+    combined_labels[: len(class_samples)] = utils.POSITIVE_CLASS_LABEL
+    combined_labels[len(class_samples) :] = utils.NEGATIVE_CLASS_LABEL
+
+    batched_samples = utils.batch_list(combined_samples, batch_size)
+    batched_labels = utils.batch_list(combined_labels, batch_size)
 
     return batched_samples, batched_labels
 
@@ -123,10 +150,16 @@ def get_effects_per_class(
     Probe_act_submodule is the submodule where the probe is attached, usually resid_post
     """
     probe = probes[class_idx]
-    # texts_train, labels_train = get_class_nonclass_samples(
-    #     train_bios, class_idx, batch_size, device, seed
-    # )
-    texts_train, labels_train = get_class_samples(train_bios, class_idx, batch_size, device)
+
+    if class_idx >= 0:
+        texts_train, labels_train = get_class_samples(train_bios, class_idx, batch_size, device)
+        # texts_train, labels_train = get_class_nonclass_samples(
+        #     train_bios, class_idx, batch_size, device, seed
+        # )
+    else:
+        texts_train, labels_train = get_paired_class_samples(
+            train_bios, class_idx, batch_size, device
+        )
     if n_batches is not None:
         if len(texts_train) > n_batches:
             texts_train = texts_train[:n_batches]
@@ -447,6 +480,7 @@ def run_interventions(
     T_max_sideeffect: float,
     max_classes: int,
     random_seed: int,
+    include_gender: bool,
     device: str = "cuda",
     verbose: bool = False,
 ):
@@ -472,7 +506,9 @@ def run_interventions(
     context_length = utils.get_ctx_length(ae_paths)
 
     dataset, _ = load_and_prepare_dataset()
-    train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
+    train_bios, test_bios = get_train_test_data(
+        dataset, train_set_size, test_set_size, include_gender
+    )
 
     train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
     test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
@@ -494,6 +530,7 @@ def run_interventions(
     only_model_name = model_name.split("/")[-1]
     probe_path = f"{probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
 
+    # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     if not os.path.exists(probe_path):
         print("Probes not found, training probes")
         probes = probe_training.train_probes(
@@ -506,6 +543,7 @@ def run_interventions(
             probe_dir=probes_dir,
             llm_model_name=model_name,
             epochs=10,
+            include_gender=True,  # It's cheap to calculate and avoids potential bugs
         )
 
     with open(probe_path, "rb") as f:
@@ -645,6 +683,7 @@ if __name__ == "__main__":
 
     random_seed = random.randint(0, 1000)
     num_classes = 5
+    include_gender = True
 
     probe_train_set_size = 5000
     probe_test_set_size = 1000
@@ -654,11 +693,16 @@ if __name__ == "__main__":
     test_set_size = 1000
     probe_batch_size = 500
     llm_batch_size = 125
-    # llm_batch_size = 10
 
     # Attribution patching variables
     patching_batch_size = 100
-    # patching_batch_size = 5
+
+    reduced_GPU_memory = False
+
+    if reduced_GPU_memory:
+        probe_batch_size = 50
+        llm_batch_size = 10
+        patching_batch_size = 10
 
     n_eval_batches = train_set_size // patching_batch_size
 
@@ -719,4 +763,5 @@ if __name__ == "__main__":
             T_max_sideeffect,
             num_classes,
             random_seed,
+            include_gender=include_gender,
         )

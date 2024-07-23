@@ -94,8 +94,24 @@ def plot_label_distribution(df):
     plt.show()
 
 
+def add_gender_classes(balanced_data: dict, df: pd.DataFrame, random_seed: int) -> dict:
+    # TODO: Experiment with more professions
+    male_texts = df[(df["profession"] == 0) & (df["gender"] == 0)]["hard_text"].tolist()
+    female_texts = df[(df["profession"] == 0) & (df["gender"] == 1)]["hard_text"].tolist()
+
+    min_count = min(len(male_texts), len(female_texts))
+    rng = np.random.default_rng(random_seed)
+
+    balanced_data[-2] = rng.permutation(male_texts[:min_count]).tolist()
+    balanced_data[-3] = rng.permutation(female_texts[:min_count]).tolist()
+
+    return balanced_data
+
+
 # Dataset balancing and preparation
-def get_balanced_dataset(dataset, min_samples_per_group: int, train: bool, random_seed: int = SEED):
+def get_balanced_dataset(
+    dataset, min_samples_per_group: int, train: bool, include_gender: bool, random_seed: int = SEED
+):
     df = pd.DataFrame(dataset["train" if train else "test"])
     balanced_df_list = []
 
@@ -121,7 +137,12 @@ def get_balanced_dataset(dataset, min_samples_per_group: int, train: bool, rando
 
     # Use NumPy's random number generator for shuffling
     rng = np.random.default_rng(random_seed)
-    return {label: rng.permutation(texts).tolist() for label, texts in grouped.items()}
+    balanced_data = {label: rng.permutation(texts).tolist() for label, texts in grouped.items()}
+
+    if include_gender:
+        balanced_data = add_gender_classes(balanced_data, df, random_seed)
+
+    return balanced_data
 
 
 def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
@@ -144,12 +165,18 @@ def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
     return train_data, test_data
 
 
-def get_train_test_data(dataset, train_set_size: int, test_set_size: int) -> tuple[dict, dict]:
+def get_train_test_data(
+    dataset, train_set_size: int, test_set_size: int, include_gender: bool
+) -> tuple[dict, dict]:
     minimum_train_samples = train_set_size // 4
     minimum_test_samples = test_set_size // 4
 
-    train_bios = get_balanced_dataset(dataset, minimum_train_samples, train=True)
-    test_bios = get_balanced_dataset(dataset, minimum_test_samples, train=False)
+    train_bios = get_balanced_dataset(
+        dataset, minimum_train_samples, train=True, include_gender=include_gender
+    )
+    test_bios = get_balanced_dataset(
+        dataset, minimum_test_samples, train=False, include_gender=include_gender
+    )
 
     train_bios, test_bios = ensure_shared_keys(train_bios, test_bios)
 
@@ -245,17 +272,24 @@ def prepare_probe_data(
     batch_size: int,
     device: str,
 ) -> tuple[t.Tensor, t.Tensor]:
+    """If class_idx is negative, there is a paired class idx in utils.py."""
     positive_acts = all_activations[class_idx]
 
     num_positive = len(positive_acts)
 
-    # Collect all negative class activations and labels
-    negative_acts = []
-    for idx, acts in all_activations.items():
-        if idx != class_idx:
-            negative_acts.append(acts)
+    if class_idx >= 0:
+        # Collect all negative class activations and labels
+        negative_acts = []
+        for idx, acts in all_activations.items():
+            if idx != class_idx:
+                negative_acts.append(acts)
 
-    negative_acts = t.cat(negative_acts)
+        negative_acts = t.cat(negative_acts)
+    else:
+        if class_idx not in utils.PAIRED_CLASS_KEYS:
+            raise ValueError(f"Class index {class_idx} is not a valid class index.")
+
+        negative_acts = all_activations[utils.PAIRED_CLASS_KEYS[class_idx]]
 
     # Randomly select num_positive samples from negative class
     indices = t.randperm(len(negative_acts))[:num_positive]
@@ -265,8 +299,10 @@ def prepare_probe_data(
 
     # Combine positive and negative samples
     combined_acts = t.cat([positive_acts, selected_negative_acts])
-    combined_labels = t.zeros(len(combined_acts), device=device)
-    combined_labels[num_positive:] = 1
+
+    combined_labels = t.empty(len(combined_acts), dtype=t.int, device=device)
+    combined_labels[:num_positive] = utils.POSITIVE_CLASS_LABEL
+    combined_labels[num_positive:] = utils.NEGATIVE_CLASS_LABEL
 
     # Shuffle the combined data
     shuffle_indices = t.randperm(len(combined_acts))
@@ -275,7 +311,7 @@ def prepare_probe_data(
 
     # Reshape into lists of tensors with specified batch_size
     num_samples = len(shuffled_acts)
-    num_batches = (num_samples + batch_size - 1) // batch_size
+    num_batches = num_samples // batch_size
 
     batched_acts = [
         shuffled_acts[i * batch_size : (i + 1) * batch_size] for i in range(num_batches)
@@ -398,6 +434,7 @@ def train_probes(
     epochs: int = 10,
     save_results: bool = True,
     seed: int = SEED,
+    include_gender: bool = False,
 ) -> dict[int, float]:
 
     t.manual_seed(seed)
@@ -413,7 +450,9 @@ def train_probes(
 
     dataset, df = load_and_prepare_dataset()
 
-    train_bios, test_bios = get_train_test_data(dataset, train_set_size, test_set_size)
+    train_bios, test_bios = get_train_test_data(
+        dataset, train_set_size, test_set_size, include_gender
+    )
     train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
     test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
 
@@ -486,6 +525,7 @@ if __name__ == "__main__":
         epochs=10,
         device="cuda",
         seed=SEED,
+        include_gender=True,
     )
     print(test_accuracies)
 # %%
