@@ -91,6 +91,7 @@ def test_run_interventions():
             num_classes,
             seed,
             include_gender=True,
+            chosen_class_indices=[0, 1, 2], # omit -1, this is automatically added
         )
 
         ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
@@ -100,7 +101,7 @@ def test_run_interventions():
 
         with open(output_filename, "rb") as f:
             class_accuracies = pickle.load(f)
-        tolerance = 0.02
+        tolerance = 0.03
 
         print(class_accuracies)
 

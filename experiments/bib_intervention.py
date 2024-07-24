@@ -482,6 +482,7 @@ def run_interventions(
     max_classes: int,
     random_seed: int,
     include_gender: bool,
+    chosen_class_indices: list[int] = None,
     device: str = "cuda",
     verbose: bool = False,
 ):
@@ -552,7 +553,12 @@ def run_interventions(
     with open(probe_path, "rb") as f:
         probes = pickle.load(f)
 
-    all_classes_list = sorted(list(probes.keys()))[:max_classes]
+    if chosen_class_indices is not None:
+        all_classes_list = chosen_class_indices
+    else:
+        all_classes_list = sorted(list(probes.keys()))[:max_classes]
+    print(f'all_classes_list: {all_classes_list}')
+        
 
     ### Get activations for original model, all classes
     print("Getting activations for original model")
@@ -789,3 +795,5 @@ if __name__ == "__main__":
     end_time = time.time()
 
     print(f"Time taken: {end_time - start_time} seconds")
+
+# %%
