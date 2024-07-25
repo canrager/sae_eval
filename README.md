@@ -1,4 +1,40 @@
-# Sparse Feature Circuits: Discovering and Editing Interpretable Causal Graphs in Language Models
+# SAE eval
+by measuring the effect of SAE features on probes.
+
+`setup.sh` installs dependencies and downloads our pretrained dictionaries.
+Most other functionality we added lives in `/experiments`
+
+1. Train linear probes on the professions from the **bias in bios datset**. Saving probes in `/experiments/trained_bib_probes`
+2. Identify "relevance scores" for each feature to each probe by running `/experiments/bib_interventions.py`. Saving these scores as a dict `effects[probe_name] = importance_scores_tensor of shape d_SAE` in the file `/dictionary_learning/dictionaries/path_to_the_evaluated_sae/node_effects.pkl`.
+3. We're now measuring the effect of zero ablating features with an effect above `threshold` on all probes (not just the one we computed the effect for). Saving the probe accuraries as a dict `accs[ablated_probe][importance_score_threshold][evaluated_probe] = test_accuracy of probe after ablating features above importance threshold for ablated_probe` in the file `/dictionary_learning/dictionaries/path_to_the_evaluated_sae/class_accuracies.pkl`. This is done in the same `/experiments/bib_interventions.py` execution.
+4. Run benchmark SAE metrics (L_0, Loss Recovered) in `/experiments/eval_saes.py`. Saving results in `/dictionary_learning/dictionaries/path_to_the_evaluated_sae/eval_results.json`
+5. Plotting results in `/experiments/graph_3var.ipynb`.
+
+All experiments follow this convention for declaring the SAEs to evaluate. Example:
+```
+ae_sweep_paths = {
+    "pythia70m_sweep_standard_ctx128_0712": {
+        "resid_post_layer_3": {"trainer_ids": [1, 7, 11, 18]}
+    }
+}
+```
+
+More comprehensively:
+```
+# Example of sweeping over all SAEs in a sweep
+ae_sweep_paths = {"pythia70m_test_sae": None}
+
+# Example of sweeping over all SAEs in a submodule
+ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": None}}}
+
+# Example of sweeping over a single SAE
+ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
+```
+
+
+
+
+# Fork of: Sparse Feature Circuits: Discovering and Editing Interpretable Causal Graphs in Language Models
 
 This repository contains code, data, and links to autoencoders for replicating the experiments of [Sparse Feature Circuits: Discovering and Editing Interpretable Causal Graphs in Language Models](https://arxiv.org/abs/2403.19647). 
 
