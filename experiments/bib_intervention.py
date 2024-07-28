@@ -482,7 +482,7 @@ def run_interventions(
     max_classes: int,
     random_seed: int,
     include_gender: bool,
-    chosen_class_indices: list[int] = None,
+    chosen_class_indices: Optional[list[int]] = None,
     device: str = "cuda",
     verbose: bool = False,
 ):
@@ -557,17 +557,21 @@ def run_interventions(
         all_classes_list = chosen_class_indices
     else:
         all_classes_list = sorted(list(probes.keys()))[:max_classes]
-    print(f'all_classes_list: {all_classes_list}')
-        
+    print(f"all_classes_list: {all_classes_list}")
 
     ### Get activations for original model, all classes
     print("Getting activations for original model")
     test_acts = {}
     for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated class"):
-        class_test_acts = get_all_activations(
+        test_acts[class_idx] = get_all_activations(
             test_bios[class_idx], model, llm_batch_size, probe_layer
         )
-        test_acts[class_idx] = class_test_acts
+
+        if class_idx in utils.PAIRED_CLASS_KEYS:
+            paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
+            test_acts[paired_class_idx] = get_all_activations(
+                test_bios[paired_class_idx], model, llm_batch_size, probe_layer
+            )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
         probes, all_classes_list, test_acts, probe_batch_size, verbose, device=device
@@ -654,6 +658,18 @@ def run_interventions(
                         probe_layer,
                     )
 
+                    if evaluated_class_idx in utils.PAIRED_CLASS_KEYS:
+                        paired_class_idx = utils.PAIRED_CLASS_KEYS[evaluated_class_idx]
+                        test_acts_ablated[paired_class_idx] = get_all_acts_ablated(
+                            test_bios[paired_class_idx],
+                            model,
+                            submodules,
+                            dictionaries,
+                            feats,
+                            llm_batch_size,
+                            probe_layer,
+                        )
+
                 for evaluated_class_idx in all_classes_list:
                     batch_test_acts, batch_test_labels = prepare_probe_data(
                         test_acts_ablated,
@@ -696,6 +712,9 @@ if __name__ == "__main__":
 
     random_seed = random.randint(0, 1000)
     num_classes = 5
+
+    chosen_class_indices = [-4, -2, 0, 1, 2]
+
     include_gender = True
 
     probe_train_set_size = 5000
@@ -704,11 +723,11 @@ if __name__ == "__main__":
     # Load datset and probes
     train_set_size = 2000
     test_set_size = 1000
-    probe_batch_size = 500
-    llm_batch_size = 125
+    probe_batch_size = 1000
+    llm_batch_size = 500
 
     # Attribution patching variables
-    patching_batch_size = 100
+    patching_batch_size = 250
 
     reduced_GPU_memory = False
 

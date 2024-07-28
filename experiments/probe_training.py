@@ -96,21 +96,46 @@ def plot_label_distribution(df):
 
 def add_gender_classes(balanced_data: dict, df: pd.DataFrame, random_seed: int) -> dict:
     # TODO: Experiment with more professions
-    male_texts = df[(df["profession"] == 0) & (df["gender"] == 0)]["hard_text"].tolist()
-    female_texts = df[(df["profession"] == 0) & (df["gender"] == 1)]["hard_text"].tolist()
 
-    min_count = min(len(male_texts), len(female_texts))
+    MALE_IDX = 0
+    FEMALE_IDX = 1
+    professor_idx = profession_dict["professor"]
+    nurse_idx = profession_dict["nurse"]
+
+    male_nurse = df[(df["profession"] == nurse_idx) & (df["gender"] == MALE_IDX)][
+        "hard_text"
+    ].tolist()
+    female_nurse = df[(df["profession"] == nurse_idx) & (df["gender"] == FEMALE_IDX)][
+        "hard_text"
+    ].tolist()
+
+    male_professor = df[(df["profession"] == professor_idx) & (df["gender"] == MALE_IDX)][
+        "hard_text"
+    ].tolist()
+    female_professor = df[(df["profession"] == professor_idx) & (df["gender"] == FEMALE_IDX)][
+        "hard_text"
+    ].tolist()
+
+    min_count = min(len(male_nurse), len(female_nurse), len(male_professor), len(female_professor))
     rng = np.random.default_rng(random_seed)
 
-    balanced_data[-2] = rng.permutation(male_texts[:min_count]).tolist()
-    balanced_data[-3] = rng.permutation(female_texts[:min_count]).tolist()
+    # Create and shuffle combinations
+    male_combined = male_professor[:min_count] + male_nurse[:min_count]
+    female_combined = female_professor[:min_count] + female_nurse[:min_count]
+    professors_combined = male_professor[:min_count] + female_professor[:min_count]
+    nurses_combined = male_nurse[:min_count] + female_nurse[:min_count]
 
-    # TODO: Next step
-    # All should be balanced
-    # balanced_data[-2] = male professors and nurses
-    # balanced_data[-3] = female professors and nurses
-    # balanced_data[-4] = male and female professors
-    # balanced_data[-5] = male and female nurses
+    # Shuffle each combination
+    rng.shuffle(male_combined)
+    rng.shuffle(female_combined)
+    rng.shuffle(professors_combined)
+    rng.shuffle(nurses_combined)
+
+    # Assign to balanced_data
+    balanced_data[-2] = male_combined
+    balanced_data[-3] = female_combined
+    balanced_data[-4] = professors_combined
+    balanced_data[-5] = nurses_combined
 
     return balanced_data
 
@@ -502,6 +527,10 @@ def train_probes(
     t.set_grad_enabled(True)
 
     for profession in all_train_acts.keys():
+
+        if profession in utils.PAIRED_CLASS_KEYS.values():
+            continue
+
         train_acts, train_labels = prepare_probe_data(
             all_train_acts, profession, probe_batch_size, device
         )
