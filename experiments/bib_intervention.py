@@ -171,9 +171,7 @@ def get_effects_per_class(
     running_total = 0
     running_nodes = None
 
-    for batch_idx, (clean, labels) in tqdm(
-        enumerate(zip(texts_train, labels_train)), total=n_batches
-    ):
+    for batch_idx, (clean, labels) in enumerate(zip(texts_train, labels_train)):
         if batch_idx == n_batches:
             break
 
@@ -261,7 +259,7 @@ def get_all_acts_ablated(
             is_tuple[submodule] = type(submodule.output.shape) == tuple
 
     all_acts_list_BD = []
-    for text_batch_BL in tqdm(text_batches, desc="Getting activations"):
+    for text_batch_BL in text_batches:
         with t.no_grad(), model.trace(text_batch_BL, **tracer_kwargs):
             for submodule in submodules:
                 dictionary = dictionaries[submodule]
@@ -448,7 +446,7 @@ def select_features(
             )
     elif selection_method == FeatureSelection.above_threshold:
         for T_effect in T_effects:
-            unique_feats[T_effect] = select_significant_features(
+            unique_feats[T_effect] = select_significant_features2(
                 node_effects, dict_size, T_effect=T_effect, verbose=verbose
             )
     elif selection_method == FeatureSelection.top_n:
@@ -597,7 +595,7 @@ def run_interventions(
         node_effects = {}
         class_accuracies = test_accuracies.copy()
 
-        for ablated_class_idx in all_classes_list:
+        for ablated_class_idx in tqdm(all_classes_list, "Getting node effects"):
             node_effects[ablated_class_idx] = {}
 
             node_effects[ablated_class_idx] = get_effects_per_class(
@@ -647,7 +645,7 @@ def run_interventions(
                 if verbose:
                     print(f"Running ablation for T_effect = {T_effect}")
                 test_acts_ablated = {}
-                for evaluated_class_idx in all_classes_list:
+                for evaluated_class_idx in tqdm(all_classes_list, desc="Getting activations"):
                     test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
                         test_bios[evaluated_class_idx],
                         model,
@@ -708,12 +706,13 @@ def run_interventions(
 if __name__ == "__main__":
 
     selection_method = FeatureSelection.above_threshold
-    selection_method = FeatureSelection.top_n
+    # selection_method = FeatureSelection.top_n
 
     random_seed = random.randint(0, 1000)
     num_classes = 5
 
     chosen_class_indices = [-4, -2, 0, 1, 2]
+    chosen_class_indices = [-4, -2]
 
     include_gender = True
 
@@ -740,8 +739,8 @@ if __name__ == "__main__":
 
     top_n_features = [5, 10, 20, 50, 100, 500]
     top_n_features = [10, 50, 500]
-    T_effects_all_classes = [0.1, 0.01, 0.005, 0.001]
-    # T_effects_all_classes = [0.001]
+    T_effects_all_classes = [0.1, 0.05, 0.025, 0.01, 0.001]
+    T_effects_all_classes = [0.1, 0.01]
     T_effects_unique_class = [1e-4, 1e-8]
 
     if selection_method == FeatureSelection.top_n:
@@ -779,6 +778,7 @@ if __name__ == "__main__":
     ae_sweep_paths = {
         "pythia70m_sweep_standard_ctx128_0712": {
             "resid_post_layer_3": {"trainer_ids": [1, 7, 11, 18]}
+            # "resid_post_layer_3": {"trainer_ids": [18]}
         }
     }
 
@@ -809,6 +809,8 @@ if __name__ == "__main__":
             num_classes,
             random_seed,
             include_gender=include_gender,
+            chosen_class_indices=chosen_class_indices,
+            verbose=False,
         )
 
     end_time = time.time()
