@@ -474,6 +474,7 @@ def run_interventions(
     probe_batch_size: int,
     llm_batch_size: int,
     n_eval_batches: int,
+    eval_results_batch_size: int,
     patching_batch_size: int,
     T_effects: list[float],
     T_max_sideeffect: float,
@@ -524,7 +525,7 @@ def run_interventions(
         ae_paths,
         eval_saes_n_inputs,
         context_length,
-        llm_batch_size,
+        eval_results_batch_size,
         device,
         overwrite_prev_results=False,
     )
@@ -706,7 +707,7 @@ def run_interventions(
 if __name__ == "__main__":
 
     selection_method = FeatureSelection.above_threshold
-    # selection_method = FeatureSelection.top_n
+    selection_method = FeatureSelection.top_n
 
     random_seed = random.randint(0, 1000)
     num_classes = 5
@@ -724,6 +725,7 @@ if __name__ == "__main__":
     test_set_size = 1000
     probe_batch_size = 1000
     llm_batch_size = 500
+    eval_results_batch_size = 100
 
     # Attribution patching variables
     patching_batch_size = 250
@@ -738,7 +740,7 @@ if __name__ == "__main__":
     n_eval_batches = train_set_size // patching_batch_size
 
     top_n_features = [5, 10, 20, 50, 100, 500]
-    top_n_features = [10, 50, 500]
+    top_n_features = [10, 50, 500, 1000]
     T_effects_all_classes = [0.1, 0.05, 0.025, 0.01, 0.001]
     T_effects_all_classes = [0.1, 0.01]
     T_effects_unique_class = [1e-4, 1e-8]
@@ -782,6 +784,26 @@ if __name__ == "__main__":
         }
     }
 
+    ae_sweep_paths = {
+        "pythia70m_sweep_standard_ctx128_0712": {
+            "resid_post_layer_0": {"trainer_ids": None},
+            "resid_post_layer_1": {"trainer_ids": None},
+            "resid_post_layer_2": {"trainer_ids": None},
+            "resid_post_layer_3": {"trainer_ids": None},
+            "resid_post_layer_4": {"trainer_ids": None},
+        }
+    }
+
+    ae_sweep_paths = {
+        "pythia70m_random_init": {
+            # "resid_post_layer_0": {"trainer_ids": None},
+            # "resid_post_layer_1": {"trainer_ids": None},
+            # "resid_post_layer_2": {"trainer_ids": None},
+            "resid_post_layer_3": {"trainer_ids": [0, 1]},
+            # "resid_post_layer_4": {"trainer_ids": None},
+        }
+    }
+
     # This will look for any empty folders in any ae_path and raise an error if it finds any
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
         ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
@@ -803,6 +825,7 @@ if __name__ == "__main__":
             probe_batch_size,
             llm_batch_size,
             n_eval_batches,
+            eval_results_batch_size,
             patching_batch_size,
             T_effects,
             T_max_sideeffect,
@@ -810,7 +833,7 @@ if __name__ == "__main__":
             random_seed,
             include_gender=include_gender,
             chosen_class_indices=chosen_class_indices,
-            verbose=False,
+            verbose=True,
         )
 
     end_time = time.time()
