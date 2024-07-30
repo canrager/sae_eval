@@ -10,6 +10,7 @@ from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
 from dictionary_learning.trainers.top_k import TrainerTopK, AutoEncoderTopK
 from dictionary_learning.trainers.gdm import GatedSAETrainer
+from dictionary_learning.trainers.p_anneal import PAnnealTrainer
 from dictionary_learning.utils import zst_to_generator, hf_dataset_to_generator
 from dictionary_learning.buffer import ActivationBuffer
 from dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder
@@ -68,6 +69,14 @@ def run_sae_training(
     decay_start = 24000
     auxk_alpha = 1 / 32
 
+    # p_anneal sae training parameters
+    p_start = 1
+    p_end = 0.2
+    anneal_end = None  # steps - int(steps/10)
+    sparsity_queue_length = 10
+    anneal_start = 10000
+    n_sparsity_updates = 10
+
     log_steps = 5  # Log the training on wandb
     if no_wandb_logging:
         log_steps = None
@@ -101,6 +110,30 @@ def run_sae_training(
     ):
         trainer_configs.extend(
             [
+                # {
+                #     "trainer": PAnnealTrainer,
+                #     "dict_class": AutoEncoder,
+                #     "activation_dim": activation_dim,
+                #     "dict_size": expansion_factor * activation_dim,
+                #     "lr": learning_rate,
+                #     "sparsity_function": "Lp^p",
+                #     "initial_sparsity_penalty": initial_sparsity_penalty,
+                #     "p_start": p_start,
+                #     "p_end": p_end,
+                #     "anneal_start": int(anneal_start),
+                #     "anneal_end": anneal_end,
+                #     "sparsity_queue_length": sparsity_queue_length,
+                #     "n_sparsity_updates": n_sparsity_updates,
+                #     "warmup_steps": warmup_steps,
+                #     "resample_steps": resample_steps,
+                #     "steps": steps,
+                #     "seed": seed,
+                #     "wandb_name": f"PAnnealTrainer-pythia70m-{layer}",
+                #     "layer": layer,
+                #     "lm_name": model_name,
+                #     "device": device,
+                #     "submodule_name": submodule_name,
+                # },
                 {
                     "trainer": StandardTrainer,
                     "dict_class": AutoEncoder,
