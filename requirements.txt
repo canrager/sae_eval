@@ -15,3 +15,4 @@ zstandard>=0.22.0 #0.22.0
 
 # New requirements
 scikit-learn>=1.5.1
+wandb==0.17.5
