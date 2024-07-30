@@ -168,7 +168,8 @@ def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
     elif dict_class == "AutoEncoderNew":
         dictionary = AutoEncoderNew.from_pretrained(ae_path, device=device)
     elif dict_class == "AutoEncoderTopK":
-        dictionary = AutoEncoderTopK.from_pretrained(ae_path, device=device)
+        k = config["trainer"]["k"]
+        dictionary = AutoEncoderTopK.from_pretrained(ae_path, k=k, device=device)
     else:
         raise ValueError(f"Dictionary class {dict_class} not supported")
 
