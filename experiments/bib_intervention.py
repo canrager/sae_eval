@@ -249,7 +249,6 @@ def get_all_acts_ablated(
     batch_size: int,
     probe_layer: int,
 ):
-
     text_batches = utils.batch_list(text_inputs, batch_size)
     assert type(text_batches[0][0]) == str
 
@@ -687,9 +686,9 @@ def run_interventions(
                         print(
                             f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {test_acc_probe}"
                         )
-                    class_accuracies[ablated_class_idx][T_effect][
-                        evaluated_class_idx
-                    ] = test_acc_probe
+                    class_accuracies[ablated_class_idx][T_effect][evaluated_class_idx] = (
+                        test_acc_probe
+                    )
 
                 del test_acts_ablated
                 del batch_test_acts
@@ -705,7 +704,6 @@ def run_interventions(
 # %%
 
 if __name__ == "__main__":
-
     selection_method = FeatureSelection.above_threshold
     selection_method = FeatureSelection.top_n
 
@@ -739,7 +737,7 @@ if __name__ == "__main__":
 
     n_eval_batches = train_set_size // patching_batch_size
 
-    top_n_features = [5, 10, 20, 50, 100, 500]
+    top_n_features = [2, 5, 10, 20, 50, 100, 500]
     top_n_features = [10, 50, 500, 1000]
     T_effects_all_classes = [0.1, 0.05, 0.025, 0.01, 0.001]
     T_effects_all_classes = [0.1, 0.01]
@@ -811,7 +809,6 @@ if __name__ == "__main__":
     start_time = time.time()
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
-
         run_interventions(
             submodule_trainers,
             sweep_name,
