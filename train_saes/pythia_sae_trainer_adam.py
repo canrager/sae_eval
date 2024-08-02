@@ -38,7 +38,6 @@ def run_sae_training(
     dry_run: bool = False,
     no_wandb_logging: bool = False,
 ):
-
     # model and data parameters
     model_name = "EleutherAI/pythia-70m-deduped"
     dataset_name = "/share/data/datasets/pile/the-eye.eu/public/AI/pile/train/00.jsonl.zst"
@@ -56,6 +55,20 @@ def run_sae_training(
     # ks = [20, 40, 80, 160, 320, 640]
     # ks = {p: ks[i] for i, p in enumerate(initial_sparsity_penalties)}
     expansion_factors = [8, 32]
+
+    # PAnneal sparsity penalties for pythia 70m. Had poor coverage of L0 100-400. Recommend adding 0.0333 and 0.0366
+    # initial_sparsity_penalties = [
+    #     0.01,
+    #     0.02,
+    #     0.03,
+    #     0.04,
+    #     0.05,
+    #     0.075,
+    #     0.1,
+    # ]
+
+    # Gated sparsity penalties for pythia 70m. No coverage from 10-50. Recommending adding 1.0 and 1.1.
+    # initial_sparsity_penalties = [0.1, 0.3, 0.5, 0.7, 0.9]
 
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
     save_steps = None
