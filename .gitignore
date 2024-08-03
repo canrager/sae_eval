@@ -170,3 +170,5 @@ circuits/*
 **/*_datasets/*
 **/*_probes/*
 **/trained_saes/*
+/ravel/data/*
+/ravel/models/*

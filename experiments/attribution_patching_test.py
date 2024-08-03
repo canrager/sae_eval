@@ -1,4 +1,3 @@
-#%%
 from attribution import patching_effect
 from dictionary_learning.trainers.top_k import AutoEncoderTopK
 from nnsight import LanguageModel
@@ -32,5 +31,3 @@ effects, _, _, _ = patching_effect(
             method='attrib',
             # steps=10,
         )
-
-# %%
