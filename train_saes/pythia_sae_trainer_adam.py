@@ -38,7 +38,6 @@ def run_sae_training(
     dry_run: bool = False,
     no_wandb_logging: bool = False,
 ):
-
     # model and data parameters
     model_name = "EleutherAI/pythia-70m-deduped"
     dataset_name = "/share/data/datasets/pile/the-eye.eu/public/AI/pile/train/00.jsonl.zst"
@@ -53,9 +52,23 @@ def run_sae_training(
     # random_seeds = t.arange(10).tolist()
     random_seeds = [0]
     initial_sparsity_penalties = [0.01, 0.05, 0.075, 0.1, 0.15]
-    # ks = [20, 100, 200]
+    # ks = [20, 40, 80, 160, 320, 640]
     # ks = {p: ks[i] for i, p in enumerate(initial_sparsity_penalties)}
     expansion_factors = [8, 32]
+
+    # PAnneal sparsity penalties for pythia 70m. Had poor coverage of L0 100-400. Recommend adding 0.0333 and 0.0366
+    # initial_sparsity_penalties = [
+    #     0.01,
+    #     0.02,
+    #     0.03,
+    #     0.04,
+    #     0.05,
+    #     0.075,
+    #     0.1,
+    # ]
+
+    # Gated sparsity penalties for pythia 70m. No coverage from 10-50. Recommending adding 1.0 and 1.1.
+    # initial_sparsity_penalties = [0.1, 0.3, 0.5, 0.7, 0.9]
 
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
     save_steps = None
@@ -134,38 +147,38 @@ def run_sae_training(
                 #     "device": device,
                 #     "submodule_name": submodule_name,
                 # },
-                {
-                    "trainer": StandardTrainer,
-                    "dict_class": AutoEncoder,
-                    "activation_dim": activation_dim,
-                    "dict_size": expansion_factor * activation_dim,
-                    "lr": learning_rate,
-                    "l1_penalty": initial_sparsity_penalty,
-                    "warmup_steps": warmup_steps,
-                    "resample_steps": resample_steps,
-                    "seed": seed,
-                    "wandb_name": f"StandardTrainer-{model_name}-{submodule_name}",
-                    "layer": layer,
-                    "lm_name": model_name,
-                    "device": device,
-                    "submodule_name": submodule_name,
-                },
                 # {
-                #     "trainer": TrainerTopK,
-                #     "dict_class": AutoEncoderTopK,
+                #     "trainer": StandardTrainer,
+                #     "dict_class": AutoEncoder,
                 #     "activation_dim": activation_dim,
                 #     "dict_size": expansion_factor * activation_dim,
-                #     "k": ks[initial_sparsity_penalty],
-                #     "auxk_alpha": auxk_alpha,  # see Appendix A.2
-                #     "decay_start": decay_start,  # when does the lr decay start
-                #     "steps": steps,  # when when does training end
+                #     "lr": learning_rate,
+                #     "l1_penalty": initial_sparsity_penalty,
+                #     "warmup_steps": warmup_steps,
+                #     "resample_steps": resample_steps,
                 #     "seed": seed,
-                #     "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
-                #     "device": device,
+                #     "wandb_name": f"StandardTrainer-{model_name}-{submodule_name}",
                 #     "layer": layer,
                 #     "lm_name": model_name,
+                #     "device": device,
                 #     "submodule_name": submodule_name,
                 # },
+                {
+                    "trainer": TrainerTopK,
+                    "dict_class": AutoEncoderTopK,
+                    "activation_dim": activation_dim,
+                    "dict_size": expansion_factor * activation_dim,
+                    "k": ks[initial_sparsity_penalty],
+                    "auxk_alpha": auxk_alpha,  # see Appendix A.2
+                    "decay_start": decay_start,  # when does the lr decay start
+                    "steps": steps,  # when when does training end
+                    "seed": seed,
+                    "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
+                    "device": device,
+                    "layer": layer,
+                    "lm_name": model_name,
+                    "submodule_name": submodule_name,
+                },
                 # {
                 #     "trainer": GatedSAETrainer,
                 #     "dict_class": GatedAutoEncoder,

@@ -67,7 +67,6 @@ class ModelEvalConfig:
 def get_ae_group_paths(
     dictionaries_path: str, sweep_name: str, submodule_trainers: Optional[dict]
 ) -> list[str]:
-
     if submodule_trainers is None:
         return [f"{dictionaries_path}/{sweep_name}"]
 
@@ -121,8 +120,9 @@ def get_nested_folders(path: str) -> list[str]:
     """
     folder_names = []
 
+    # We use config.json so it also works for data folders
     for root, dirs, files in os.walk(path):
-        if "ae.pt" in files:
+        if "config.json" in files:
             folder_names.append(root + "/")
 
     return folder_names
@@ -168,7 +168,8 @@ def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
     elif dict_class == "AutoEncoderNew":
         dictionary = AutoEncoderNew.from_pretrained(ae_path, device=device)
     elif dict_class == "AutoEncoderTopK":
-        dictionary = AutoEncoderTopK.from_pretrained(ae_path, device=device)
+        k = config["trainer"]["k"]
+        dictionary = AutoEncoderTopK.from_pretrained(ae_path, k=k, device=device)
     else:
         raise ValueError(f"Dictionary class {dict_class} not supported")
 
