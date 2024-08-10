@@ -21,6 +21,10 @@ pip install -r requirements.txt
 pip install -e .
 git submodule update --init
 
+pip install nbstripout
+pip install ipykernel
+nbstripout --install
+
 # Install necessary tools
 apt-get update
 apt-get install -y unzip zip gcc
@@ -39,6 +43,7 @@ FILES=(
     "pythia70m_test_sae.zip"
     "pythia70m_sweep_topk_ctx128_0730.zip"
     "pythia70m_sweep_gated_ctx128_0730.zip"
+    "all_730_results.zip"
 )
 
 # Download and extract each file
