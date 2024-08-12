@@ -21,13 +21,11 @@ def eval_saes(
     model: LanguageModel,
     ae_paths: list[str],
     n_inputs: int,
-    context_length: int,
     llm_batch_size: int,
     device: str,
     overwrite_prev_results: bool = False,
     transcoder: bool = False,
 ) -> dict:
-
     buffer_size = min(512, n_inputs)
 
     if transcoder:
@@ -42,7 +40,7 @@ def eval_saes(
     for i, example in enumerate(pile_dataset["train"]["text"]):
         if i == n_inputs:
             break
-        input_strings.append(example[:context_length])
+        input_strings.append(example)
 
     eval_results = {}
 
@@ -56,6 +54,8 @@ def eval_saes(
         submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
 
         activation_dim = config["trainer"]["activation_dim"]
+        # TODO: Think about how to handle context length... should we instead use the same context length for all dictionaries?
+        context_length = config["buffer"]["ctx_len"]
 
         activation_buffer_data = iter(input_strings)
 
@@ -96,8 +96,6 @@ if __name__ == "__main__":
     DEVICE = "cuda"
 
     llm_batch_size = 10  # Approx 1.5GB VRAM on pythia70m with 128 context length
-    # TODO: Don't hardcode context length
-    context_length = 128
     n_inputs = 10000
 
     submodule_trainers = {"resid_post_layer_3": {"trainer_ids": [0]}}
@@ -123,7 +121,6 @@ if __name__ == "__main__":
         model,
         ae_paths,
         n_inputs,
-        context_length,
         llm_batch_size,
         DEVICE,
     )

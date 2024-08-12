@@ -6,7 +6,6 @@ import experiments.utils as utils
 
 
 def test_eval_saes():
-
     # TODO: Add batching so we don't need a horribly high tolerance
     l0_tolerance = 10
     tolerance = 1.0
@@ -14,8 +13,6 @@ def test_eval_saes():
     DEVICE = "cuda"
 
     llm_batch_size = 20  # Approx 16GB VRAM on pythia70m with 128 context length
-    # TODO: Don't hardcode context length
-    context_length = 128
     n_inputs = 10000
 
     seed = 42
@@ -24,7 +21,6 @@ def test_eval_saes():
     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
-
         dictionaries_path = "dictionary_learning/dictionaries"
 
         model_eval_config = utils.ModelEvalConfig.from_sweep_name(sweep_name)
@@ -39,7 +35,6 @@ def test_eval_saes():
             model,
             ae_paths,
             n_inputs,
-            context_length,
             llm_batch_size,
             DEVICE,
             overwrite_prev_results=True,

@@ -523,7 +523,6 @@ def run_interventions(
         model,
         ae_paths,
         eval_saes_n_inputs,
-        context_length,
         eval_results_batch_size,
         device,
         overwrite_prev_results=False,
