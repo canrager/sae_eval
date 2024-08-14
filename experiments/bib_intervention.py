@@ -66,7 +66,7 @@ def metric_fn(model, labels, probe, probe_act_submodule):
 
 
 def get_class_nonclass_samples(
-    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
+    data: dict[int, list[str]], class_idx: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
@@ -77,41 +77,75 @@ def get_class_nonclass_samples(
         if profession != class_idx:
             nonclass_samples.extend(data[profession])
 
-    nonclass_samples = random.sample(nonclass_samples, len(class_samples))
+    if isinstance(class_samples, dict) and isinstance(class_samples.get("input_ids"), t.Tensor):
+        # Combine all non-class tensors
+        nonclass_input_ids = t.cat([sample["input_ids"] for sample in nonclass_samples], dim=0)
+        nonclass_attention_mask = t.cat(
+            [sample["attention_mask"] for sample in nonclass_samples], dim=0
+        )
 
-    combined_samples = class_samples + nonclass_samples
-    combined_labels = t.empty(len(combined_samples), dtype=t.int, device=device)
-    combined_labels[: len(class_samples)] = utils.POSITIVE_CLASS_LABEL
-    combined_labels[len(class_samples) :] = utils.NEGATIVE_CLASS_LABEL
+        # Randomly select indices
+        num_samples = class_samples["input_ids"].size(0)
+        indices = t.randperm(nonclass_input_ids.size(0))[:num_samples]
 
-    batched_samples = utils.batch_list(combined_samples, batch_size)
-    batched_labels = utils.batch_list(combined_labels, batch_size)
+        # Select random samples
+        nonclass_input_ids = nonclass_input_ids[indices]
+        nonclass_attention_mask = nonclass_attention_mask[indices]
 
-    return batched_samples, batched_labels
+        # Combine class and non-class samples
+        combined_input_ids = t.cat([class_samples["input_ids"], nonclass_input_ids], dim=0)
+        combined_attention_mask = t.cat(
+            [class_samples["attention_mask"], nonclass_attention_mask], dim=0
+        )
+        combined_samples = {
+            "input_ids": combined_input_ids,
+            "attention_mask": combined_attention_mask,
+        }
+        num_class_samples = class_samples["input_ids"].size(0)
+        num_combined_samples = combined_input_ids.size(0)
+    elif isinstance(class_samples, list) and isinstance(class_samples[0], str):
+        nonclass_samples = random.sample(nonclass_samples, len(class_samples))
+        combined_samples = class_samples + nonclass_samples
+        num_class_samples = len(class_samples)
+        num_combined_samples = len(combined_samples)
+    else:
+        raise ValueError("Unsupported input type")
+
+    combined_labels = t.empty(num_combined_samples, dtype=t.int, device=device)
+    combined_labels[:num_class_samples] = utils.POSITIVE_CLASS_LABEL
+    combined_labels[num_class_samples:] = utils.NEGATIVE_CLASS_LABEL
+
+    return combined_samples, combined_labels
 
 
 def get_class_samples(
-    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
+    data: dict[int, list[str]], class_idx: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
     class_samples = data[class_idx]
 
+    if isinstance(class_samples, list) and isinstance(class_samples[0], str):
+        num_class_samples = len(class_samples)
+    elif isinstance(class_samples, dict) and isinstance(class_samples["input_ids"], t.Tensor):
+        num_class_samples = class_samples["input_ids"].size(0)
+    else:
+        raise ValueError("Unsupported input type")
+
     class_labels = t.full(
-        (len(class_samples),), utils.POSITIVE_CLASS_LABEL, dtype=t.int, device=device
+        (num_class_samples,), utils.POSITIVE_CLASS_LABEL, dtype=t.int, device=device
     )
 
-    batched_samples = utils.batch_list(class_samples, batch_size)
-    batched_labels = utils.batch_list(class_labels, batch_size)
-
-    return batched_samples, batched_labels
+    return class_samples, class_labels
 
 
 def get_paired_class_samples(
-    data: dict[int, list[str]], class_idx: int, batch_size: int, device: str
+    data: dict[int, list[str]], class_idx: int, device: str
 ) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
+
+    # TODO: Clean this up
 
     if class_idx not in utils.PAIRED_CLASS_KEYS:
         raise ValueError(f"Class {class_idx} not in PAIRED_CLASS_KEYS")
@@ -120,16 +154,162 @@ def get_paired_class_samples(
     paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
     paired_class_samples = data[paired_class_idx]
 
-    combined_samples = class_samples + paired_class_samples
+    if isinstance(class_samples, list) and isinstance(class_samples[0], str):
+        combined_samples = class_samples + paired_class_samples
+        num_class_samples = len(class_samples)
+        num_nonclass_samples = len(paired_class_samples)
+        num_combined_samples = num_class_samples + num_nonclass_samples
 
-    combined_labels = t.empty(len(combined_samples), dtype=t.int, device=device)
-    combined_labels[: len(class_samples)] = utils.POSITIVE_CLASS_LABEL
-    combined_labels[len(class_samples) :] = utils.NEGATIVE_CLASS_LABEL
+        # Interleave the samples
+        combined_samples = [None] * num_combined_samples
+        combined_samples[::2] = class_samples
+        combined_samples[1::2] = paired_class_samples
+    elif isinstance(class_samples, dict) and isinstance(class_samples["input_ids"], t.Tensor):
+        combined_input_ids = t.cat(
+            [class_samples["input_ids"], paired_class_samples["input_ids"]], dim=0
+        )
+        combined_attention_mask = t.cat(
+            [class_samples["attention_mask"], paired_class_samples["attention_mask"]], dim=0
+        )
 
-    batched_samples = utils.batch_list(combined_samples, batch_size)
-    batched_labels = utils.batch_list(combined_labels, batch_size)
+        combined_input_ids[::2] = class_samples["input_ids"]
+        combined_input_ids[1::2] = paired_class_samples["input_ids"]
+        combined_attention_mask[::2] = class_samples["attention_mask"]
+        combined_attention_mask[1::2] = paired_class_samples["attention_mask"]
 
-    return batched_samples, batched_labels
+        combined_samples = {
+            "input_ids": combined_input_ids,
+            "attention_mask": combined_attention_mask,
+        }
+        num_class_samples = class_samples["input_ids"].size(0)
+        num_nonclass_samples = paired_class_samples["input_ids"].size(0)
+        num_combined_samples = combined_input_ids.size(0)
+    else:
+        raise ValueError("Unsupported input type")
+
+    assert num_class_samples == num_nonclass_samples
+
+    # combined_labels = [utils.POSITIVE_CLASS_LABEL] * num_class_samples + [
+    #     utils.NEGATIVE_CLASS_LABEL
+    # ] * num_nonclass_samples
+
+    # Create interleaved labels
+    combined_labels = t.empty(num_combined_samples, dtype=t.int, device=device)
+    combined_labels[::2] = utils.POSITIVE_CLASS_LABEL
+    combined_labels[1::2] = utils.NEGATIVE_CLASS_LABEL
+
+    return combined_samples, combined_labels
+
+
+# shift_dataset = load_dataset("LabHC/bias_in_bios", streaming=True)
+
+
+# To fit on 24GB VRAM GPU, I set the next 2 default batch_sizes to 64
+def get_data(train=True, ambiguous=True, gender_balanced=False, batch_size=64, seed=42):
+    profession_dict = {"professor": 21, "nurse": 13}
+    male_prof = "professor"
+    female_prof = "nurse"
+    DEVICE = "cuda"
+    if train:
+        data = shift_dataset["train"]
+    else:
+        data = shift_dataset["test"]
+    if ambiguous:
+        neg = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[male_prof] and x["gender"] == 0
+        ]
+        pos = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[female_prof] and x["gender"] == 1
+        ]
+        n = min([len(neg), len(pos)])
+        neg, pos = neg[:n], pos[:n]
+        data = neg + pos
+        labels = [0] * n + [1] * n
+        idxs = list(range(2 * n))
+        random.Random(seed).shuffle(idxs)
+        data, labels = [data[i] for i in idxs], [labels[i] for i in idxs]
+        true_labels = spurious_labels = labels
+    elif not gender_balanced:
+        neg_neg = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[male_prof] and x["gender"] == 0
+        ]
+        neg_pos = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[male_prof] and x["gender"] == 1
+        ]
+        pos_neg = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[female_prof] and x["gender"] == 0
+        ]
+        pos_pos = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[female_prof] and x["gender"] == 1
+        ]
+        n = min([len(neg_neg), len(neg_pos), len(pos_neg), len(pos_pos)])
+        neg_neg, neg_pos, pos_neg, pos_pos = neg_neg[:n], neg_pos[:n], pos_neg[:n], pos_pos[:n]
+        data = neg_neg + neg_pos + pos_neg + pos_pos
+        true_labels = [0] * n + [0] * n + [1] * n + [1] * n
+        spurious_labels = [0] * n + [1] * n + [0] * n + [1] * n
+        idxs = list(range(4 * n))
+        random.Random(seed).shuffle(idxs)
+        data, true_labels, spurious_labels = (
+            [data[i] for i in idxs],
+            [true_labels[i] for i in idxs],
+            [spurious_labels[i] for i in idxs],
+        )
+    else:
+        neg_neg = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[male_prof] and x["gender"] == 0
+        ]
+        neg_pos = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[male_prof] and x["gender"] == 1
+        ]
+        pos_neg = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[female_prof] and x["gender"] == 0
+        ]
+        pos_pos = [
+            x["hard_text"]
+            for x in data
+            if x["profession"] == profession_dict[female_prof] and x["gender"] == 1
+        ]
+        n = min([len(neg_neg), len(neg_pos), len(pos_neg), len(pos_pos)])
+        neg_neg, neg_pos, pos_neg, pos_pos = neg_neg[:n], neg_pos[:n], pos_neg[:n], pos_pos[:n]
+        data = neg_neg + neg_pos + pos_neg + pos_pos
+        true_labels = [0] * n + [1] * n + [0] * n + [1] * n
+        spurious_labels = [0] * n + [0] * n + [1] * n + [1] * n
+        idxs = list(range(4 * n))
+        random.Random(seed).shuffle(idxs)
+        data, true_labels, spurious_labels = (
+            [data[i] for i in idxs],
+            [true_labels[i] for i in idxs],
+            [spurious_labels[i] for i in idxs],
+        )
+
+    batches = [
+        (
+            data[i : i + batch_size],
+            t.tensor(true_labels[i : i + batch_size], device=DEVICE),
+            t.tensor(spurious_labels[i : i + batch_size], device=DEVICE),
+        )
+        for i in range(0, len(data), batch_size)
+    ]
+
+    return batches
 
 
 def get_effects_per_class(
@@ -142,7 +322,6 @@ def get_effects_per_class(
     train_bios,
     seed: int,
     device: str,
-    n_batches: Optional[int] = None,
     batch_size: int = 10,
     patching_method: str = "ig",
     steps: int = 10,  # only used for ig
@@ -153,25 +332,30 @@ def get_effects_per_class(
     probe = probes[class_idx]
 
     if class_idx >= 0:
-        texts_train, labels_train = get_class_samples(train_bios, class_idx, batch_size, device)
+        texts_train, labels_train = get_class_samples(train_bios, class_idx, device)
         # texts_train, labels_train = get_class_nonclass_samples(
-        #     train_bios, class_idx, batch_size, device, seed
+        #     train_bios, class_idx, device
         # )
     else:
-        texts_train, labels_train = get_paired_class_samples(
-            train_bios, class_idx, batch_size, device
-        )
-    if n_batches is not None:
-        if len(texts_train) > n_batches:
-            texts_train = texts_train[:n_batches]
-            labels_train = labels_train[:n_batches]
-    else:
-        n_batches = len(texts_train)
+        texts_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
+
+    texts_train = utils.batch_inputs(texts_train, batch_size)
+    labels_train = utils.batch_inputs(labels_train, batch_size)
 
     running_total = 0
     running_nodes = None
 
+    n_batches = len(texts_train)
+
     for batch_idx, (clean, labels) in enumerate(zip(texts_train, labels_train)):
+        # for batch_idx, (clean, labels, _) in tqdm(
+        #     enumerate(
+        #         get_data(
+        #             train=True, ambiguous=False, gender_balanced=True, batch_size=batch_size, seed=42
+        #         )
+        #     ),
+        #     total=n_batches,
+        # ):
         if batch_idx == n_batches:
             break
 
@@ -249,8 +433,7 @@ def get_all_acts_ablated(
     batch_size: int,
     probe_layer: int,
 ):
-    text_batches = utils.batch_list(text_inputs, batch_size)
-    assert type(text_batches[0][0]) == str
+    text_batches = utils.batch_inputs(text_inputs, batch_size)
 
     is_tuple = {}
     with t.no_grad(), model.trace("_"):
@@ -472,7 +655,6 @@ def run_interventions(
     test_set_size: int,
     probe_batch_size: int,
     llm_batch_size: int,
-    n_eval_batches: int,
     eval_results_batch_size: int,
     patching_batch_size: int,
     T_effects: list[float],
@@ -509,11 +691,15 @@ def run_interventions(
 
     dataset, _ = load_and_prepare_dataset()
     train_bios, test_bios = get_train_test_data(
-        dataset, train_set_size, test_set_size, include_gender
+        dataset,
+        train_set_size,
+        test_set_size,
+        include_gender,
+        sort_by_length=True,
     )
 
-    train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
-    test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
+    train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
+    test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
     # TODO: Add batching so n_inputs is actually n_inputs
     eval_saes_n_inputs = 10000
@@ -561,13 +747,13 @@ def run_interventions(
     test_acts = {}
     for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated class"):
         test_acts[class_idx] = get_all_activations(
-            test_bios[class_idx], model, llm_batch_size, probe_layer
+            test_bios[class_idx], model, llm_batch_size, probe_layer, context_length
         )
 
         if class_idx in utils.PAIRED_CLASS_KEYS:
             paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
             test_acts[paired_class_idx] = get_all_activations(
-                test_bios[paired_class_idx], model, llm_batch_size, probe_layer
+                test_bios[paired_class_idx], model, llm_batch_size, probe_layer, context_length
             )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
@@ -607,10 +793,10 @@ def run_interventions(
                 train_bios,
                 random_seed,
                 device,
-                n_eval_batches,
                 batch_size=patching_batch_size,
                 patching_method="attrib",
-                steps=10,
+                # patching_method="ig",
+                steps=5,
             )
 
         node_effects_cpu = utils.to_device(node_effects, "cpu")
@@ -620,9 +806,16 @@ def run_interventions(
                 ae_name_lookup[submodule]: effects
                 for submodule, effects in node_effects_cpu[abl_class_idx].items()
             }
+
+        for key, value in node_effects[-2].items():
+            node_effects_2 = node_effects[-2][key] > 0.1
+            for idx in node_effects_2.nonzero():
+                print(f"idx: {idx} value {node_effects[-2][key][idx]}")
+
         with open(ae_path + "node_effects.pkl", "wb") as f:
             pickle.dump(node_effects_cpu, f)
         del node_effects_cpu
+        t.cuda.empty_cache()
         gc.collect()
 
         unique_feats = select_features(
@@ -710,7 +903,8 @@ if __name__ == "__main__":
     num_classes = 5
 
     chosen_class_indices = [-4, -2, 0, 1, 2]
-    chosen_class_indices = [-4, -2]
+    chosen_class_indices = [-4, -2, 0, 1]
+    # chosen_class_indices = [-2]
 
     include_gender = True
 
@@ -718,14 +912,14 @@ if __name__ == "__main__":
     probe_test_set_size = 1000
 
     # Load datset and probes
-    train_set_size = 2000
+    train_set_size = 1000
     test_set_size = 1000
-    probe_batch_size = 1000
-    llm_batch_size = 500
+    probe_batch_size = 500
+    llm_batch_size = 250
     eval_results_batch_size = 100
 
     # Attribution patching variables
-    patching_batch_size = 250
+    patching_batch_size = 100
 
     reduced_GPU_memory = False
 
@@ -734,10 +928,9 @@ if __name__ == "__main__":
         llm_batch_size = 10
         patching_batch_size = 10
 
-    n_eval_batches = train_set_size // patching_batch_size
-
     top_n_features = [2, 5, 10, 20, 50, 100, 500]
-    top_n_features = [10, 50, 500, 1000]
+    # top_n_features = [10, 50, 500, 1000]
+    # top_n_features = [10]
     T_effects_all_classes = [0.1, 0.05, 0.025, 0.01, 0.001]
     T_effects_all_classes = [0.1, 0.01]
     T_effects_unique_class = [1e-4, 1e-8]
@@ -782,23 +975,44 @@ if __name__ == "__main__":
     }
 
     ae_sweep_paths = {
-        "pythia70m_sweep_standard_ctx128_0712": {
-            "resid_post_layer_0": {"trainer_ids": None},
-            "resid_post_layer_1": {"trainer_ids": None},
-            "resid_post_layer_2": {"trainer_ids": None},
-            "resid_post_layer_3": {"trainer_ids": None},
-            "resid_post_layer_4": {"trainer_ids": None},
-        }
-    }
-
-    ae_sweep_paths = {
-        "pythia70m_random_init": {
+        "pythia70m_sweep_topk_ctx128_0730": {
             # "resid_post_layer_0": {"trainer_ids": None},
             # "resid_post_layer_1": {"trainer_ids": None},
             # "resid_post_layer_2": {"trainer_ids": None},
-            "resid_post_layer_3": {"trainer_ids": [0, 1]},
+            # "resid_post_layer_3": {"trainer_ids": None},
             # "resid_post_layer_4": {"trainer_ids": None},
+            "resid_post_layer_3": {"trainer_ids": [10]},
         }
+    }
+    ae_sweep_paths = {
+        # "pythia70m_sweep_standard_ctx128_0712": {
+        #     # "resid_post_layer_0": {"trainer_ids": None},
+        #     # "resid_post_layer_1": {"trainer_ids": None},
+        #     # "resid_post_layer_2": {"trainer_ids": None},
+        #     "resid_post_layer_3": {"trainer_ids": None},
+        #     "resid_post_layer_4": {"trainer_ids": None},
+        # },
+        "pythia70m_sweep_gated_ctx128_0730": {
+            # "resid_post_layer_0": {"trainer_ids": None},
+            # "resid_post_layer_1": {"trainer_ids": None},
+            # "resid_post_layer_2": {"trainer_ids": None},
+            "resid_post_layer_3": {"trainer_ids": None},
+            "resid_post_layer_4": {"trainer_ids": None},
+        },
+        # "pythia70m_sweep_panneal_ctx128_0730": {
+        #     # "resid_post_layer_0": {"trainer_ids": None},
+        #     # "resid_post_layer_1": {"trainer_ids": None},
+        #     # "resid_post_layer_2": {"trainer_ids": None},
+        #     "resid_post_layer_3": {"trainer_ids": None},
+        #     # "resid_post_layer_4": {"trainer_ids": None},
+        # },
+        "pythia70m_sweep_topk_ctx128_0730": {
+            # "resid_post_layer_0": {"trainer_ids": None},
+            # "resid_post_layer_1": {"trainer_ids": None},
+            # "resid_post_layer_2": {"trainer_ids": None},
+            "resid_post_layer_3": {"trainer_ids": None},
+            "resid_post_layer_4": {"trainer_ids": None},
+        },
     }
 
     # This will look for any empty folders in any ae_path and raise an error if it finds any
@@ -820,7 +1034,6 @@ if __name__ == "__main__":
             test_set_size,
             probe_batch_size,
             llm_batch_size,
-            n_eval_batches,
             eval_results_batch_size,
             patching_batch_size,
             T_effects,

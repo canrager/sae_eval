@@ -19,6 +19,7 @@ from tqdm import tqdm
 from typing import Callable, Optional
 
 from datasets import load_dataset
+import datasets
 from nnsight import LanguageModel
 
 import experiments.utils as utils
@@ -142,12 +143,20 @@ def add_gender_classes(balanced_data: dict, df: pd.DataFrame, random_seed: int) 
 
 # Dataset balancing and preparation
 def get_balanced_dataset(
-    dataset, min_samples_per_group: int, train: bool, include_gender: bool, random_seed: int = SEED
+    dataset,
+    min_samples_per_group: int,
+    train: bool,
+    include_paired_classes: bool,
+    sort_by_length: bool,
+    random_seed: int = SEED,
 ):
+    """Sort by length is useful for efficiency if we are padding to longest sequence length in the batch.
+    We just have to be sure to shuffle later, such as shuffling the gathered activations."""
+
     df = pd.DataFrame(dataset["train" if train else "test"])
     balanced_df_list = []
 
-    for profession in df["profession"].unique():
+    for profession in tqdm(df["profession"].unique()):
         prof_df = df[df["profession"] == profession]
         min_count = prof_df["gender"].value_counts().min()
 
@@ -165,14 +174,15 @@ def get_balanced_dataset(
 
     balanced_df = pd.concat(balanced_df_list).reset_index(drop=True)
     grouped = balanced_df.groupby("profession")["hard_text"].apply(list)
-    # return {label: shuffle(texts) for label, texts in grouped.items()}
 
-    # Use NumPy's random number generator for shuffling
-    rng = np.random.default_rng(random_seed)
-    balanced_data = {label: rng.permutation(texts).tolist() for label, texts in grouped.items()}
+    balanced_data = {label: texts for label, texts in grouped.items()}
 
-    if include_gender:
+    if include_paired_classes:
         balanced_data = add_gender_classes(balanced_data, df, random_seed)
+
+    if sort_by_length:
+        for key in balanced_data.keys():
+            balanced_data[key] = sorted(balanced_data[key], key=len)
 
     return balanced_data
 
@@ -198,60 +208,34 @@ def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
 
 
 def get_train_test_data(
-    dataset, train_set_size: int, test_set_size: int, include_gender: bool
+    dataset,
+    train_set_size: int,
+    test_set_size: int,
+    include_paired_classes: bool,
+    sort_by_length: bool = False,
 ) -> tuple[dict, dict]:
+    # 4 is because male / gender for each profession
     minimum_train_samples = train_set_size // 4
     minimum_test_samples = test_set_size // 4
 
     train_bios = get_balanced_dataset(
-        dataset, minimum_train_samples, train=True, include_gender=include_gender
+        dataset,
+        minimum_train_samples,
+        train=True,
+        include_paired_classes=include_paired_classes,
+        sort_by_length=sort_by_length,
     )
     test_bios = get_balanced_dataset(
-        dataset, minimum_test_samples, train=False, include_gender=include_gender
+        dataset,
+        minimum_test_samples,
+        train=False,
+        include_paired_classes=include_paired_classes,
+        sort_by_length=sort_by_length,
     )
 
     train_bios, test_bios = ensure_shared_keys(train_bios, test_bios)
 
     return train_bios, test_bios
-
-
-def sample_from_classes(data_dict, chosen_class):
-    total_samples = len(data_dict[chosen_class])
-    all_classes = list(data_dict.keys())
-    all_classes.remove(chosen_class)
-    random_class_indices = random.choices(all_classes, k=total_samples)
-
-    samples_count = defaultdict(int)
-    for class_idx in random_class_indices:
-        samples_count[class_idx] += 1
-
-    sampled_data = []
-    for class_idx, count in samples_count.items():
-        sampled_data.extend(random.sample(data_dict[class_idx], count))
-
-    return sampled_data
-
-
-def create_labeled_dataset(data_dict: dict, chosen_class: int, batch_size: int, device: str):
-    """0 = in class"""
-    in_class_data = data_dict[chosen_class]
-    other_class_data = sample_from_classes(data_dict, chosen_class)
-
-    combined_dataset = [(sample, 0) for sample in in_class_data] + [
-        (sample, 1) for sample in other_class_data
-    ]
-    random.shuffle(combined_dataset)
-
-    bio_texts, bio_labels = zip(*combined_dataset)
-    text_batches = [
-        bio_texts[i : i + batch_size] for i in range(0, len(combined_dataset), batch_size)
-    ]
-    label_batches = [
-        t.tensor(bio_labels[i : i + batch_size], device=device)
-        for i in range(0, len(combined_dataset), batch_size)
-    ]
-
-    return text_batches, label_batches
 
 
 # Probe model and training
@@ -277,16 +261,17 @@ def get_acts(text):
 
 @t.no_grad()
 def get_all_activations(
-    text_inputs: list[str], model: LanguageModel, batch_size: int, layer: int
+    text_inputs: list[str], model: LanguageModel, batch_size: int, layer: int, context_length: int
 ) -> t.Tensor:
-
-    text_batches = utils.batch_list(text_inputs, batch_size)
-
-    assert type(text_batches[0][0]) == str
+    # TODO: Rename text_inputs
+    text_batches = utils.batch_inputs(text_inputs, batch_size)
 
     all_acts_list_BD = []
     for text_batch_BL in text_batches:
-        with model.trace(text_batch_BL, **tracer_kwargs):
+        with model.trace(
+            text_batch_BL,
+            **tracer_kwargs,
+        ):
             attn_mask = model.input[1]["attention_mask"]
             acts_BLD = model.gpt_neox.layers[layer].output[0]
             acts_BLD = acts_BLD * attn_mask[:, :, None]
@@ -309,7 +294,6 @@ def prepare_probe_data(
     positive_acts = all_activations[class_idx]
 
     if single_class and class_idx >= 0:
-
         positive_labels = t.full(
             (len(positive_acts),), utils.POSITIVE_CLASS_LABEL, dtype=t.int, device=device
         )
@@ -440,6 +424,7 @@ def test_probe(
             if precomputed_acts:
                 acts_BD = input_batch
             else:
+                raise NotImplementedError("Currently deprecated.")
                 acts_BD = get_acts(input_batch)
             logits_B = probe(acts_BD)
             preds_B = (logits_B > 0.0).long()
@@ -485,7 +470,6 @@ def train_probes(
     seed: int = SEED,
     include_gender: bool = False,
 ) -> dict[int, float]:
-
     t.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -500,10 +484,15 @@ def train_probes(
     dataset, df = load_and_prepare_dataset()
 
     train_bios, test_bios = get_train_test_data(
-        dataset, train_set_size, test_set_size, include_gender
+        dataset,
+        train_set_size,
+        test_set_size,
+        include_gender,
+        sort_by_length=True,
     )
-    train_bios = utils.trim_bios_to_context_length(train_bios, context_length)
-    test_bios = utils.trim_bios_to_context_length(test_bios, context_length)
+
+    train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
+    test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
     probes, test_accuracies = {}, {}
 
@@ -514,10 +503,10 @@ def train_probes(
         print(f"Collecting activations for profession: {profession}")
 
         all_train_acts[profession] = get_all_activations(
-            train_bios[profession], model, llm_batch_size, probe_layer
+            train_bios[profession], model, llm_batch_size, probe_layer, context_length
         )
         all_test_acts[profession] = get_all_activations(
-            test_bios[profession], model, llm_batch_size, probe_layer
+            test_bios[profession], model, llm_batch_size, probe_layer, context_length
         )
 
         # For debugging
@@ -527,7 +516,6 @@ def train_probes(
     t.set_grad_enabled(True)
 
     for profession in all_train_acts.keys():
-
         if profession in utils.PAIRED_CLASS_KEYS.values():
             continue
 
