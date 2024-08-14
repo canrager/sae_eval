@@ -95,7 +95,9 @@ def plot_label_distribution(df):
     plt.show()
 
 
-def add_gender_classes(balanced_data: dict, df: pd.DataFrame, random_seed: int) -> dict:
+def add_gender_classes(
+    balanced_data: dict, df: pd.DataFrame, cutoff: int, random_seed: int
+) -> dict:
     # TODO: Experiment with more professions
 
     MALE_IDX = 0
@@ -117,7 +119,9 @@ def add_gender_classes(balanced_data: dict, df: pd.DataFrame, random_seed: int) 
         "hard_text"
     ].tolist()
 
-    min_count = min(len(male_nurse), len(female_nurse), len(male_professor), len(female_professor))
+    min_count = min(
+        len(male_nurse), len(female_nurse), len(male_professor), len(female_professor), cutoff
+    )
     rng = np.random.default_rng(random_seed)
 
     # Create and shuffle combinations
@@ -178,7 +182,7 @@ def get_balanced_dataset(
     balanced_data = {label: texts for label, texts in grouped.items()}
 
     if include_paired_classes:
-        balanced_data = add_gender_classes(balanced_data, df, random_seed)
+        balanced_data = add_gender_classes(balanced_data, df, cutoff, random_seed)
 
     if sort_by_length:
         for key in balanced_data.keys():
