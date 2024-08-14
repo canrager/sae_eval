@@ -2,6 +2,7 @@ import torch
 import json
 import os
 from typing import TypeAlias, Any, Optional
+from tqdm import tqdm
 
 from dictionary_learning import AutoEncoder, ActivationBuffer
 from dictionary_learning.dictionary import (
@@ -198,16 +199,45 @@ def get_submodule(model, submodule_str: str, layer: int):
     return submodule
 
 
-def batch_dict_lists(
-    input_dict: dict[int, list[str]], batch_size: int
-) -> dict[int, list[list[str]]]:
-    for key in input_dict.keys():
-        input_dict[key] = batch_list(input_dict[key], batch_size)
-    return input_dict
+def batch_inputs(inputs, batch_size: int):
+    if isinstance(inputs, list) and isinstance(inputs[0], str):
+        return [inputs[i : i + batch_size] for i in range(0, len(inputs), batch_size)]
+    elif isinstance(inputs, list) and isinstance(inputs[0], int):
+        return [torch.tensor(inputs[i : i + batch_size]) for i in range(0, len(inputs), batch_size)]
+    elif isinstance(inputs, torch.Tensor):
+        return [inputs[i : i + batch_size] for i in range(0, len(inputs), batch_size)]
+    elif (
+        isinstance(inputs, dict)
+        and "input_ids" in inputs.keys()
+        and "attention_mask" in inputs.keys()
+    ):
+        input_ids = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
+        return [
+            {
+                "input_ids": input_ids[i : i + batch_size],
+                "attention_mask": attention_mask[i : i + batch_size],
+            }
+            for i in range(0, len(input_ids), batch_size)
+        ]
+    else:
+        raise ValueError("Unsupported input type")
 
 
-def batch_list(input_list: list[str], batch_size: int) -> list[list[str]]:
-    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
+def tokenize_data(
+    data: dict[int, list[str]], tokenizer, max_length: int, device: str
+) -> dict[int, dict]:
+    tokenized_data = {}
+    for key, texts in tqdm(data.items(), desc="Tokenizing data"):
+        # .data so we have a dict, not a BatchEncoding
+        tokenized_data[key] = (
+            tokenizer(
+                texts, padding=True, truncation=True, max_length=max_length, return_tensors="pt"
+            )
+            .to(device)
+            .data
+        )
+    return tokenized_data
 
 
 def get_ctx_length(ae_paths: list[str]) -> int:
@@ -234,10 +264,3 @@ def get_ctx_length(ae_paths: list[str]) -> int:
     else:
         print("All context lengths are the same.")
     return first_ctx_len
-
-
-def trim_bios_to_context_length(bios_dict: dict[int, str], context_length: int) -> dict[int, str]:
-    trimmed_bios = {}
-    for key, bio_list in bios_dict.items():
-        trimmed_bios[key] = [bio[: context_length + 1] for bio in bio_list]
-    return trimmed_bios
