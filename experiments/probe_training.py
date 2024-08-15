@@ -160,17 +160,19 @@ def get_balanced_dataset(
     df = pd.DataFrame(dataset["train" if train else "test"])
     balanced_df_list = []
 
+    if sort_by_length:
+        min_samples_per_group *= 4
+
     for profession in tqdm(df["profession"].unique()):
         prof_df = df[df["profession"] == profession]
         min_count = prof_df["gender"].value_counts().min()
 
-        if min_samples_per_group and min_count < min_samples_per_group:
+        if min_count < min_samples_per_group:
             continue
 
-        cutoff = min_samples_per_group or min_count
         balanced_prof_df = pd.concat(
             [
-                group.sample(n=cutoff, random_state=random_seed)
+                group.sample(n=min_samples_per_group, random_state=random_seed)
                 for _, group in prof_df.groupby("gender")
             ]
         ).reset_index(drop=True)
@@ -182,11 +184,14 @@ def get_balanced_dataset(
     balanced_data = {label: texts for label, texts in grouped.items()}
 
     if include_paired_classes:
-        balanced_data = add_gender_classes(balanced_data, df, cutoff, random_seed)
+        balanced_data = add_gender_classes(balanced_data, df, min_samples_per_group, random_seed)
 
     if sort_by_length:
+        min_samples_per_group //= 2
         for key in balanced_data.keys():
+            # The purpose of this is to include lower length samples so we don't have to pad as much
             balanced_data[key] = sorted(balanced_data[key], key=len)
+            balanced_data[key] = balanced_data[key][:min_samples_per_group]
 
     return balanced_data
 
