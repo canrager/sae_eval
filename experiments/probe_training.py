@@ -153,9 +153,6 @@ def get_balanced_dataset(
     include_paired_classes: bool,
     random_seed: int = SEED,
 ):
-    """Sort by length is useful for efficiency if we are padding to longest sequence length in the batch.
-    We just have to be sure to shuffle later, such as shuffling the gathered activations."""
-
     df = pd.DataFrame(dataset["train" if train else "test"])
     balanced_df_list = []
 
@@ -486,7 +483,6 @@ def train_probes(
         train_set_size,
         test_set_size,
         include_gender,
-        sort_by_length=True,
     )
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
