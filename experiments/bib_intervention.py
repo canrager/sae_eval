@@ -606,7 +606,6 @@ def run_interventions(
         train_set_size,
         test_set_size,
         include_gender,
-        sort_by_length=False,
     )
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)

@@ -151,7 +151,6 @@ def get_balanced_dataset(
     min_samples_per_group: int,
     train: bool,
     include_paired_classes: bool,
-    sort_by_length: bool,
     random_seed: int = SEED,
 ):
     """Sort by length is useful for efficiency if we are padding to longest sequence length in the batch.
@@ -159,9 +158,6 @@ def get_balanced_dataset(
 
     df = pd.DataFrame(dataset["train" if train else "test"])
     balanced_df_list = []
-
-    if sort_by_length:
-        min_samples_per_group *= 4
 
     for profession in tqdm(df["profession"].unique()):
         prof_df = df[df["profession"] == profession]
@@ -186,12 +182,8 @@ def get_balanced_dataset(
     if include_paired_classes:
         balanced_data = add_gender_classes(balanced_data, df, min_samples_per_group, random_seed)
 
-    if sort_by_length:
-        min_samples_per_group //= 2
-        for key in balanced_data.keys():
-            # The purpose of this is to include lower length samples so we don't have to pad as much
-            balanced_data[key] = sorted(balanced_data[key], key=len)
-            balanced_data[key] = balanced_data[key][:min_samples_per_group]
+    for key in balanced_data.keys():
+        assert len(balanced_data[key]) == min_samples_per_group * 2
 
     return balanced_data
 
@@ -221,7 +213,6 @@ def get_train_test_data(
     train_set_size: int,
     test_set_size: int,
     include_paired_classes: bool,
-    sort_by_length: bool = False,
 ) -> tuple[dict, dict]:
     # 4 is because male / gender for each profession
     minimum_train_samples = train_set_size // 4
@@ -232,14 +223,12 @@ def get_train_test_data(
         minimum_train_samples,
         train=True,
         include_paired_classes=include_paired_classes,
-        sort_by_length=sort_by_length,
     )
     test_bios = get_balanced_dataset(
         dataset,
         minimum_test_samples,
         train=False,
         include_paired_classes=include_paired_classes,
-        sort_by_length=sort_by_length,
     )
 
     train_bios, test_bios = ensure_shared_keys(train_bios, test_bios)
