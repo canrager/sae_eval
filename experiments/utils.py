@@ -124,7 +124,7 @@ def get_nested_folders(path: str) -> list[str]:
     # We use config.json so it also works for data folders
     for root, dirs, files in os.walk(path):
         if "config.json" in files:
-            folder_names.append(root + "/")
+            folder_names.append(root)
 
     return folder_names
 
@@ -140,8 +140,8 @@ def check_for_empty_folders(ae_group_paths: list[str]) -> bool:
 def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
     if verbose:
         print(f"Loading dictionary from {base_path}")
-    ae_path = f"{base_path}ae.pt"
-    config_path = f"{base_path}config.json"
+    ae_path = f"{base_path}/ae.pt"
+    config_path = f"{base_path}/config.json"
 
     with open(config_path, "r") as f:
         config = json.load(f)
