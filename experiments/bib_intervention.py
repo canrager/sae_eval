@@ -65,9 +65,7 @@ def metric_fn(model, labels, probe, probe_act_submodule):
 # Attribution Patching
 
 
-def get_class_nonclass_samples(
-    data: dict[int, list[str]], class_idx: int, device: str
-) -> tuple[list, t.Tensor]:
+def get_class_nonclass_samples(data: dict, class_idx: int, device: str) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
     class_samples = data[class_idx]
@@ -85,42 +83,48 @@ def get_class_nonclass_samples(
         )
 
         # Randomly select indices
-        num_samples = class_samples["input_ids"].size(0)
-        indices = t.randperm(nonclass_input_ids.size(0))[:num_samples]
+        num_class_samples = class_samples["input_ids"].size(0)
+        indices = t.randperm(nonclass_input_ids.size(0))[:num_class_samples]
 
         # Select random samples
         nonclass_input_ids = nonclass_input_ids[indices]
         nonclass_attention_mask = nonclass_attention_mask[indices]
 
-        # Combine class and non-class samples
         combined_input_ids = t.cat([class_samples["input_ids"], nonclass_input_ids], dim=0)
         combined_attention_mask = t.cat(
             [class_samples["attention_mask"], nonclass_attention_mask], dim=0
         )
+
+        combined_input_ids[::2] = class_samples["input_ids"]
+        combined_input_ids[1::2] = nonclass_input_ids
+        combined_attention_mask[::2] = class_samples["attention_mask"]
+        combined_attention_mask[1::2] = nonclass_attention_mask
+
         combined_samples = {
             "input_ids": combined_input_ids,
             "attention_mask": combined_attention_mask,
         }
+
         num_class_samples = class_samples["input_ids"].size(0)
-        num_combined_samples = combined_input_ids.size(0)
+        num_nonclass_samples = nonclass_input_ids.size(0)
+        num_combined_samples = num_class_samples + num_nonclass_samples
     elif isinstance(class_samples, list) and isinstance(class_samples[0], str):
         nonclass_samples = random.sample(nonclass_samples, len(class_samples))
         combined_samples = class_samples + nonclass_samples
         num_class_samples = len(class_samples)
-        num_combined_samples = len(combined_samples)
+        num_nonclass_samples = len(nonclass_samples)
+        num_combined_samples = num_class_samples + num_nonclass_samples
     else:
         raise ValueError("Unsupported input type")
 
     combined_labels = t.empty(num_combined_samples, dtype=t.int, device=device)
-    combined_labels[:num_class_samples] = utils.POSITIVE_CLASS_LABEL
-    combined_labels[num_class_samples:] = utils.NEGATIVE_CLASS_LABEL
+    combined_labels[::2] = utils.POSITIVE_CLASS_LABEL
+    combined_labels[1::2] = utils.NEGATIVE_CLASS_LABEL
 
     return combined_samples, combined_labels
 
 
-def get_class_samples(
-    data: dict[int, list[str]], class_idx: int, device: str
-) -> tuple[list, t.Tensor]:
+def get_class_samples(data: dict, class_idx: int, device: str) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
     class_samples = data[class_idx]
@@ -139,13 +143,14 @@ def get_class_samples(
     return class_samples, class_labels
 
 
-def get_paired_class_samples(
-    data: dict[int, list[str]], class_idx: int, device: str
-) -> tuple[list, t.Tensor]:
+# TODO: Think about removing support for list of string inputs
+def get_paired_class_samples(data: dict, class_idx: int, device: str) -> tuple[list, t.Tensor]:
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
 
     # TODO: Clean this up
+    # I'm interleaving the samples because I'm sorting the samples by length.
+    # This can minimize the number of padding tokens in the batch for efficiency.
 
     if class_idx not in utils.PAIRED_CLASS_KEYS:
         raise ValueError(f"Class {class_idx} not in PAIRED_CLASS_KEYS")
@@ -183,7 +188,7 @@ def get_paired_class_samples(
         }
         num_class_samples = class_samples["input_ids"].size(0)
         num_nonclass_samples = paired_class_samples["input_ids"].size(0)
-        num_combined_samples = combined_input_ids.size(0)
+        num_combined_samples = num_class_samples + num_nonclass_samples
     else:
         raise ValueError("Unsupported input type")
 
@@ -333,9 +338,7 @@ def get_effects_per_class(
 
     if class_idx >= 0:
         texts_train, labels_train = get_class_samples(train_bios, class_idx, device)
-        # texts_train, labels_train = get_class_nonclass_samples(
-        #     train_bios, class_idx, device
-        # )
+        # texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
     else:
         texts_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
 
@@ -640,7 +643,26 @@ def select_features(
     return unique_feats
 
 
-# %%
+def save_log_files(ae_path: str, data: dict, base_filename: str, extension: str):
+    # Always save/overwrite the main file
+    main_file = os.path.join(ae_path, f"{base_filename}{extension}")
+    with open(main_file, "wb") as f:
+        pickle.dump(data, f)
+    print(f"Saved main file: {base_filename}{extension}")
+
+    # Find the next available number for the backup file
+    counter = 1
+    while True:
+        backup_filename = f"{base_filename}{counter}{extension}"
+        full_path = os.path.join(ae_path, backup_filename)
+
+        if not os.path.exists(full_path):
+            with open(full_path, "wb") as f:
+                pickle.dump(data, f)
+            print(f"Saved backup as: {backup_filename}")
+            break
+
+        counter += 1
 
 
 def run_interventions(
@@ -812,8 +834,7 @@ def run_interventions(
             for idx in node_effects_2.nonzero():
                 print(f"idx: {idx} value {node_effects[-2][key][idx]}")
 
-        with open(ae_path + "node_effects.pkl", "wb") as f:
-            pickle.dump(node_effects_cpu, f)
+        save_log_files(ae_path, node_effects_cpu, "node_effects", ".pkl")
         del node_effects_cpu
         t.cuda.empty_cache()
         gc.collect()
@@ -889,8 +910,8 @@ def run_interventions(
                 gc.collect()
 
         class_accuracies = utils.to_device(class_accuracies, "cpu")
-        with open(ae_path + "class_accuracies.pkl", "wb") as f:
-            pickle.dump(class_accuracies, f)
+
+        save_log_files(ae_path, class_accuracies, "class_accuracies", ".pkl")
 
 
 # %%
@@ -903,7 +924,7 @@ if __name__ == "__main__":
     num_classes = 5
 
     chosen_class_indices = [-4, -2, 0, 1, 2]
-    chosen_class_indices = [-4, -2, 0, 1]
+    # chosen_class_indices = [-4, -2, 0, 1]
     # chosen_class_indices = [-2]
 
     include_gender = True
@@ -912,8 +933,8 @@ if __name__ == "__main__":
     probe_test_set_size = 1000
 
     # Load datset and probes
-    train_set_size = 1000
-    test_set_size = 1000
+    train_set_size = 500
+    test_set_size = 500
     probe_batch_size = 500
     llm_batch_size = 250
     eval_results_batch_size = 100
@@ -985,19 +1006,19 @@ if __name__ == "__main__":
         }
     }
     ae_sweep_paths = {
-        # "pythia70m_sweep_standard_ctx128_0712": {
-        #     # "resid_post_layer_0": {"trainer_ids": None},
-        #     # "resid_post_layer_1": {"trainer_ids": None},
-        #     # "resid_post_layer_2": {"trainer_ids": None},
-        #     "resid_post_layer_3": {"trainer_ids": None},
-        #     "resid_post_layer_4": {"trainer_ids": None},
-        # },
+        "pythia70m_sweep_standard_ctx128_0712": {
+            #     # "resid_post_layer_0": {"trainer_ids": None},
+            #     # "resid_post_layer_1": {"trainer_ids": None},
+            #     # "resid_post_layer_2": {"trainer_ids": None},
+            "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
+            #     "resid_post_layer_4": {"trainer_ids": None},
+        },
         "pythia70m_sweep_gated_ctx128_0730": {
             # "resid_post_layer_0": {"trainer_ids": None},
             # "resid_post_layer_1": {"trainer_ids": None},
             # "resid_post_layer_2": {"trainer_ids": None},
-            "resid_post_layer_3": {"trainer_ids": None},
-            "resid_post_layer_4": {"trainer_ids": None},
+            "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
+            # "resid_post_layer_4": {"trainer_ids": None},
         },
         # "pythia70m_sweep_panneal_ctx128_0730": {
         #     # "resid_post_layer_0": {"trainer_ids": None},
@@ -1010,8 +1031,8 @@ if __name__ == "__main__":
             # "resid_post_layer_0": {"trainer_ids": None},
             # "resid_post_layer_1": {"trainer_ids": None},
             # "resid_post_layer_2": {"trainer_ids": None},
-            "resid_post_layer_3": {"trainer_ids": None},
-            "resid_post_layer_4": {"trainer_ids": None},
+            "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
+            # "resid_post_layer_4": {"trainer_ids": None},
         },
     }
 
