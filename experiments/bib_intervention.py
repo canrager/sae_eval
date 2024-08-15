@@ -69,17 +69,12 @@ def get_class_nonclass_samples(data: dict, class_idx: int, device: str) -> tuple
     """This is for getting equal number of text samples from the chosen class and all other classes.
     We use this for attribution patching."""
     class_samples = data[class_idx]
-    nonclass_samples = []
-
-    for profession in data:
-        if profession != class_idx:
-            nonclass_samples.extend(data[profession])
 
     if isinstance(class_samples, dict) and isinstance(class_samples.get("input_ids"), t.Tensor):
         # Combine all non-class tensors
-        nonclass_input_ids = t.cat([sample["input_ids"] for sample in nonclass_samples], dim=0)
+        nonclass_input_ids = t.cat([data[profession]["input_ids"] for profession in data], dim=0)
         nonclass_attention_mask = t.cat(
-            [sample["attention_mask"] for sample in nonclass_samples], dim=0
+            [data[profession]["attention_mask"] for profession in data], dim=0
         )
 
         # Randomly select indices
@@ -109,6 +104,11 @@ def get_class_nonclass_samples(data: dict, class_idx: int, device: str) -> tuple
         num_nonclass_samples = nonclass_input_ids.size(0)
         num_combined_samples = num_class_samples + num_nonclass_samples
     elif isinstance(class_samples, list) and isinstance(class_samples[0], str):
+        nonclass_samples = []
+        for profession in data:
+            if profession != class_idx:
+                nonclass_samples.extend(data[profession])
+
         nonclass_samples = random.sample(nonclass_samples, len(class_samples))
         combined_samples = class_samples + nonclass_samples
         num_class_samples = len(class_samples)
@@ -226,8 +226,8 @@ def get_effects_per_class(
     probe = probes[class_idx]
 
     if class_idx >= 0:
-        texts_train, labels_train = get_class_samples(train_bios, class_idx, device)
-        # texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
+        # texts_train, labels_train = get_class_samples(train_bios, class_idx, device)
+        texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
     else:
         texts_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
 
@@ -814,7 +814,7 @@ if __name__ == "__main__":
 
     chosen_class_indices = [-4, -2, 0, 1, 2]
     # chosen_class_indices = [-4, -2, 0, 1]
-    # chosen_class_indices = [-2]
+    # chosen_class_indices = [0, 1]
 
     include_gender = True
 
