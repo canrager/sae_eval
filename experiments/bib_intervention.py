@@ -809,12 +809,12 @@ if __name__ == "__main__":
     num_classes = 5
 
     chosen_class_indices = [-4, -2, 0, 1, 2]
-    # chosen_class_indices = [-4, -2, 0, 1]
+    chosen_class_indices = [-4, -2, 0, 1]
     # chosen_class_indices = [0, 1]
 
     include_gender = True
 
-    probe_train_set_size = 5000
+    probe_train_set_size = 4000
     probe_test_set_size = 1000
 
     # Load datset and probes

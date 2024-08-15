@@ -122,6 +122,9 @@ def add_gender_classes(
     min_count = min(
         len(male_nurse), len(female_nurse), len(male_professor), len(female_professor), cutoff
     )
+
+    assert min_count == cutoff
+
     rng = np.random.default_rng(random_seed)
 
     # Create and shuffle combinations
