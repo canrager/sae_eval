@@ -712,16 +712,16 @@ def run_interventions(
 
         node_effects_cpu = utils.to_device(node_effects, "cpu")
         # Replace submodule keys with submodule_ae_path
+        # In node_effects, we use submodule keys to give us the option to intervene on multiple autoencoders
+        # When saving, we don't use ae_path as a key though.
         for abl_class_idx in node_effects_cpu.keys():
             node_effects_cpu[abl_class_idx] = {
-                ae_name_lookup[submodule]: effects
-                for submodule, effects in node_effects_cpu[abl_class_idx].items()
+                effects for submodule, effects in node_effects_cpu[abl_class_idx].items()
             }
 
-        for key, value in node_effects[-2].items():
-            node_effects_2 = node_effects[-2][key] > 0.1
-            for idx in node_effects_2.nonzero():
-                print(f"idx: {idx} value {node_effects[-2][key][idx]}")
+        node_effects_2 = node_effects[-2] > 0.1
+        for idx in node_effects_2.nonzero():
+            print(f"idx: {idx} value {node_effects[-2][idx]}")
 
         save_log_files(ae_path, node_effects_cpu, "node_effects", ".pkl")
         del node_effects_cpu
