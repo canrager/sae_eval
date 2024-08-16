@@ -240,10 +240,10 @@ def get_train_test_data(
 class Probe(nn.Module):
     def __init__(self, activation_dim):
         super().__init__()
-        self.net = nn.Linear(activation_dim, 1, bias=True)
+        self.net = nn.Linear(activation_dim, 2, bias=False)
 
     def forward(self, x):
-        return self.net(x).squeeze(-1)
+        return self.net(x)
 
 
 def get_acts(text):
@@ -376,7 +376,7 @@ def train_probe(
 
     probe = Probe(dim).to(device)
     optimizer = t.optim.AdamW(probe.parameters(), lr=lr)
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.CrossEntropyLoss()
 
     for epoch in range(epochs):
         batch_idx = 0
@@ -386,7 +386,7 @@ def train_probe(
             else:
                 acts_BD = get_acts(inputs)
             logits_B = probe(acts_BD)
-            loss = criterion(logits_B, labels.clone().detach().to(device=device, dtype=t.float32))
+            loss = criterion(logits_B, labels.clone().detach().to(device=device, dtype=t.long))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -417,17 +417,30 @@ def test_probe(
         assert get_acts is None, "get_acts will not be used if precomputed_acts is True."
 
     with t.no_grad():
-        corrects = []
+        corrects_all = []
+        corrects_0 = []
+        corrects_1 = []
+
         for input_batch, labels_B in zip(input_batches, label_batches):
             if precomputed_acts:
                 acts_BD = input_batch
             else:
                 raise NotImplementedError("Currently deprecated.")
                 acts_BD = get_acts(input_batch)
-            logits_B = probe(acts_BD)
-            preds_B = (logits_B > 0.0).long()
-            corrects.append((preds_B == labels_B).float())
-        return t.cat(corrects).mean().item()
+            logits_BC = probe(acts_BD)
+            preds_B = t.argmax(logits_BC, dim=1).to(dtype=t.long)
+            corrects_B = (preds_B == labels_B).float()
+            corrects_all.append(corrects_B)
+            corrects_0.append(corrects_B[labels_B == 0])
+            corrects_1.append(corrects_B[labels_B == 1])
+
+        accuracy_all = t.cat(corrects_all).mean().item()
+        accuracy_0 = t.cat(corrects_0).mean().item() if len(corrects_0) > 0 else 0.0
+        accuracy_1 = t.cat(corrects_1).mean().item() if len(corrects_1) > 0 else 0.0
+
+        print(f"0: {accuracy_0}, 1: {accuracy_1}, all: {accuracy_all}")
+
+        return accuracy_all
 
 
 def get_probe_test_accuracy(

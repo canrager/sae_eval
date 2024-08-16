@@ -54,12 +54,20 @@ class FeatureSelection(Enum):
 
 
 def metric_fn(model, labels, probe, probe_act_submodule):
-    attn_mask = model.input[1]["attention_mask"]
-    acts = probe_act_submodule.output[0]
-    acts = acts * attn_mask[:, :, None]
-    acts = acts.sum(1) / attn_mask.sum(1)[:, None]
+    attn_mask_BLD = model.input[1]["attention_mask"]
+    acts_BLD = probe_act_submodule.output[0]
+    acts_BLD = acts_BLD * attn_mask_BLD[:, :, None]
+    acts_BD = acts_BLD.sum(1) / attn_mask_BLD.sum(1)[:, None]
 
-    return t.where(labels == utils.POSITIVE_CLASS_LABEL, probe(acts), -probe(acts))
+    logits_BC = probe(acts_BD)
+    logits_BC = t.nn.functional.softmax(logits_BC, dim=1)
+    criterion = t.nn.CrossEntropyLoss()
+
+    return t.where(
+        labels == utils.POSITIVE_CLASS_LABEL,
+        logits_BC[:, 0],
+        logits_BC[:, 1],
+    )
 
 
 # Attribution Patching
@@ -226,8 +234,8 @@ def get_effects_per_class(
     probe = probes[class_idx]
 
     if class_idx >= 0:
-        # texts_train, labels_train = get_class_samples(train_bios, class_idx, device)
-        texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
+        texts_train, labels_train = get_class_samples(train_bios, class_idx, device)
+        # texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
     else:
         texts_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
 
@@ -240,14 +248,6 @@ def get_effects_per_class(
     n_batches = len(texts_train)
 
     for batch_idx, (clean, labels) in enumerate(zip(texts_train, labels_train)):
-        # for batch_idx, (clean, labels, _) in tqdm(
-        #     enumerate(
-        #         get_data(
-        #             train=True, ambiguous=False, gender_balanced=True, batch_size=batch_size, seed=42
-        #         )
-        #     ),
-        #     total=n_batches,
-        # ):
         if batch_idx == n_batches:
             break
 
@@ -809,7 +809,7 @@ if __name__ == "__main__":
     num_classes = 5
 
     chosen_class_indices = [-4, -2, 0, 1, 2]
-    chosen_class_indices = [-4, -2, 0, 1]
+    # chosen_class_indices = [-4, -2]
     # chosen_class_indices = [0, 1]
 
     include_gender = True
