@@ -226,8 +226,8 @@ def get_effects_per_class(
     probe = probes[class_idx]
 
     if class_idx >= 0:
-        # texts_train, labels_train = get_class_samples(train_bios, class_idx, device)
-        texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
+        texts_train, labels_train = get_class_samples(train_bios, class_idx, device)
+        # texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
     else:
         texts_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
 
@@ -774,7 +774,7 @@ def run_interventions(
                         device=device,
                         single_class=False,
                     )
-                    test_acc_probe = test_probe(
+                    test_acc_probe, acc_0, acc_1 = test_probe(
                         batch_test_acts,
                         batch_test_labels,
                         probes[evaluated_class_idx],
@@ -784,9 +784,11 @@ def run_interventions(
                         print(
                             f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {test_acc_probe}"
                         )
-                    class_accuracies[ablated_class_idx][T_effect][evaluated_class_idx] = (
-                        test_acc_probe
-                    )
+                    class_accuracies[ablated_class_idx][T_effect][evaluated_class_idx] = {
+                        "acc": test_acc_probe,
+                        "acc_0": acc_0,
+                        "acc_1": acc_1,
+                    }
 
                 del test_acts_ablated
                 del batch_test_acts
@@ -809,7 +811,7 @@ if __name__ == "__main__":
     num_classes = 5
 
     chosen_class_indices = [-4, -2, 0, 1, 2]
-    chosen_class_indices = [-4, -2, 0, 1]
+    # chosen_class_indices = [-2, -4]
     # chosen_class_indices = [0, 1]
 
     include_gender = True

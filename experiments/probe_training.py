@@ -417,17 +417,32 @@ def test_probe(
         assert get_acts is None, "get_acts will not be used if precomputed_acts is True."
 
     with t.no_grad():
-        corrects = []
+        corrects_0 = []
+        corrects_1 = []
+        all_corrects = []
+
         for input_batch, labels_B in zip(input_batches, label_batches):
             if precomputed_acts:
                 acts_BD = input_batch
             else:
                 raise NotImplementedError("Currently deprecated.")
                 acts_BD = get_acts(input_batch)
+
             logits_B = probe(acts_BD)
             preds_B = (logits_B > 0.0).long()
-            corrects.append((preds_B == labels_B).float())
-        return t.cat(corrects).mean().item()
+            correct_B = (preds_B == labels_B).float()
+
+            all_corrects.append(correct_B)
+            corrects_0.append(correct_B[labels_B == 0])
+            corrects_1.append(correct_B[labels_B == 1])
+
+        accuracy_all = t.cat(all_corrects).mean().item()
+        accuracy_0 = t.cat(corrects_0).mean().item() if corrects_0 else 0.0
+        accuracy_1 = t.cat(corrects_1).mean().item() if corrects_1 else 0.0
+
+        print(f"0: {accuracy_0}, 1: {accuracy_1}, all: {accuracy_all}")
+
+    return accuracy_all, accuracy_0, accuracy_1
 
 
 def get_probe_test_accuracy(
@@ -444,7 +459,7 @@ def get_probe_test_accuracy(
         batch_test_acts, batch_test_labels = prepare_probe_data(
             all_activations, class_idx, probe_batch_size, device
         )
-        test_acc_probe = test_probe(
+        test_acc_probe, acc_0, acc_1 = test_probe(
             batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True
         )
         test_accuracies[-1][class_idx] = test_acc_probe
