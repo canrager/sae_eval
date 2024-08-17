@@ -27,7 +27,7 @@ nbstripout --install
 
 # Install necessary tools
 apt-get update
-apt-get install -y unzip zip gcc
+apt-get install -y unzip zip
 
 # Navigate to the dictionaries directory
 cd dictionary_learning
@@ -39,19 +39,14 @@ REPO_NAME="canrager/lm_sae"
 
 # List of files to download
 FILES=(
-    "pythia70m_sweep_standard_ctx128_0712.zip"
+    # "pythia70m_sweep_standard_ctx128_0712.zip"
     "pythia70m_test_sae.zip"
-    "pythia70m_sweep_topk_ctx128_0730.zip"
-    "pythia70m_sweep_gated_ctx128_0730.zip"
-    "all_730_results.zip"
+    # "pythia70m_sweep_topk_ctx128_0730.zip"
+    # "pythia70m_sweep_gated_ctx128_0730.zip"
+    # "all_730_results.zip"
 )
 
 # Download and extract each file
 for file in "${FILES[@]}"; do
     download_and_extract "$REPO_NAME" "$file"
 done
-
-# Set up Triton kernels for Vast AI machines
-export CC=/usr/bin/gcc
-gcc --version
-echo $CC
