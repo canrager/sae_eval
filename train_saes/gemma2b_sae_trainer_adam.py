@@ -44,14 +44,14 @@ def run_sae_training(
     context_length = 128
 
     buffer_size = int(2e3)
-    llm_batch_size = 32  # 256 for A100 GPU, 64 for 1080ti
-    sae_batch_size = 256
+    llm_batch_size = 32  # 32 on a 24GB RTX 3090
+    sae_batch_size = 4096
     num_tokens = 200_000_000
 
     # sae training parameters
     # random_seeds = t.arange(10).tolist()
     random_seeds = [0]
-    initial_sparsity_penalties = [0.01, 0.05, 0.075, 0.1]
+    initial_sparsity_penalties = [0.01, 0.05, 0.075, 0.1, 0.15]
     ks = [20, 40, 80, 160, 320]
     ks = {p: ks[i] for i, p in enumerate(initial_sparsity_penalties)}
     expansion_factors = [8, 32]
@@ -91,11 +91,11 @@ def run_sae_training(
     anneal_start = 10000
     n_sparsity_updates = 10
 
-    log_steps = 5  # Log the training on wandb
+    log_steps = 25  # Log the training on wandb
     if no_wandb_logging:
         log_steps = None
 
-    model = LanguageModel(model_name, dispatch=True, device_map=DEVICE)
+    model = LanguageModel(model_name, dispatch=True, device_map=DEVICE, torch_dtype=t.bfloat16)
     submodule = model.model.layers[layer]
     submodule_name = f"resid_post_layer_{layer}"
     io = "out"
@@ -211,6 +211,9 @@ def run_sae_training(
             save_steps=save_steps,
             save_dir=save_dir,
             log_steps=log_steps,
+            use_wandb=not no_wandb_logging,
+            wandb_entity="adam-karvonen",
+            wandb_project="topk_sae_sweep",
         )
 
 
