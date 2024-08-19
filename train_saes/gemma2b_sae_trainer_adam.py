@@ -39,11 +39,11 @@ def run_sae_training(
     no_wandb_logging: bool = False,
 ):
     # model and data parameters
-    model_name = "google/gemma-2b"
+    model_name = "google/gemma-2-2b"
     dataset_name = "/share/data/datasets/pile/the-eye.eu/public/AI/pile/train/00.jsonl.zst"
     context_length = 128
 
-    buffer_size = int(2e3)
+    buffer_size = int(4e3)
     llm_batch_size = 32  # 32 on a 24GB RTX 3090
     sae_batch_size = 4096
     num_tokens = 200_000_000
@@ -95,7 +95,14 @@ def run_sae_training(
     if no_wandb_logging:
         log_steps = None
 
-    model = LanguageModel(model_name, dispatch=True, device_map=DEVICE, torch_dtype=t.bfloat16)
+    model = LanguageModel(
+        model_name,
+        # token=hf_token,
+        device_map=device,
+        low_cpu_mem_usage=True,
+        attn_implementation="eager",
+        torch_dtype=t.bfloat16,
+    )
     submodule = model.model.layers[layer]
     submodule_name = f"resid_post_layer_{layer}"
     io = "out"
