@@ -43,7 +43,7 @@ def run_sae_training(
     dataset_name = "/share/data/datasets/pile/the-eye.eu/public/AI/pile/train/00.jsonl.zst"
     context_length = 128
 
-    buffer_size = int(4e3)
+    buffer_size = int(2e3)
     llm_batch_size = 32  # 32 on a 24GB RTX 3090
     sae_batch_size = 4096
     num_tokens = 200_000_000
@@ -51,8 +51,11 @@ def run_sae_training(
     # sae training parameters
     # random_seeds = t.arange(10).tolist()
     random_seeds = [0]
+    initial_sparsity_penalties = [0.02, 0.025, 0.035, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09]
     initial_sparsity_penalties = [0.01, 0.05, 0.075, 0.1, 0.15]
     ks = [20, 40, 80, 160, 320]
+
+    assert len(initial_sparsity_penalties) == len(ks) # This is pretty janky but it can't fail silently with the assert
     ks = {p: ks[i] for i, p in enumerate(initial_sparsity_penalties)}
     expansion_factors = [8, 32]
     expansion_factors = [8]
@@ -97,7 +100,7 @@ def run_sae_training(
 
     model = LanguageModel(
         model_name,
-        # token=hf_token,
+        # token=hf_token, # I had to use huggingface-cli login for some reason
         device_map=device,
         low_cpu_mem_usage=True,
         attn_implementation="eager",
