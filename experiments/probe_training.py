@@ -238,9 +238,9 @@ def get_train_test_data(
 
 # Probe model and training
 class Probe(nn.Module):
-    def __init__(self, activation_dim):
+    def __init__(self, activation_dim: int, dtype: t.dtype):
         super().__init__()
-        self.net = nn.Linear(activation_dim, 1, bias=True)
+        self.net = nn.Linear(activation_dim, 1, bias=True, dtype=dtype)
 
     def forward(self, x):
         return self.net(x).squeeze(-1)
@@ -364,6 +364,7 @@ def train_probe(
     dim: int,
     epochs: int,
     device: str,
+    model_dtype: t.dtype,
     lr: float = 1e-2,
     seed: int = SEED,
 ) -> tuple[Probe, float]:
@@ -374,7 +375,7 @@ def train_probe(
     elif type(train_input_batches[0]) == t.Tensor or type(test_input_batches[0]) == t.Tensor:
         assert precomputed_acts == True
 
-    probe = Probe(dim).to(device)
+    probe = Probe(dim, model_dtype).to(device)
     optimizer = t.optim.AdamW(probe.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
 
@@ -479,6 +480,7 @@ def train_probes(
     probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
     epochs: int = 10,
+    model_dtype: t.dtype = t.bfloat16,
     save_results: bool = True,
     seed: int = SEED,
     include_gender: bool = False,
@@ -550,6 +552,7 @@ def train_probes(
             epochs=epochs,
             dim=d_model,
             device=device,
+            model_dtype=model_dtype,
         )
 
         probes[profession] = probe

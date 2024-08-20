@@ -588,8 +588,18 @@ def run_interventions(
     if "160m" in model_name:
         llm_batch_size //= 2
         patching_batch_size //= 2
+    elif "gemma-2-2b" in model_name:
+        llm_batch_size = 32
+        patching_batch_size = 8
 
-    model = LanguageModel(model_name, device_map=device, dispatch=True)
+    model_dtype = t.bfloat16
+    model = LanguageModel(
+        model_name,
+        device_map=device,
+        dispatch=True,
+        attn_implementation="eager",
+        torch_dtype=model_dtype,
+    )
 
     probe_layer = model_eval_config.probe_layer
     probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
@@ -640,7 +650,8 @@ def run_interventions(
             probe_dir=probes_dir,
             llm_model_name=model_name,
             epochs=10,
-            include_gender=True,  # It's cheap to calculate and avoids potential bugs
+            model_dtype=model_dtype,
+            include_gender=include_gender,
         )
 
     with open(probe_path, "rb") as f:
@@ -657,13 +668,13 @@ def run_interventions(
     test_acts = {}
     for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated class"):
         test_acts[class_idx] = get_all_activations(
-            test_bios[class_idx], model, llm_batch_size, probe_layer, context_length
+            test_bios[class_idx], model, llm_batch_size, probe_act_submodule
         )
 
         if class_idx in utils.PAIRED_CLASS_KEYS:
             paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
             test_acts[paired_class_idx] = get_all_activations(
-                test_bios[paired_class_idx], model, llm_batch_size, probe_layer, context_length
+                test_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
             )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
@@ -679,6 +690,7 @@ def run_interventions(
         submodules = []
         dictionaries = {}
         submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
+        dictionary = dictionary.to(dtype=model_dtype)
         submodules.append(submodule)
         dictionaries[submodule] = dictionary
         dict_size = config["trainer"]["dict_size"]
@@ -763,7 +775,7 @@ def run_interventions(
                             dictionaries,
                             feats,
                             llm_batch_size,
-                            probe_layer,
+                            probe_act_submodule,
                         )
 
                 for evaluated_class_idx in all_classes_list:
