@@ -728,18 +728,17 @@ def run_interventions(
         for abl_class_idx in list(node_effects_cpu.keys()):
             node_effects_cpu[abl_class_idx] = node_effects_cpu[abl_class_idx][submodule]
 
-        node_effects_2 = node_effects_cpu[-2] > 0.1
-        for idx in node_effects_2.nonzero():
-            print(f"idx: {idx} value {node_effects_cpu[-2][idx]}")
-
         save_log_files(ae_path, node_effects_cpu, "node_effects", ".pkl")
-        del node_effects_cpu
-        t.cuda.empty_cache()
-        gc.collect()
 
         unique_feats = select_features(
             selection_method, node_effects, dict_size, T_effects, T_max_sideeffect, verbose=verbose
         )
+
+        del node_effects_cpu
+        del node_effects
+
+        t.cuda.empty_cache()
+        gc.collect()
 
         for ablated_class_idx in all_classes_list:
             class_accuracies[ablated_class_idx] = {}
