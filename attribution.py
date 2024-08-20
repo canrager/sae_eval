@@ -38,6 +38,7 @@ def _pe_attrib(
             x = submodule.output
             if is_tuple[submodule]:
                 x = x[0]
+            x = x.to(dtype=model.dtype)
             x_hat, f = dictionary(x, output_features=True)  # x_hat implicitly depends on f
             residual = x - x_hat
             hidden_states_clean[submodule] = SparseAct(act=f, res=residual).save()
@@ -68,6 +69,7 @@ def _pe_attrib(
                 x = submodule.output
                 if is_tuple[submodule]:
                     x = x[0]
+                x = x.to(dtype=model.dtype)
                 x_hat, f = dictionary(x, output_features=True)
                 residual = x - x_hat
                 hidden_states_patch[submodule] = SparseAct(act=f, res=residual).save()
@@ -118,6 +120,7 @@ def _pe_ig(
             x = submodule.output
             if is_tuple[submodule]:
                 x = x[0]
+            x = x.to(dtype=model.dtype)
             f = dictionary.encode(x)
             x_hat = dictionary.decode(f)
             residual = x - x_hat
@@ -139,6 +142,7 @@ def _pe_ig(
                 x = submodule.output
                 if is_tuple[submodule]:
                     x = x[0]
+                x = x.to(dtype=model.dtype)
                 f = dictionary.encode(x)
                 x_hat = dictionary.decode(f)
                 residual = x - x_hat
