@@ -43,6 +43,7 @@ FILES=(
     "pythia70m_test_sae.zip"
     # "pythia70m_sweep_topk_ctx128_0730.zip"
     # "pythia70m_sweep_gated_ctx128_0730.zip"
+    # "pythia70m_sweep_panneal_ctx128_0730.zip"
     # "all_730_results.zip"
 )
 
