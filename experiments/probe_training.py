@@ -259,7 +259,7 @@ def get_acts(text):
 
 @t.no_grad()
 def get_all_activations(
-    text_inputs: list[str], model: LanguageModel, batch_size: int, layer: int, context_length: int
+    text_inputs: list[str], model: LanguageModel, batch_size: int, submodule: utils.submodule_alias
 ) -> t.Tensor:
     # TODO: Rename text_inputs
     text_batches = utils.batch_inputs(text_inputs, batch_size)
@@ -271,7 +271,7 @@ def get_all_activations(
             **tracer_kwargs,
         ):
             attn_mask = model.input[1]["attention_mask"]
-            acts_BLD = model.gpt_neox.layers[layer].output[0]
+            acts_BLD = submodule.output[0]
             acts_BLD = acts_BLD * attn_mask[:, :, None]
             acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]
             acts_BD = acts_BD.save()
@@ -493,6 +493,7 @@ def train_probes(
     model_eval_config = utils.ModelEvalConfig.from_full_model_name(llm_model_name)
     d_model = model_eval_config.activation_dim
     probe_layer = model_eval_config.probe_layer
+    probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
     dataset, df = load_and_prepare_dataset()
 
@@ -515,10 +516,10 @@ def train_probes(
         print(f"Collecting activations for profession: {profession}")
 
         all_train_acts[profession] = get_all_activations(
-            train_bios[profession], model, llm_batch_size, probe_layer, context_length
+            train_bios[profession], model, llm_batch_size, probe_act_submodule
         )
         all_test_acts[profession] = get_all_activations(
-            test_bios[profession], model, llm_batch_size, probe_layer, context_length
+            test_bios[profession], model, llm_batch_size, probe_act_submodule
         )
 
         # For debugging

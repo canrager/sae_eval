@@ -323,7 +323,7 @@ def get_all_acts_ablated(
     dictionaries,
     to_ablate,
     batch_size: int,
-    probe_layer: int,
+    probe_submodule: utils.submodule_alias,
 ):
     text_batches = utils.batch_inputs(text_inputs, batch_size)
 
@@ -349,7 +349,7 @@ def get_all_acts_ablated(
                 else:
                     submodule.output = dictionary.decode(f) + res
             attn_mask = model.input[1]["attention_mask"]
-            act = model.gpt_neox.layers[probe_layer].output[0]
+            act = probe_submodule.output[0]
             act = act * attn_mask[:, :, None]
             act = act.sum(1) / attn_mask.sum(1)[:, None]
             act = act.save()
@@ -751,7 +751,7 @@ def run_interventions(
                         dictionaries,
                         feats,
                         llm_batch_size,
-                        probe_layer,
+                        probe_act_submodule,
                     )
 
                     if evaluated_class_idx in utils.PAIRED_CLASS_KEYS:
