@@ -34,6 +34,11 @@ class ModelEvalConfig:
             "activation_dim": 768,
             "probe_layer": 10,
         },
+        "gemma-2-2b": {
+            "full_model_name": "google/gemma-2-2b",
+            "activation_dim": 2304,
+            "probe_layer": 20,
+        },
     }
 
     def __init__(self, model_name):
@@ -193,6 +198,11 @@ def get_submodule(model, submodule_str: str, layer: int):
             submodule = model.gpt_neox.layers[layer]
         else:
             raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
+    elif model_architecture == "Gemma2ForCausalLM":
+        if "resid_post" in submodule_str:
+            submodule = model.model.layers[layer]
+        else:
+            raise ValueError(f"submodule_str must contain 'resid_post'")
     else:
         raise ValueError(f"Model architecture {model_architecture} not supported")
 
