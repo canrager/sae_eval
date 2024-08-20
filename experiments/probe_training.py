@@ -473,6 +473,7 @@ def get_probe_test_accuracy(
 def train_probes(
     train_set_size: int,
     test_set_size: int,
+    model: LanguageModel,
     context_length: int,
     probe_batch_size: int,
     llm_batch_size: int,
@@ -488,9 +489,6 @@ def train_probes(
     t.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
-
-    # TODO: I think there may be a scoping issue with model and get_acts(), but we currently aren't using get_acts()
-    model = LanguageModel(llm_model_name, device_map=device, dispatch=True)
 
     model_eval_config = utils.ModelEvalConfig.from_full_model_name(llm_model_name)
     d_model = model_eval_config.activation_dim
@@ -572,17 +570,28 @@ def train_probes(
 
 
 if __name__ == "__main__":
+    llm_model_name = "EleutherAI/pythia-70m-deduped"
+    device = "cuda"
+    train_set_size = 1000
+    test_set_size = 1000
+    context_length = 128
+    include_gender = True
+
+    # TODO: I think there may be a scoping issue with model and get_acts(), but we currently aren't using get_acts()
+    model = LanguageModel(llm_model_name, device_map=device, dispatch=True)
+
     test_accuracies = train_probes(
         train_set_size=1000,
         test_set_size=1000,
+        model=model,
         context_length=128,
         probe_batch_size=50,
         llm_batch_size=20,
-        llm_model_name="EleutherAI/pythia-70m-deduped",
+        llm_model_name=llm_model_name,
         epochs=10,
-        device="cuda",
+        device=device,
         seed=SEED,
-        include_gender=True,
+        include_gender=include_gender,
     )
     print(test_accuracies)
 # %%

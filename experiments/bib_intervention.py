@@ -641,8 +641,9 @@ def run_interventions(
     if not os.path.exists(probe_path):
         print("Probes not found, training probes")
         probes = probe_training.train_probes(
-            train_set_size=probe_train_set_size,
-            test_set_size=probe_test_set_size,
+            probe_train_set_size,
+            probe_test_set_size,
+            model,
             context_length=context_length,
             probe_batch_size=probe_batch_size,
             llm_batch_size=llm_batch_size,
