@@ -135,11 +135,16 @@ def add_gender_classes(
     male_professor = male_professor[: min_count * 2]
     female_nurse = female_nurse[: min_count * 2]
 
+    pos_ratio = 1.995
+    neg_ratio = 2.0 - pos_ratio
+
     biased_males_combined = (
-        male_professor[: int(min_count * 1.6)] + male_nurse[: int(min_count * 0.4)]
+        male_professor[: math.ceil(min_count * pos_ratio)]
+        + male_nurse[: math.ceil(min_count * neg_ratio)]
     )
     biased_females_combined = (
-        female_professor[: int(min_count * 0.4)] + female_nurse[: int(min_count * 1.6)]
+        female_professor[: math.ceil(min_count * neg_ratio)]
+        + female_nurse[: math.ceil(min_count * pos_ratio)]
     )
 
     # Shuffle each combination
@@ -448,8 +453,6 @@ def test_probe(
         accuracy_0 = t.cat(corrects_0).mean().item() if corrects_0 else 0.0
         accuracy_1 = t.cat(corrects_1).mean().item() if corrects_1 else 0.0
 
-        print(f"loss: {loss}, 0: {accuracy_0}, 1: {accuracy_1}, all: {accuracy_all}")
-
     return accuracy_all, accuracy_0, accuracy_1, loss
 
 
@@ -490,6 +493,7 @@ def get_probe_test_accuracy(
                 precomputed_acts=True,
             )
             combined_class_name = f"{spurious_class_name} probe on {class_name} data"
+            print(f"Test accuracy for {combined_class_name}: {test_acc_probe}")
             test_accuracies[combined_class_name] = {
                 "acc": test_acc_probe,
                 "acc_0": acc_0,
@@ -546,6 +550,9 @@ def train_probes(
 
     with t.no_grad():
         for i, profession in enumerate(train_bios.keys()):
+            # if isinstance(profession, int):
+            #     continue
+
             print(f"Collecting activations for profession: {profession}")
 
             all_train_acts[profession] = get_all_activations(
@@ -565,6 +572,11 @@ def train_probes(
 
         test_acts, test_labels = prepare_probe_data(all_test_acts, profession, probe_batch_size)
 
+        if profession == "biased_male / biased_female":
+            probe_epochs = epochs
+        else:
+            probe_epochs = epochs
+
         probe, test_accuracy = train_probe(
             train_acts,
             train_labels,
@@ -572,7 +584,7 @@ def train_probes(
             test_labels,
             get_acts,
             precomputed_acts=True,
-            epochs=epochs,
+            epochs=probe_epochs,
             dim=d_model,
             device=device,
             model_dtype=model_dtype,
