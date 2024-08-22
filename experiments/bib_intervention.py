@@ -72,10 +72,15 @@ def get_class_nonclass_samples(data: dict, class_idx: int, device: str) -> tuple
 
     if isinstance(class_samples, dict) and isinstance(class_samples.get("input_ids"), t.Tensor):
         # Combine all non-class tensors
-        nonclass_input_ids = t.cat([data[profession]["input_ids"] for profession in data], dim=0)
-        nonclass_attention_mask = t.cat(
-            [data[profession]["attention_mask"] for profession in data], dim=0
-        )
+
+        nonclass_input_ids = []
+        nonclass_attention_mask = []
+        for profession in data:
+            if profession != class_idx and isinstance(profession, int):
+                nonclass_input_ids.append(data[profession]["input_ids"])
+                nonclass_attention_mask.append(data[profession]["attention_mask"])
+        nonclass_input_ids = t.cat(nonclass_input_ids, dim=0)
+        nonclass_attention_mask = t.cat(nonclass_attention_mask, dim=0)
 
         # Randomly select indices
         num_class_samples = class_samples["input_ids"].size(0)
