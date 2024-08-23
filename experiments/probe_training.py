@@ -135,7 +135,7 @@ def add_gender_classes(
     male_professor = male_professor[: min_count * 2]
     female_nurse = female_nurse[: min_count * 2]
 
-    pos_ratio = 1.995
+    pos_ratio = 1.95
     neg_ratio = 2.0 - pos_ratio
 
     biased_males_combined = (
@@ -572,8 +572,8 @@ def train_probes(
 
         test_acts, test_labels = prepare_probe_data(all_test_acts, profession, probe_batch_size)
 
-        if profession == "biased_male / biased_female":
-            probe_epochs = epochs
+        if profession == "biased_male / biased_female" or profession == "male / female":
+            probe_epochs = 1
         else:
             probe_epochs = epochs
 
