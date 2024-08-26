@@ -30,6 +30,16 @@ else:
 ### BEGIN OF ACTIVATION COLLECTION FUNCTIONS ###
 
 
+def get_memory_usage():
+    if torch.cuda.is_available():
+        return torch.cuda.memory_allocated() / 1024 / 1024  # Convert to MB
+    return 0  # Return 0 if CUDA is not available
+
+
+MEMORY_DEBUG = False
+
+
+@torch.no_grad()
 def get_max_activating_prompts(
     model,
     submodule,
@@ -40,29 +50,42 @@ def get_max_activating_prompts(
     context_length: int = 128,
     k: int = 30,
 ):
+    # If encountering memory issues, we could try preallocate tensors instead of concatenating in the for loop
     feature_count = dim_indices.shape[0]
 
     device = model.device
 
-    max_activating_indices_FK = torch.zeros((feature_count, k), device=device, dtype=torch.int)
-    max_activations_FK = torch.zeros((feature_count, k), device=device, dtype=torch.float32)
-    max_tokens_FKL = torch.zeros((feature_count, k, context_length), device=device, dtype=torch.int)
-    max_activations_FKL = torch.zeros(
-        (feature_count, k, context_length), device=device, dtype=torch.float32
+    if MEMORY_DEBUG:
+        print(f"Initial memory usage: {get_memory_usage():.2f} MB")
+
+    max_activating_indices_FK = torch.zeros((feature_count, k), device=device, dtype=torch.int32)
+    max_activations_FK = torch.zeros((feature_count, k), device=device, dtype=torch.bfloat16)
+    max_tokens_FKL = torch.zeros(
+        (feature_count, k, context_length), device=device, dtype=torch.int32
     )
+    max_activations_FKL = torch.zeros(
+        (feature_count, k, context_length), device=device, dtype=torch.bfloat16
+    )
+
+    if MEMORY_DEBUG:
+        print(f"Initial memory usage: {get_memory_usage():.2f} MB")
 
     for i, inputs in tqdm(enumerate(tokenized_inputs_bL), total=len(tokenized_inputs_bL)):
         batch_offset = i * batch_size
-        inputs_BL = inputs["input_ids"]
+        inputs_BL = inputs["input_ids"].to(dtype=torch.int32)
+
+        if MEMORY_DEBUG:
+            print(f"Memory usage: {get_memory_usage():.2f} MB")
 
         with torch.no_grad(), model.trace(inputs, **tracer_kwargs):
             activations_BLD = submodule.output
             if type(activations_BLD.shape) == tuple:
-                activations_BLD = activations_BLD[0]
-            activations_BLF = dictionary.encode(activations_BLD)
-            activations_BLF = activations_BLF[:, :, dim_indices].save()
+                activations_BLD = activations_BLD[0].save()
 
-        activations_FBL = einops.rearrange(activations_BLF.value, "B L F -> F B L")
+        activations_BLF = dictionary.encode(activations_BLD.value)
+        activations_BLF = activations_BLF[:, :, dim_indices]
+
+        activations_FBL = einops.rearrange(activations_BLF, "B L F -> F B L")
         # Use einops to find the max activation per input
         activations_FB = einops.reduce(activations_FBL, "F B L -> F B", "max")
         tokens_FBL = einops.repeat(inputs_BL, "B L -> F B L", F=feature_count)
@@ -149,14 +172,17 @@ def get_autointerp_inputs_for_one_sae(
 
     dla_results_FK = compute_dla(
         all_feature_indices, autoencoder.decoder.weight, unembed_VD, top_k_prompts
-    )
+    ).to(dtype=torch.int32)
+
+    assert max_tokens_FKL.dtype == torch.int32
+    assert max_activations_FKL.dtype == torch.bfloat16
 
     # TODO: We could maybe reduce max_activations_FKL to unsigned 8-bit integers
     # They are always positive, but maybe look into it first?
     results = {
-        "max_tokens_FKL": max_tokens_FKL.to("cpu").to(dtype=torch.int32),
-        "max_activations_FKL": max_activations_FKL.to("cpu").to(dtype=torch.bfloat16),
-        "dla_results_FK": dla_results_FK.to("cpu").to(dtype=torch.int32),
+        "max_tokens_FKL": max_tokens_FKL.to("cpu"),
+        "max_activations_FKL": max_activations_FKL.to("cpu"),
+        "dla_results_FK": dla_results_FK.to("cpu"),
     }
 
     return results
@@ -257,6 +283,9 @@ def highlight_top_activations(
 
 
 if __name__ == "__main__":
+    import os
+
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     trainer_ids = [2, 6, 10, 14, 18]
     ae_sweep_paths = {
         "pythia70m_sweep_standard_ctx128_0712": {
@@ -266,13 +295,13 @@ if __name__ == "__main__":
             "resid_post_layer_3": {"trainer_ids": trainer_ids},
             #     "resid_post_layer_4": {"trainer_ids": None},
         },
-        "pythia70m_sweep_gated_ctx128_0730": {
-            # "resid_post_layer_0": {"trainer_ids": None},
-            # "resid_post_layer_1": {"trainer_ids": None},
-            # "resid_post_layer_2": {"trainer_ids": None},
-            "resid_post_layer_3": {"trainer_ids": trainer_ids},
-            # "resid_post_layer_4": {"trainer_ids": None},
-        },
+        # "pythia70m_sweep_gated_ctx128_0730": {
+        #     # "resid_post_layer_0": {"trainer_ids": None},
+        #     # "resid_post_layer_1": {"trainer_ids": None},
+        #     # "resid_post_layer_2": {"trainer_ids": None},
+        #     "resid_post_layer_3": {"trainer_ids": trainer_ids},
+        #     # "resid_post_layer_4": {"trainer_ids": None},
+        # },
         # "pythia70m_sweep_panneal_ctx128_0730": {
         #     # "resid_post_layer_0": {"trainer_ids": None},
         #     # "resid_post_layer_1": {"trainer_ids": None},
@@ -289,17 +318,17 @@ if __name__ == "__main__":
         },
     }
 
-    ae_sweep_paths = {
-        "pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": None}},
-    }
+    # ae_sweep_paths = {
+    #     "pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": None}},
+    # }
 
     dictionaries_path = "../dictionary_learning/dictionaries"
 
     n_inputs = 1000
-    top_k_prompts = 30
+    top_k_prompts = 10
     model_dtype = torch.bfloat16
     device = "cuda"
-    device = "mps"
+    # device = "mps"
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
         ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
