@@ -550,31 +550,6 @@ def save_log_files(ae_path: str, data: dict, base_filename: str, extension: str)
         counter += 1
 
 
-def get_batch_sizes(
-    model_eval_config: utils.ModelEvalConfig,
-    probe_train_set_size: int,
-    probe_test_set_size: int,
-    train_set_size: int,
-    test_set_size: int,
-    reduced_GPU_memory: bool,
-) -> tuple[int, int, int]:
-    llm_batch_size = model_eval_config.llm_batch_size
-    patching_batch_size = model_eval_config.attribution_patching_batch_size
-    eval_results_batch_size = model_eval_config.eval_results_batch_size
-
-    if reduced_GPU_memory:
-        llm_batch_size //= 5
-        llm_batch_size //= 5
-        patching_batch_size //= 5
-
-    assert probe_train_set_size >= llm_batch_size
-    assert probe_test_set_size >= llm_batch_size
-    assert train_set_size >= llm_batch_size
-    assert test_set_size >= llm_batch_size
-
-    return llm_batch_size, patching_batch_size, eval_results_batch_size
-
-
 def run_interventions(
     submodule_trainers: dict,
     sweep_name: str,
@@ -604,7 +579,7 @@ def run_interventions(
     model_eval_config = utils.ModelEvalConfig.from_sweep_name(sweep_name)
     model_name = model_eval_config.full_model_name
 
-    llm_batch_size, patching_batch_size, eval_results_batch_size = get_batch_sizes(
+    llm_batch_size, patching_batch_size, eval_results_batch_size = utils.get_batch_sizes(
         model_eval_config,
         probe_train_set_size,
         probe_test_set_size,

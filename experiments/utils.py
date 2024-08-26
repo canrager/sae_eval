@@ -118,6 +118,35 @@ def get_ae_paths(ae_group_paths: list[str]) -> list[str]:
     return ae_paths
 
 
+def get_batch_sizes(
+    model_eval_config: ModelEvalConfig,
+    reduced_GPU_memory: bool,
+    train_set_size: int,
+    test_set_size: Optional[int] = None,
+    probe_train_set_size: Optional[int] = None,
+    probe_test_set_size: Optional[int] = None,
+) -> tuple[int, int, int]:
+    llm_batch_size = model_eval_config.llm_batch_size
+    patching_batch_size = model_eval_config.attribution_patching_batch_size
+    eval_results_batch_size = model_eval_config.eval_results_batch_size
+
+    if reduced_GPU_memory:
+        llm_batch_size //= 5
+        llm_batch_size //= 5
+        patching_batch_size //= 5
+
+    assert train_set_size >= llm_batch_size
+
+    if test_set_size is not None:
+        assert test_set_size >= llm_batch_size
+    if probe_train_set_size is not None:
+        assert probe_train_set_size >= llm_batch_size
+    if probe_test_set_size is not None:
+        assert probe_test_set_size >= llm_batch_size
+
+    return llm_batch_size, patching_batch_size, eval_results_batch_size
+
+
 def to_device(data, device):
     """
     Recursively move tensors in a nested dictionary to desired device.
@@ -159,6 +188,7 @@ def check_for_empty_folders(ae_group_paths: list[str]) -> bool:
     return True
 
 
+# TODO: Use model.device instead of device?
 def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
     if verbose:
         print(f"Loading dictionary from {base_path}")
@@ -200,7 +230,7 @@ def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
 
 
 def get_submodule(model, submodule_str: str, layer: int):
-    allowed_submodules = ["attention_out", "mlp_out", "resid_post"]
+    allowed_submodules = ["attention_out", "mlp_out", "resid_post", "unembed"]
 
     model_architecture = model.config.architectures[0]
 
@@ -213,13 +243,17 @@ def get_submodule(model, submodule_str: str, layer: int):
             submodule = model.gpt_neox.layers[layer].mlp
         elif "resid_post" in submodule_str:
             submodule = model.gpt_neox.layers[layer]
+        elif "unembed" in submodule_str:
+            submodule = model.embed_out
         else:
             raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
     elif model_architecture == "Gemma2ForCausalLM":
         if "resid_post" in submodule_str:
             submodule = model.model.layers[layer]
+        elif "unembed" in submodule_str:
+            submodule = model.lm_head
         else:
-            raise ValueError(f"submodule_str must contain 'resid_post'")
+            raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
     else:
         raise ValueError(f"Model architecture {model_architecture} not supported")
 
