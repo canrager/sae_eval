@@ -51,6 +51,7 @@ def get_max_activating_prompts(
     k: int = 30,
 ):
     # If encountering memory issues, we could try preallocate tensors instead of concatenating in the for loop
+    # If speedup is needed, we could do multiple SAEs at once
     feature_count = dim_indices.shape[0]
 
     device = model.device
@@ -285,6 +286,8 @@ def highlight_top_activations(
 if __name__ == "__main__":
     import os
 
+    # This flag is set because we are calling torch.cat in a for loop
+    # At some point, we may want to preallocate tensors and fill them in but this is fine for now
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     trainer_ids = [2, 6, 10, 14, 18]
     ae_sweep_paths = {
@@ -322,9 +325,13 @@ if __name__ == "__main__":
     #     "pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": None}},
     # }
 
+    ae_sweep_paths = {
+        "gemma-2-2b_sweep_topk_ctx128_0817": {"resid_post_layer_12": {"trainer_ids": None}},
+    }
+
     dictionaries_path = "../dictionary_learning/dictionaries"
 
-    n_inputs = 1000
+    n_inputs = 10000
     top_k_prompts = 10
     model_dtype = torch.bfloat16
     device = "cuda"
