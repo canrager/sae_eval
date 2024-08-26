@@ -188,6 +188,7 @@ def check_for_empty_folders(ae_group_paths: list[str]) -> bool:
     return True
 
 
+# TODO: Use model.device instead of device?
 def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
     if verbose:
         print(f"Loading dictionary from {base_path}")
@@ -229,7 +230,7 @@ def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
 
 
 def get_submodule(model, submodule_str: str, layer: int):
-    allowed_submodules = ["attention_out", "mlp_out", "resid_post"]
+    allowed_submodules = ["attention_out", "mlp_out", "resid_post", "unembed"]
 
     model_architecture = model.config.architectures[0]
 
@@ -242,13 +243,15 @@ def get_submodule(model, submodule_str: str, layer: int):
             submodule = model.gpt_neox.layers[layer].mlp
         elif "resid_post" in submodule_str:
             submodule = model.gpt_neox.layers[layer]
+        elif "unembed" in submodule_str:
+            submodule = model.embed_out
         else:
             raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
     elif model_architecture == "Gemma2ForCausalLM":
         if "resid_post" in submodule_str:
             submodule = model.model.layers[layer]
         else:
-            raise ValueError(f"submodule_str must contain 'resid_post'")
+            raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
     else:
         raise ValueError(f"Model architecture {model_architecture} not supported")
 
