@@ -909,16 +909,16 @@ if __name__ == "__main__":
             #     # "resid_post_layer_0": {"trainer_ids": None},
             #     # "resid_post_layer_1": {"trainer_ids": None},
             #     # "resid_post_layer_2": {"trainer_ids": None},
-            "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
+            "resid_post_layer_3": {"trainer_ids": [6]},
             #     "resid_post_layer_4": {"trainer_ids": None},
         },
-        "pythia70m_sweep_gated_ctx128_0730": {
-            # "resid_post_layer_0": {"trainer_ids": None},
-            # "resid_post_layer_1": {"trainer_ids": None},
-            # "resid_post_layer_2": {"trainer_ids": None},
-            "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
-            # "resid_post_layer_4": {"trainer_ids": None},
-        },
+        # "pythia70m_sweep_gated_ctx128_0730": {
+        #     # "resid_post_layer_0": {"trainer_ids": None},
+        #     # "resid_post_layer_1": {"trainer_ids": None},
+        #     # "resid_post_layer_2": {"trainer_ids": None},
+        #     "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
+        #     # "resid_post_layer_4": {"trainer_ids": None},
+        # },
         # "pythia70m_sweep_panneal_ctx128_0730": {
         #     # "resid_post_layer_0": {"trainer_ids": None},
         #     # "resid_post_layer_1": {"trainer_ids": None},
@@ -926,13 +926,13 @@ if __name__ == "__main__":
         #     "resid_post_layer_3": {"trainer_ids": None},
         #     # "resid_post_layer_4": {"trainer_ids": None},
         # },
-        "pythia70m_sweep_topk_ctx128_0730": {
-            # "resid_post_layer_0": {"trainer_ids": None},
-            # "resid_post_layer_1": {"trainer_ids": None},
-            # "resid_post_layer_2": {"trainer_ids": None},
-            "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
-            # "resid_post_layer_4": {"trainer_ids": None},
-        },
+        # "pythia70m_sweep_topk_ctx128_0730": {
+        #     # "resid_post_layer_0": {"trainer_ids": None},
+        #     # "resid_post_layer_1": {"trainer_ids": None},
+        #     # "resid_post_layer_2": {"trainer_ids": None},
+        #     "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
+        #     # "resid_post_layer_4": {"trainer_ids": None},
+        # },
     }
 
     # This will look for any empty folders in any ae_path and raise an error if it finds any
