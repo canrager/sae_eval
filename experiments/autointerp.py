@@ -51,7 +51,7 @@ def highlight_top_activations(
             else:
                 highlighted_tokens.append(token)
 
-        result.append(highlighted_tokens)
+        result.append("".join(highlighted_tokens))
 
     return result
 
@@ -76,6 +76,84 @@ def compute_dla(feat_indices: torch.Tensor, sae_decoder: torch.Tensor, unembed: 
     _, topk_indices = torch.topk(dla, return_topk_tokens, dim=0)
     return topk_indices.T
 
+
+def get_max_activating_prompts(
+    model,
+    submodule,
+    tokenized_inputs_bL: list[list[dict]],
+    dim_indices: torch.Tensor,
+    batch_size: int,
+    dictionary=None,
+    n_inputs: int = 512,
+    k: int = 30,
+    context_length: int = 128,
+):
+
+    assert n_inputs % batch_size == 0
+    assert n_inputs >= len(tokenized_inputs_bL)
+    tokenized_inputs_bL = tokenized_inputs_bL[:n_inputs]
+
+    feature_count = dim_indices.shape[0]
+
+    device = model.device
+
+    max_activating_indices_FK = torch.zeros((feature_count, k), device=device, dtype=torch.int)
+    max_activations_FK = torch.zeros((feature_count, k), device=device, dtype=torch.float32)
+    max_tokens_FKL = torch.zeros((feature_count, k, context_length), device=device, dtype=torch.int)
+    max_activations_FKL = torch.zeros((feature_count, k, context_length), device=device, dtype=torch.float32)
+
+    for i, inputs in tqdm(enumerate(tokenized_inputs_bL), total=len(tokenized_inputs_bL)):
+
+        batch_offset = i * batch_size
+        inputs_BL = inputs['input_ids']
+
+        with torch.no_grad(), model.trace(inputs, **tracer_kwargs):
+            activations_BLD = submodule.output
+            if type(activations_BLD.shape) == tuple:
+                activations_BLD = activations_BLD[0]
+            activations_BLF = dictionary.encode(activations_BLD)
+            activations_BLF = activations_BLF[:, :, dim_indices].save()
+
+        activations_FBL = einops.rearrange(activations_BLF.value, 'B L F -> F B L')
+        # Use einops to find the max activation per input
+        activations_FB = einops.reduce(activations_FBL, 'F B L -> F B', 'max')
+        tokens_FBL = einops.repeat(inputs_BL, 'B L -> F B L', F=feature_count)
+        
+        # Keep track of input indices
+        indices_B = torch.arange(batch_offset, batch_offset + batch_size, device=device)
+        indices_FB = einops.repeat(indices_B, 'B -> F B', F=feature_count)
+
+        # Concatenate current batch activations and indices with the previous ones
+        combined_activations_FB = torch.cat([max_activations_FK, activations_FB], dim=1)
+        combined_indices_FB = torch.cat([max_activating_indices_FK, indices_FB], dim=1)
+        combined_activations_FBL = torch.cat([max_activations_FKL, activations_FBL], dim=1)
+        combined_tokens_FBL = torch.cat([max_tokens_FKL, tokens_FBL], dim=1)
+
+        # Sort and keep top k activations for each dimension
+        topk_activations_FK, topk_indices_FK = torch.topk(combined_activations_FB, k, dim=1)
+        max_activations_FK = topk_activations_FK
+
+        feature_indices_F1 = torch.arange(feature_count, device=device)[:, None]
+        max_activating_indices_FK = combined_indices_FB[feature_indices_F1, topk_indices_FK]
+        max_activations_FKL = combined_activations_FBL[feature_indices_F1, topk_indices_FK]
+        max_tokens_FKL = combined_tokens_FBL[feature_indices_F1, topk_indices_FK]
+            
+
+    return max_tokens_FKL, max_activations_FKL
+
+def evaluate_binary_llm_output(llm_outputs):
+    decisions = torch.ones(len(llm_outputs), dtype=torch.int) * -2
+    for i, llm_out in enumerate(llm_outputs):
+        llm_out = llm_out[0].text.lower()[-10:]
+        if 'yes' in llm_out and 'no' in llm_out:
+            decisions[i] = -1
+        elif 'yes' in llm_out:
+            decisions[i] = 1
+        elif 'no' in llm_out:
+            decisions[i] = 0
+        else:
+            decisions[i] = -1
+    return decisions
 
 # loading model, data, dictionaries --> dict, feature: yes/no gender
 

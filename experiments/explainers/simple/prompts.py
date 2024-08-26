@@ -7,6 +7,8 @@ Guidelines:
 You will be given a list of text examples on which the neuron activates. The specific tokens which cause the neuron to activate will appear between delimiters like <<this>>. The activation value of the token is given after each token in parentheses like <<this>>(3).
 
 - Try to judge whether the neurons behavior is related to {concept}. Simply make a choice based on the text features that activate the neuron, and what its role might be based on the tokens it predicts.
+- If part of the text examples or predicited tokens are incorrectly formatted, please ignore them.
+- If you are not able to find any coherent description of the neurons behavior, decide that the neuron is not related to {concept}.
 - The last line of your response must be your binary decision, yes or no."""
 
 COT = """
