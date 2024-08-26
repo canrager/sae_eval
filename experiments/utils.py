@@ -15,7 +15,12 @@ from dictionary_learning.interp import examine_dimension
 
 submodule_alias: TypeAlias = Any
 
-PAIRED_CLASS_KEYS = {-2: -3, -4: -5}
+PAIRED_CLASS_KEYS = {
+    "male / female": "female_data_only",
+    "professor / nurse": "nurse_data_only",
+    "male_professor / female_nurse": "female_nurse_data_only",
+    "biased_male / biased_female": "biased_female_data_only",
+}
 POSITIVE_CLASS_LABEL = 0
 NEGATIVE_CLASS_LABEL = 1
 
@@ -28,16 +33,25 @@ class ModelEvalConfig:
             "full_model_name": "EleutherAI/pythia-70m-deduped",
             "activation_dim": 512,
             "probe_layer": 4,
+            "llm_batch_size": 500,
+            "attribution_patching_batch_size": 250,
+            "eval_results_batch_size": 100,
         },
         "pythia160m": {
             "full_model_name": "EleutherAI/pythia-160m-deduped",
             "activation_dim": 768,
             "probe_layer": 10,
+            "llm_batch_size": 125,
+            "attribution_patching_batch_size": 50,
+            "eval_results_batch_size": 50,
         },
         "gemma-2-2b": {
             "full_model_name": "google/gemma-2-2b",
             "activation_dim": 2304,
             "probe_layer": 20,
+            "llm_batch_size": 32,
+            "attribution_patching_batch_size": 8,
+            "eval_results_batch_size": 32,
         },
     }
 
@@ -50,6 +64,9 @@ class ModelEvalConfig:
         self.full_model_name = config["full_model_name"]
         self.activation_dim = config["activation_dim"]
         self.probe_layer = config["probe_layer"]
+        self.llm_batch_size = config["llm_batch_size"]
+        self.attribution_patching_batch_size = config["attribution_patching_batch_size"]
+        self.eval_results_batch_size = config["eval_results_batch_size"]
 
     @classmethod
     def from_sweep_name(cls, sweep_name):

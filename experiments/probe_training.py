@@ -132,18 +132,38 @@ def add_gender_classes(
     female_combined = female_professor[:min_count] + female_nurse[:min_count]
     professors_combined = male_professor[:min_count] + female_professor[:min_count]
     nurses_combined = male_nurse[:min_count] + female_nurse[:min_count]
+    male_professor = male_professor[: min_count * 2]
+    female_nurse = female_nurse[: min_count * 2]
+
+    pos_ratio = 1.95
+    neg_ratio = 2.0 - pos_ratio
+
+    biased_males_combined = (
+        male_professor[: math.ceil(min_count * pos_ratio)]
+        + male_nurse[: math.ceil(min_count * neg_ratio)]
+    )
+    biased_females_combined = (
+        female_professor[: math.ceil(min_count * neg_ratio)]
+        + female_nurse[: math.ceil(min_count * pos_ratio)]
+    )
 
     # Shuffle each combination
     rng.shuffle(male_combined)
     rng.shuffle(female_combined)
     rng.shuffle(professors_combined)
     rng.shuffle(nurses_combined)
+    rng.shuffle(male_professor)
+    rng.shuffle(female_nurse)
 
     # Assign to balanced_data
-    balanced_data[-2] = male_combined
-    balanced_data[-3] = female_combined
-    balanced_data[-4] = professors_combined
-    balanced_data[-5] = nurses_combined
+    balanced_data["male / female"] = male_combined
+    balanced_data["female_data_only"] = female_combined
+    balanced_data["professor / nurse"] = professors_combined
+    balanced_data["nurse_data_only"] = nurses_combined
+    balanced_data["male_professor / female_nurse"] = male_professor
+    balanced_data["female_nurse_data_only"] = female_nurse
+    balanced_data["biased_male / biased_female"] = biased_males_combined
+    balanced_data["biased_female_data_only"] = biased_females_combined
 
     return balanced_data
 
@@ -183,6 +203,7 @@ def get_balanced_dataset(
         balanced_data = add_gender_classes(balanced_data, df, min_samples_per_group, random_seed)
 
     for key in balanced_data.keys():
+        balanced_data[key] = balanced_data[key][: min_samples_per_group * 2]
         assert len(balanced_data[key]) == min_samples_per_group * 2
 
     return balanced_data
@@ -282,37 +303,21 @@ def get_all_activations(
 
 
 def prepare_probe_data(
-    all_activations: dict[int, t.Tensor],
-    class_idx: int,
+    all_activations: dict[int | str, t.Tensor],
+    class_idx: int | str,
     batch_size: int,
-    device: str,
-    single_class: bool = False,
 ) -> tuple[list[t.Tensor], list[t.Tensor]]:
-    """If class_idx is negative, there is a paired class idx in utils.py."""
+    """If class_idx is a string, there is a paired class idx in utils.py."""
     positive_acts = all_activations[class_idx]
-
-    if single_class and class_idx >= 0:
-        positive_labels = t.full(
-            (len(positive_acts),), utils.POSITIVE_CLASS_LABEL, dtype=t.int, device=device
-        )
-        num_samples = len(positive_acts)
-        num_batches = num_samples // batch_size
-        batched_acts = [
-            positive_acts[i * batch_size : (i + 1) * batch_size] for i in range(num_batches)
-        ]
-        batched_labels = [
-            positive_labels[i * batch_size : (i + 1) * batch_size] for i in range(num_batches)
-        ]
-
-        return batched_acts, batched_labels
+    device = positive_acts.device
 
     num_positive = len(positive_acts)
 
-    if class_idx >= 0:
+    if isinstance(class_idx, int):
         # Collect all negative class activations and labels
         negative_acts = []
         for idx, acts in all_activations.items():
-            if idx != class_idx:
+            if idx != class_idx and isinstance(idx, int):
                 negative_acts.append(acts)
 
         negative_acts = t.cat(negative_acts)
@@ -387,7 +392,7 @@ def train_probe(
             else:
                 acts_BD = get_acts(inputs)
             logits_B = probe(acts_BD)
-            loss = criterion(logits_B, labels.clone().detach().to(device=device, dtype=t.float32))
+            loss = criterion(logits_B, labels.clone().detach().to(device=device, dtype=model_dtype))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -417,10 +422,13 @@ def test_probe(
     if precomputed_acts is True:
         assert get_acts is None, "get_acts will not be used if precomputed_acts is True."
 
+    criterion = nn.BCEWithLogitsLoss()
+
     with t.no_grad():
         corrects_0 = []
         corrects_1 = []
         all_corrects = []
+        losses = []
 
         for input_batch, labels_B in zip(input_batches, label_batches):
             if precomputed_acts:
@@ -437,35 +445,62 @@ def test_probe(
             corrects_0.append(correct_B[labels_B == 0])
             corrects_1.append(correct_B[labels_B == 1])
 
+            loss = criterion(logits_B, labels_B.to(dtype=probe.net.weight.dtype))
+            losses.append(loss)
+
         accuracy_all = t.cat(all_corrects).mean().item()
+        loss = t.stack(losses).mean().item()
         accuracy_0 = t.cat(corrects_0).mean().item() if corrects_0 else 0.0
         accuracy_1 = t.cat(corrects_1).mean().item() if corrects_1 else 0.0
 
-        print(f"0: {accuracy_0}, 1: {accuracy_1}, all: {accuracy_all}")
-
-    return accuracy_all, accuracy_0, accuracy_1
+    return accuracy_all, accuracy_0, accuracy_1, loss
 
 
 def get_probe_test_accuracy(
-    probes: list[t.Tensor],
-    all_class_list: list[int],
-    all_activations: dict[int, t.Tensor],
+    probes,
+    all_class_list: list[str],
+    all_activations: dict[str, t.Tensor],
     probe_batch_size: int,
-    verbose: bool,
-    device: str,
 ):
     test_accuracies = {}
-    test_accuracies[-1] = {}
-    for class_idx in all_class_list:
+    for class_name in all_class_list:
         batch_test_acts, batch_test_labels = prepare_probe_data(
-            all_activations, class_idx, probe_batch_size, device
+            all_activations, class_name, probe_batch_size
         )
-        test_acc_probe, acc_0, acc_1 = test_probe(
-            batch_test_acts, batch_test_labels, probes[class_idx], precomputed_acts=True
+        test_acc_probe, acc_0, acc_1, loss = test_probe(
+            batch_test_acts, batch_test_labels, probes[class_name], precomputed_acts=True
         )
-        test_accuracies[-1][class_idx] = test_acc_probe
-        if verbose:
-            print(f"class {class_idx} test accuracy: {test_acc_probe}")
+        test_accuracies[class_name] = {
+            "acc": test_acc_probe,
+            "acc_0": acc_0,
+            "acc_1": acc_1,
+            "loss": loss,
+        }
+
+    for class_name in all_class_list:
+        if class_name not in utils.PAIRED_CLASS_KEYS:
+            continue
+        spurious_class_names = [key for key in utils.PAIRED_CLASS_KEYS if key != class_name]
+        batch_test_acts, batch_test_labels = prepare_probe_data(
+            all_activations, class_name, probe_batch_size
+        )
+
+        for spurious_class_name in spurious_class_names:
+            test_acc_probe, acc_0, acc_1, loss = test_probe(
+                batch_test_acts,
+                batch_test_labels,
+                probes[spurious_class_name],
+                precomputed_acts=True,
+            )
+            combined_class_name = f"{spurious_class_name} probe on {class_name} data"
+            print(f"Test accuracy for {combined_class_name}: {test_acc_probe}")
+            test_accuracies[combined_class_name] = {
+                "acc": test_acc_probe,
+                "acc_0": acc_0,
+                "acc_1": acc_1,
+                "loss": loss,
+            }
+
     return test_accuracies
 
 
@@ -486,6 +521,7 @@ def train_probes(
     seed: int = SEED,
     include_gender: bool = False,
 ) -> dict[int, float]:
+    """Because we save the probes, we always train them on all classes to avoid potential issues with missing classes. It's only a one-time cost."""
     t.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -512,19 +548,19 @@ def train_probes(
     all_train_acts = {}
     all_test_acts = {}
 
-    for i, profession in enumerate(train_bios.keys()):
-        print(f"Collecting activations for profession: {profession}")
+    with t.no_grad():
+        for i, profession in enumerate(train_bios.keys()):
+            # if isinstance(profession, int):
+            #     continue
 
-        all_train_acts[profession] = get_all_activations(
-            train_bios[profession], model, llm_batch_size, probe_act_submodule
-        )
-        all_test_acts[profession] = get_all_activations(
-            test_bios[profession], model, llm_batch_size, probe_act_submodule
-        )
+            print(f"Collecting activations for profession: {profession}")
 
-        # For debugging
-        # if i > 1:
-        # break
+            all_train_acts[profession] = get_all_activations(
+                train_bios[profession], model, llm_batch_size, probe_act_submodule
+            )
+            all_test_acts[profession] = get_all_activations(
+                test_bios[profession], model, llm_batch_size, probe_act_submodule
+            )
 
     t.set_grad_enabled(True)
 
@@ -532,13 +568,14 @@ def train_probes(
         if profession in utils.PAIRED_CLASS_KEYS.values():
             continue
 
-        train_acts, train_labels = prepare_probe_data(
-            all_train_acts, profession, probe_batch_size, device
-        )
+        train_acts, train_labels = prepare_probe_data(all_train_acts, profession, probe_batch_size)
 
-        test_acts, test_labels = prepare_probe_data(
-            all_test_acts, profession, probe_batch_size, device
-        )
+        test_acts, test_labels = prepare_probe_data(all_test_acts, profession, probe_batch_size)
+
+        if profession == "biased_male / biased_female" or profession == "male / female":
+            probe_epochs = 1
+        else:
+            probe_epochs = epochs
 
         probe, test_accuracy = train_probe(
             train_acts,
@@ -547,7 +584,7 @@ def train_probes(
             test_labels,
             get_acts,
             precomputed_acts=True,
-            epochs=epochs,
+            epochs=probe_epochs,
             dim=d_model,
             device=device,
             model_dtype=model_dtype,
