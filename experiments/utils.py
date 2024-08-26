@@ -250,6 +250,8 @@ def get_submodule(model, submodule_str: str, layer: int):
     elif model_architecture == "Gemma2ForCausalLM":
         if "resid_post" in submodule_str:
             submodule = model.model.layers[layer]
+        elif "unembed" in submodule_str:
+            submodule = model.lm_head
         else:
             raise ValueError(f"submodule_str must contain one of {allowed_submodules}")
     else:
