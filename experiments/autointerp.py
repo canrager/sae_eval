@@ -29,7 +29,7 @@ else:
 
 
 def highlight_top_activations(
-    decoded_tokens_KL: list[list[str]], activations_KL: torch.Tensor, top_n: int = 5
+    decoded_tokens_KL: list[list[str]], activations_KL: torch.Tensor, top_n: int = 5, include_activations: bool = False
 ) -> list[list[str]]:
     assert len(decoded_tokens_KL) == activations_KL.shape[0], "Number of sequences must match"
 
@@ -46,6 +46,8 @@ def highlight_top_activations(
         for i, token in enumerate(tokens):
             if i in top_indices:
                 highlighted_tokens.append(f" <<{token}>>")
+                if include_activations:
+                    highlighted_tokens.append(f"({activations[i].item():.0f})")
             else:
                 highlighted_tokens.append(token)
 
@@ -53,8 +55,45 @@ def highlight_top_activations(
 
     return result
 
+def compute_dla(feat_indices: torch.Tensor, sae_decoder: torch.Tensor, unembed: torch.Tensor, return_topk_tokens: int) -> torch.Tensor:
+    """
+    Compute direct logit attribution for a given set of features
+    """
+    assert len(feat_indices.shape) == 1
+    assert len(sae_decoder.shape) == 2
+    assert len(unembed.shape) == 2
+    assert sae_decoder.shape[0] == unembed.shape[1]
 
-# def collect_activating_inputs(sweep_name: str, submodule_trainers, dictionaries_path: str, n_inputs: int)
+    # Select features from the decoder
+    W_dec = sae_decoder[:, feat_indices]
+    W_dec = W_dec.to(unembed.dtype)
+
+    # Normalize the decoder and unembed matrices
+    W_dec = W_dec / W_dec.norm(dim=0, keepdim=True)
+    unembed = unembed / unembed.norm(dim=1, keepdim=True)
+
+    dla = unembed @ W_dec
+    _, topk_indices = torch.topk(dla, return_topk_tokens, dim=0)
+    return topk_indices.T
+
+
+# loading model, data, dictionaries --> dict, feature: yes/no gender
+
+# per feature
+    # def collect_activating_inputs(dataset: list, dictionary: Any, feature_idxs: list, n_inputs: int)
+    # store as a file
+
+    # collect_direct_logit_attributions
+
+# build prompts
+
+# call LLM (batched)
+
+# build a test set
+
+# scale to classes
+
+
 
 # if __name__ == "__main__":
 
