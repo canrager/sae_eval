@@ -151,10 +151,12 @@ def get_autointerp_inputs_for_one_sae(
         all_feature_indices, autoencoder.decoder.weight, unembed_VD, top_k_prompts
     )
 
+    # TODO: We could maybe reduce max_activations_FKL to unsigned 8-bit integers
+    # They are always positive, but maybe look into it first?
     results = {
-        "max_tokens_FKL": max_tokens_FKL.to("cpu"),
-        "max_activations_FKL": max_activations_FKL.to("cpu"),
-        "dla_results_FK": dla_results_FK.to("cpu"),
+        "max_tokens_FKL": max_tokens_FKL.to("cpu").to(dtype=torch.int32),
+        "max_activations_FKL": max_activations_FKL.to("cpu").to(dtype=torch.bfloat16),
+        "dla_results_FK": dla_results_FK.to("cpu").to(dtype=torch.int32),
     }
 
     return results
@@ -293,11 +295,11 @@ if __name__ == "__main__":
 
     dictionaries_path = "../dictionary_learning/dictionaries"
 
-    n_inputs = 10000
+    n_inputs = 1000
     top_k_prompts = 30
     model_dtype = torch.bfloat16
     device = "cuda"
-    # device = "mps"
+    device = "mps"
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
         ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
@@ -328,5 +330,5 @@ if __name__ == "__main__":
             context_length,
             top_k_prompts,
             ae_paths,
-            force_rerun=False,
+            force_rerun=True,
         )
