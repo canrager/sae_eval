@@ -261,7 +261,7 @@ def highlight_top_activations(
             else:
                 highlighted_tokens.append(token)
 
-        result.append("".join(highlighted_tokens))
+        result.append(highlighted_tokens)
 
     return result
 
@@ -281,6 +281,7 @@ def format_examples(model: LanguageModel, max_token_idxs_FKL: torch.Tensor, max_
             top_n=num_top_emphasized_tokens, 
             include_activations=False
         )
+        formatted_sequences_K = ["".join(tokens) for tokens in formatted_sequences_K]
         formatted_sequences = [seq for seq in formatted_sequences_K if seq] # Drop empty sequences
         
         example_prompt = []
