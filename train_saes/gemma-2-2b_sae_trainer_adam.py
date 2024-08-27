@@ -44,18 +44,20 @@ def run_sae_training(
     context_length = 128
 
     buffer_size = int(2e3)
-    llm_batch_size = 32  # 32 on a 24GB RTX 3090
+    llm_batch_size = 24  # 32 on a 24GB RTX 3090
     sae_batch_size = 4096
     num_tokens = 200_000_000
 
     # sae training parameters
     # random_seeds = t.arange(10).tolist()
     random_seeds = [0]
-    initial_sparsity_penalties = [0.02, 0.025, 0.035, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09]
-    initial_sparsity_penalties = [0.01, 0.05, 0.075, 0.1, 0.15]
-    ks = [20, 40, 80, 160, 320]
+    initial_sparsity_penalties = [0.025, 0.035, 0.04, 0.05, 0.06, 0.07]
+    # initial_sparsity_penalties = [0.01, 0.05, 0.075, 0.1, 0.15]
+    ks = [20, 40, 80, 160, 320, 640]
 
-    assert len(initial_sparsity_penalties) == len(ks) # This is pretty janky but it can't fail silently with the assert
+    assert len(initial_sparsity_penalties) == len(
+        ks
+    )  # This is pretty janky but it can't fail silently with the assert
     ks = {p: ks[i] for i, p in enumerate(initial_sparsity_penalties)}
     expansion_factors = [8, 32]
     expansion_factors = [8]
@@ -75,9 +77,11 @@ def run_sae_training(
     # initial_sparsity_penalties = [0.1, 0.3, 0.5, 0.7, 0.9]
 
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
-    save_steps = None
+    save_steps = int(steps / 10)
     warmup_steps = 1000  # Warmup period at start of training and after each resample
     resample_steps = None
+
+    save_steps = [0, 4882, 9764, 19528, 29292]
 
     # standard sae training parameters
     learning_rates = [3e-4]
@@ -94,7 +98,7 @@ def run_sae_training(
     anneal_start = 10000
     n_sparsity_updates = 10
 
-    log_steps = 25  # Log the training on wandb
+    log_steps = 100  # Log the training on wandb
     if no_wandb_logging:
         log_steps = None
 
@@ -158,38 +162,38 @@ def run_sae_training(
                 #     "device": device,
                 #     "submodule_name": submodule_name,
                 # },
-                # {
-                #     "trainer": StandardTrainer,
-                #     "dict_class": AutoEncoder,
-                #     "activation_dim": activation_dim,
-                #     "dict_size": expansion_factor * activation_dim,
-                #     "lr": learning_rate,
-                #     "l1_penalty": initial_sparsity_penalty,
-                #     "warmup_steps": warmup_steps,
-                #     "resample_steps": resample_steps,
-                #     "seed": seed,
-                #     "wandb_name": f"StandardTrainer-{model_name}-{submodule_name}",
-                #     "layer": layer,
-                #     "lm_name": model_name,
-                #     "device": device,
-                #     "submodule_name": submodule_name,
-                # },
                 {
-                    "trainer": TrainerTopK,
-                    "dict_class": AutoEncoderTopK,
+                    "trainer": StandardTrainer,
+                    "dict_class": AutoEncoder,
                     "activation_dim": activation_dim,
                     "dict_size": expansion_factor * activation_dim,
-                    "k": ks[initial_sparsity_penalty],
-                    "auxk_alpha": auxk_alpha,  # see Appendix A.2
-                    "decay_start": decay_start,  # when does the lr decay start
-                    "steps": steps,  # when when does training end
+                    "lr": learning_rate,
+                    "l1_penalty": initial_sparsity_penalty,
+                    "warmup_steps": warmup_steps,
+                    "resample_steps": resample_steps,
                     "seed": seed,
-                    "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
-                    "device": device,
+                    "wandb_name": f"StandardTrainer-{model_name}-{submodule_name}",
                     "layer": layer,
                     "lm_name": model_name,
+                    "device": device,
                     "submodule_name": submodule_name,
                 },
+                # {
+                #     "trainer": TrainerTopK,
+                #     "dict_class": AutoEncoderTopK,
+                #     "activation_dim": activation_dim,
+                #     "dict_size": expansion_factor * activation_dim,
+                #     "k": ks[initial_sparsity_penalty],
+                #     "auxk_alpha": auxk_alpha,  # see Appendix A.2
+                #     "decay_start": decay_start,  # when does the lr decay start
+                #     "steps": steps,  # when when does training end
+                #     "seed": seed,
+                #     "wandb_name": f"TopKTrainer-{model_name}-{submodule_name}",
+                #     "device": device,
+                #     "layer": layer,
+                #     "lm_name": model_name,
+                #     "submodule_name": submodule_name,
+                # },
                 # {
                 #     "trainer": GatedSAETrainer,
                 #     "dict_class": GatedAutoEncoder,
@@ -223,7 +227,7 @@ def run_sae_training(
             log_steps=log_steps,
             use_wandb=not no_wandb_logging,
             wandb_entity="adam-karvonen",
-            wandb_project="topk_sae_sweep",
+            wandb_project="standard_sae_sweep",
         )
 
 
