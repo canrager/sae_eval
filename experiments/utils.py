@@ -51,7 +51,7 @@ class ModelEvalConfig:
             "probe_layer": 20,
             "llm_batch_size": 32,
             "attribution_patching_batch_size": 8,
-            "eval_results_batch_size": 32,
+            "eval_results_batch_size": 24,
         },
     }
 
