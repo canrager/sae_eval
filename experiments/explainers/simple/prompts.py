@@ -1,15 +1,15 @@
 ### SYSTEM PROMPT ###
 
-SYSTEM = """You are a meticulous AI researcher conducting an important investigation into a certain neuron in a language model. Your task is to analyze the neuron and decide whether its behavior is related to the concept of {concept}.
+SYSTEM = """You are a meticulous AI researcher conducting an important investigation into a certain neuron in a language model. Your task is to analyze the neuron and decide whether its behavior is related to a concept for each concept in {concepts}.
 {prompt}
 Guidelines:
 
 You will be given a list of text examples on which the neuron activates. The specific tokens which cause the neuron to activate will appear between delimiters like <<this>>. The activation value of the token is given after each token in parentheses like <<this>>(3).
 
-- Try to judge whether the neurons behavior is related to {concept}. Simply make a choice based on the text features that activate the neuron, and what its role might be based on the tokens it predicts.
+- For each concept in {concepts}, try to judge whether the neurons behavior is related to the concept. Simply make a choice based on the text features that activate the neuron, and what its role might be based on the tokens it predicts.
 - If part of the text examples or predicited tokens are incorrectly formatted, please ignore them.
-- If you are not able to find any coherent description of the neurons behavior, decide that the neuron is not related to {concept}.
-- The last line of your response must be your binary decision, yes or no."""
+- If you are not able to find any coherent description of the neurons behavior, decide that the neuron is not related to any concept.
+- The last line of your response must be your binary decisions, yes or no in the following format: """
 
 COT = """
 (Part 1) Tokens that the neuron activates highly on in text
@@ -32,7 +32,6 @@ LOGITS = """
 You will also be shown a list called Top_logits. The logits promoted by the neuron shed light on how the neuron's activation influences the model's predictions or outputs. Look at this list of Top_logits and refine your hypotheses from part 1. It is possible that this list is more informative than the examples from part 1.
 
 Pay close attention to the words in this list and write down what they have in common. Then look at what they have in common, as well as patterns in the tokens you found in Part 1, to produce a single explanation for what features of text cause the neuron to activate. Propose your explanation in the following format:
-[yes/no DECISION]: <your decision>
 """
 
 ### EXAMPLE 1 ###
@@ -101,9 +100,11 @@ SIMILAR TOKENS: "elated", "joyful", "thrilled".
 - The top logits list contains words that are strongly associated with positive emotions.
 """
 
-EXAMPLE_1_EXPLANATION = """
-[yes/no DECISION]: no
-"""
+# TODO Should be adapted to the new format
+# EXAMPLE_1_EXPLANATION = """
+# [yes/no DECISION]: no
+# """
+EXAMPLE_1_EXPLANATION = ""
 
 ### EXAMPLE 2 ###
 
@@ -173,9 +174,11 @@ SIMILAR TOKENS: None
 - The top logits list contains unrelated nouns and adverbs.
 """
 
-EXAMPLE_2_EXPLANATION = """
-[yes/no DECISION]: no
-"""
+# TODO Should be adapted to the new format
+# EXAMPLE_2_EXPLANATION = """
+# [yes/no DECISION]: no
+# """
+EXAMPLE_2_EXPLANATION = ""
 
 ### EXAMPLE 3 ###
 
@@ -248,10 +251,13 @@ SIMILAR TOKENS: "room", "container", "space".
 - The top logits list suggests a focus on nouns representing physical or metaphorical spaces.
 """
 
-EXAMPLE_3_EXPLANATION = """
-[yes/no DECISION]: no
-"""
+# TODO Should be adapted to the new format
+# EXAMPLE_3_EXPLANATION = """
+# [yes/no DECISION]: no
+# """
+EXAMPLE_3_EXPLANATION = ""
 
+from typing import List
 
 def get(item):
     return globals()[item]
@@ -270,7 +276,6 @@ def _prompt(n, logits=False, activations=False, **kwargs):
 
 def _response(
     n,
-    concept: str,
     cot=False,
     logits=False,
     activations=False,
@@ -297,9 +302,15 @@ def example(n, **kwargs):
 
     return prompt, response
 
+def answer_options(concepts: List[str]):
+    ans = 'yes_or_no_decisions = {'
+    for concept in concepts:
+        ans += f'"{concept}": "your_decision", '
+    ans = ans[:-2] + '}'
+    return ans
 
-def system(
-    concept: str,
+def build_system_prompt(
+    concepts: List[str],
     cot=False,
     logits=False,
     activations=False,
@@ -313,10 +324,14 @@ def system(
 
     if logits:
         prompt += LOGITS
+        prompt += answer_options(concepts)
+
+    concepts_str = ", ".join(concepts)
+    concepts_str = f"({concepts_str})"
 
     return [
         {
             "type": "text",
-            "text": SYSTEM.format(prompt=prompt, concept=concept),
+            "text": SYSTEM.format(prompt=prompt, concepts=concepts_str) + answer_options(concepts),
         }
     ]

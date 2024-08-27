@@ -1,6 +1,6 @@
 from typing import List
 
-from .prompts import example, system
+from .prompts import example
 
 
 def build_examples(
@@ -29,23 +29,13 @@ def build_examples(
 
 def build_prompt(
     examples,
-    concept: str,
     cot: bool = False,
-    few_shot: bool = False,
     activations: bool = False,
     top_logits: List[str] = None,
 ):
     logits = True if top_logits is not None else False
 
-    system_prompt = system(
-        concept=concept,
-        cot=cot,
-        logits=logits,
-        activations=activations,
-    )
-
     few_shot_examples = build_examples(
-        concept=concept,
         cot=cot,
         logits=logits,
         activations=activations,
@@ -65,4 +55,4 @@ def build_prompt(
         }
     )
 
-    return system_prompt, messages
+    return messages

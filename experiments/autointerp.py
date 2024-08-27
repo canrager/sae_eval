@@ -236,15 +236,15 @@ def get_autointerp_inputs_for_all_saes(
 
 
 def highlight_top_activations(
-    decoded_tokens_KL: list[list[str]],
+    token_str_KL: list[list[str]],
     activations_KL: torch.Tensor,
     top_n: int = 5,
     include_activations: bool = False,
 ) -> list[list[str]]:
-    assert len(decoded_tokens_KL) == activations_KL.shape[0], "Number of sequences must match"
+    assert len(token_str_KL) == activations_KL.shape[0], "Number of sequences must match"
 
     result = []
-    for tokens, activations in zip(decoded_tokens_KL, activations_KL):
+    for tokens, activations in zip(token_str_KL, activations_KL):
         # Get indices of top activations
         nonzero_activations = activations[activations != 0]
         top_indices = torch.argsort(activations, descending=True)[
@@ -265,20 +265,41 @@ def highlight_top_activations(
 
     return result
 
+def format_examples(model: LanguageModel, max_token_idxs_FKL: torch.Tensor, max_activations_FKL: torch.Tensor, num_top_emphasized_tokens: int):
+    def _list_decode(x):
+            if len(x.shape) == 0:
+                return model.tokenizer.decode(x, skip_special_tokens=True)
+            else:
+                return [_list_decode(y) for y in x]
 
-def evaluate_binary_llm_output(llm_outputs):
-    decisions = torch.ones(len(llm_outputs), dtype=torch.int) * -2
-    for i, llm_out in enumerate(llm_outputs):
-        llm_out = llm_out[0].text.lower()[-10:]
-        if 'yes' in llm_out and 'no' in llm_out:
-            decisions[i] = -1
-        elif 'yes' in llm_out:
-            decisions[i] = 1
-        elif 'no' in llm_out:
-            decisions[i] = 0
-        else:
-            decisions[i] = -1
-    return decisions
+    example_prompts = []
+    for feat_idx, (max_token_idxs_KL, max_activations_KL), in enumerate(zip(max_token_idxs_FKL, max_activations_FKL)):
+        max_token_str_KL = _list_decode(max_token_idxs_KL)
+        formatted_sequences_K = highlight_top_activations(
+            max_token_str_KL, 
+            max_activations_KL, 
+            top_n=num_top_emphasized_tokens, 
+            include_activations=False
+        )
+        formatted_sequences = [seq for seq in formatted_sequences_K if seq] # Drop empty sequences
+        
+        example_prompt = []
+        for i, seq in enumerate(formatted_sequences):
+            example_prompt.append(f"Example {i+1}: {seq}\n\n")
+        example_prompt = "".join(example_prompt)
+        example_prompts.append(example_prompt)
+
+    return example_prompts
+
+def evaluate_binary_llm_output(string: str) -> bool:
+    if 'yes' in string and 'no' in string:
+        raise ValueError("String contains both 'yes' and 'no'")
+    elif 'yes' in string:
+        return True
+    elif 'no' in string:
+        return False
+    else:
+        raise ValueError("String does not contain 'yes' or 'no'")
 
 if __name__ == "__main__":
     import os
