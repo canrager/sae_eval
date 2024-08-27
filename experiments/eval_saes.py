@@ -27,6 +27,7 @@ def eval_saes(
     transcoder: bool = False,
 ) -> dict:
     buffer_size = min(512, n_inputs)
+    n_batches = n_inputs // llm_batch_size
 
     if transcoder:
         io = "in_and_out"
@@ -38,8 +39,6 @@ def eval_saes(
     input_strings = []
 
     for i, example in enumerate(pile_dataset["train"]["text"]):
-        if i == n_inputs:
-            break
         input_strings.append(example)
 
     eval_results = {}
@@ -73,12 +72,11 @@ def eval_saes(
         )
 
         eval_results = evaluate(
-            dictionary, activation_buffer, context_length, llm_batch_size, io=io, device=device
+            dictionary, activation_buffer, context_length, llm_batch_size, io=io, device=device, n_batches=n_batches
         )
 
         hyperparameters = {
-            # TODO: Add batching so n_inputs is actually n_inputs
-            "n_inputs": llm_batch_size,
+            "n_inputs": n_inputs,
             "context_length": context_length,
         }
         eval_results["hyperparameters"] = hyperparameters

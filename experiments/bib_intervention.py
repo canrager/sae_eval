@@ -560,6 +560,7 @@ def run_interventions(
     probe_test_set_size: int,
     train_set_size: int,
     test_set_size: int,
+    eval_saes_n_inputs: int,
     probe_batch_size: int,
     T_effects: list[float],
     T_max_sideeffect: float,
@@ -581,11 +582,11 @@ def run_interventions(
 
     llm_batch_size, patching_batch_size, eval_results_batch_size = utils.get_batch_sizes(
         model_eval_config,
+        reduced_GPU_memory,
         probe_train_set_size,
         probe_test_set_size,
         train_set_size,
         test_set_size,
-        reduced_GPU_memory,
     )
 
     model = LanguageModel(
@@ -605,6 +606,16 @@ def run_interventions(
     # TODO: experiment with different context lengths
     context_length = utils.get_ctx_length(ae_paths)
 
+    # This will only run eval_saes on autoencoders that don't yet have a eval_results.json file
+    eval_saes.eval_saes(
+        model,
+        ae_paths,
+        eval_saes_n_inputs,
+        eval_results_batch_size,
+        device,
+        overwrite_prev_results=False,
+    )
+
     dataset, _ = load_and_prepare_dataset()
     train_bios, test_bios = get_train_test_data(
         dataset,
@@ -615,19 +626,6 @@ def run_interventions(
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
-
-    # TODO: Add batching so n_inputs is actually n_inputs
-    eval_saes_n_inputs = 10000
-
-    # This will only run eval_saes on autoencoders that don't yet have a eval_results.json file
-    eval_saes.eval_saes(
-        model,
-        ae_paths,
-        eval_saes_n_inputs,
-        eval_results_batch_size,
-        device,
-        overwrite_prev_results=False,
-    )
 
     only_model_name = model_name.split("/")[-1]
     probe_path = f"{probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
@@ -834,6 +832,9 @@ if __name__ == "__main__":
     # Load datset and probes
     train_set_size = 100
     test_set_size = 200
+
+    eval_saes_n_inputs = 250
+
     probe_batch_size = 100
 
     model_dtype = t.bfloat16
@@ -934,16 +935,20 @@ if __name__ == "__main__":
     # trainer_ids = [1, 2, 3, 4, 5, 6]
 
     ae_sweep_paths = {
-        "gemma-2-2b_sweep_topk_ctx128_0817": {
-            # "resid_post_layer_12": {"trainer_ids": trainer_ids},
-            "resid_post_layer_16": {"trainer_ids": trainer_ids},
-            "resid_post_layer_20": {"trainer_ids": trainer_ids},
+        "gemma-2-2b_sweep_topk_ctx128_ef8_0824": {
+            "resid_post_layer_3": {"trainer_ids": trainer_ids},
+            "resid_post_layer_7": {"trainer_ids": trainer_ids},
+            "resid_post_layer_11": {"trainer_ids": trainer_ids},
+            "resid_post_layer_15": {"trainer_ids": trainer_ids},
+            "resid_post_layer_19": {"trainer_ids": trainer_ids},
         },
-        # "gemma-2-2b_sweep_standard_ctx128_0816": {
-        # "resid_post_layer_12": {"trainer_ids": trainer_ids},
-        # "resid_post_layer_16": {"trainer_ids": trainer_ids},
-        # "resid_post_layer_20": {"trainer_ids": trainer_ids},
-        # },
+        "gemma-2-2b_sweep_standard_ctx128_ef8_0824": {
+            "resid_post_layer_3": {"trainer_ids": trainer_ids},
+            "resid_post_layer_7": {"trainer_ids": trainer_ids},
+            "resid_post_layer_11": {"trainer_ids": trainer_ids},
+            "resid_post_layer_15": {"trainer_ids": trainer_ids},
+            "resid_post_layer_19": {"trainer_ids": trainer_ids},
+        },
     }
 
     # This will look for any empty folders in any ae_path and raise an error if it finds any
@@ -963,6 +968,7 @@ if __name__ == "__main__":
             probe_test_set_size,
             train_set_size,
             test_set_size,
+            eval_saes_n_inputs,
             probe_batch_size,
             T_effects,
             T_max_sideeffect,
