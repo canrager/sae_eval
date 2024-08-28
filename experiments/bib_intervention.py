@@ -583,10 +583,10 @@ def run_interventions(
     llm_batch_size, patching_batch_size, eval_results_batch_size = utils.get_batch_sizes(
         model_eval_config,
         reduced_GPU_memory,
-        probe_train_set_size,
-        probe_test_set_size,
         train_set_size,
         test_set_size,
+        probe_train_set_size,
+        probe_test_set_size,
     )
 
     model = LanguageModel(
