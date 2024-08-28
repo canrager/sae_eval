@@ -266,20 +266,29 @@ def highlight_top_activations(
 
     return result
 
-def format_examples(tokenizer: AutoTokenizer, max_token_idxs_FKL: torch.Tensor, max_activations_FKL: torch.Tensor, num_top_emphasized_tokens: int):
 
+def format_examples(
+    tokenizer: AutoTokenizer,
+    max_token_idxs_FKL: torch.Tensor,
+    max_activations_FKL: torch.Tensor,
+    num_top_emphasized_tokens: int,
+    include_activations: bool = False,
+):
     example_prompts = []
-    for feat_idx, (max_token_idxs_KL, max_activations_KL), in enumerate(zip(max_token_idxs_FKL, max_activations_FKL)):
+    for (
+        feat_idx,
+        (max_token_idxs_KL, max_activations_KL),
+    ) in enumerate(zip(max_token_idxs_FKL, max_activations_FKL)):
         max_token_str_KL = utils.list_decode(max_token_idxs_KL, tokenizer)
         formatted_sequences_K = highlight_top_activations(
-            max_token_str_KL, 
-            max_activations_KL, 
-            top_n=num_top_emphasized_tokens, 
-            include_activations=False
+            max_token_str_KL,
+            max_activations_KL,
+            top_n=num_top_emphasized_tokens,
+            include_activations=include_activations,
         )
         formatted_sequences_K = ["".join(tokens) for tokens in formatted_sequences_K]
-        formatted_sequences = [seq for seq in formatted_sequences_K if seq] # Drop empty sequences
-        
+        formatted_sequences = [seq for seq in formatted_sequences_K if seq]  # Drop empty sequences
+
         example_prompt = []
         for i, seq in enumerate(formatted_sequences):
             example_prompt.append(f"\n\n\nExample {i+1}: {seq}\n\n")
@@ -288,15 +297,17 @@ def format_examples(tokenizer: AutoTokenizer, max_token_idxs_FKL: torch.Tensor, 
 
     return example_prompts
 
+
 def evaluate_binary_llm_output(string: str) -> bool:
-    if 'yes' in string and 'no' in string:
+    if "yes" in string and "no" in string:
         raise ValueError("String contains both 'yes' and 'no'")
-    elif 'yes' in string:
+    elif "yes" in string:
         return True
-    elif 'no' in string:
+    elif "no" in string:
         return False
     else:
         raise ValueError("String does not contain 'yes' or 'no'")
+
 
 if __name__ == "__main__":
     import os
