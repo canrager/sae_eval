@@ -8,6 +8,7 @@ import numpy as np
 import os
 import random
 import datasets
+from transformers import AutoTokenizer
 
 import einops
 import dictionary_learning.interp as interp
@@ -265,16 +266,11 @@ def highlight_top_activations(
 
     return result
 
-def format_examples(model: LanguageModel, max_token_idxs_FKL: torch.Tensor, max_activations_FKL: torch.Tensor, num_top_emphasized_tokens: int):
-    def _list_decode(x):
-            if len(x.shape) == 0:
-                return model.tokenizer.decode(x, skip_special_tokens=True)
-            else:
-                return [_list_decode(y) for y in x]
+def format_examples(tokenizer: AutoTokenizer, max_token_idxs_FKL: torch.Tensor, max_activations_FKL: torch.Tensor, num_top_emphasized_tokens: int):
 
     example_prompts = []
     for feat_idx, (max_token_idxs_KL, max_activations_KL), in enumerate(zip(max_token_idxs_FKL, max_activations_FKL)):
-        max_token_str_KL = _list_decode(max_token_idxs_KL)
+        max_token_str_KL = utils.list_decode(max_token_idxs_KL, tokenizer)
         formatted_sequences_K = highlight_top_activations(
             max_token_str_KL, 
             max_activations_KL, 
@@ -286,7 +282,7 @@ def format_examples(model: LanguageModel, max_token_idxs_FKL: torch.Tensor, max_
         
         example_prompt = []
         for i, seq in enumerate(formatted_sequences):
-            example_prompt.append(f"Example {i+1}: {seq}\n\n")
+            example_prompt.append(f"\n\n\nExample {i+1}: {seq}\n\n")
         example_prompt = "".join(example_prompt)
         example_prompts.append(example_prompt)
 

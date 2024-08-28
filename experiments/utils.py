@@ -325,3 +325,9 @@ def get_ctx_length(ae_paths: list[str]) -> int:
     else:
         print("All context lengths are the same.")
     return first_ctx_len
+
+def list_decode(x, tokenizer):
+    if len(x.shape) == 0:
+        return tokenizer.decode(x, skip_special_tokens=True)
+    else:
+        return [list_decode(y, tokenizer) for y in x]
