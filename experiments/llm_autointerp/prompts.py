@@ -367,3 +367,49 @@ def build_system_prompt(
             ),
         }
     ]
+
+
+def create_few_shot_examples(few_shot_manual_labels: dict) -> str:
+    for label in few_shot_manual_labels:
+        print(label, few_shot_manual_labels[label]["per_class_scores"])
+
+    few_shot_examples = "Here's a few examples of how to perform the task:\n\n"
+
+    for i, selected_index in enumerate(few_shot_manual_labels):
+        example_prompts = few_shot_manual_labels[selected_index]["example_prompts"]
+        tokens_string = few_shot_manual_labels[selected_index]["tokens_string"]
+        per_class_scores = few_shot_manual_labels[selected_index]["per_class_scores"]
+        chain_of_thought = few_shot_manual_labels[selected_index]["chain_of_thought"]
+
+        example_prompts = example_prompts[0].split("Example 4:")[0]
+
+        few_shot_examples += f"\n\n<<BEGIN EXAMPLE FEATURE {i}>>\n"
+        few_shot_examples += f"Promoted tokens: {tokens_string}\n"
+        few_shot_examples += f"Example prompts: {example_prompts}\n"
+        few_shot_examples += f"Chain of thought: {chain_of_thought}\n\n"
+        few_shot_examples += "```json\n"
+        few_shot_examples += f"{per_class_scores}\n"
+        few_shot_examples += "```"
+        few_shot_examples += f"\n<<END EXAMPLE FEATURE {i}>>\n\n"
+
+    return few_shot_examples
+
+
+def create_test_prompts(manual_test_labels: dict) -> list[str]:
+    test_prompts = []
+
+    for example_feature in manual_test_labels:
+        example_prompts = manual_test_labels[example_feature]["example_prompts"]
+        tokens_string = manual_test_labels[example_feature]["tokens_string"]
+        per_class_scores = manual_test_labels[example_feature]["per_class_scores"]
+        chain_of_thought = manual_test_labels[example_feature]["chain_of_thought"]
+        class_index = manual_test_labels[example_feature]["class_index"]
+
+        llm_prompt = "Okay, now here's the real task.\n"
+        llm_prompt += f"Promoted tokens: {tokens_string}\n"
+        llm_prompt += f"Example prompts: {example_prompts[0]}\n"
+        llm_prompt += "Chain of thought:"
+
+        test_prompts.append((llm_prompt, class_index, per_class_scores, chain_of_thought))
+
+    return test_prompts
