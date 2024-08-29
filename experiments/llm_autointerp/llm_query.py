@@ -32,18 +32,19 @@ async def process_prompt(
     model: str,
     system_prompt: str,
     test_prompt: str,
+    prompt_index: int,
     few_shot_examples: str,
     min_scale: int,
     max_scale: int,
     chosen_class_names: list[str],
-) -> tuple[str, dict, bool, str]:
+) -> tuple[int, str, dict, bool, str]:
     full_prompt = few_shot_examples + test_prompt
     llm_response = await anthropic_request(client, system_prompt, full_prompt, model)
     json_response = llm_utils.extract_and_validate_json(llm_response)
     good_json, verification_message = llm_utils.verify_json_response(
         json_response, min_scale, max_scale, chosen_class_names
     )
-    return llm_response, json_response, good_json, verification_message
+    return prompt_index, llm_response, json_response, good_json, verification_message
 
 
 async def run_all_prompts(
@@ -62,51 +63,25 @@ async def run_all_prompts(
             client,
             model,
             system_prompt[0]["text"],
-            test_prompts[i][0],
+            test_prompts[prompt_index][0],
+            prompt_index,
             few_shot_examples,
             min_scale,
             max_scale,
             chosen_class_names,
         )
-        for i in range(number_of_test_examples)
+        for prompt_index in range(number_of_test_examples)
     ]
 
     results = []
     async for result in tqdm(
         asyncio.as_completed(tasks), total=len(tasks), desc="Processing prompts"
     ):
-        llm_response, json_response, good_json, verification_message = await result
-        results.append((llm_response, json_response, good_json, verification_message))
+        prompt_index, llm_response, json_response, good_json, verification_message = await result
+        results.append((prompt_index, llm_response, json_response, good_json, verification_message))
         print(len(results) - 1, good_json, verification_message)
 
     return results
-
-
-async def llm_inference(
-    model: str,
-    number_of_test_examples: int,
-    system_prompt: list[dict],
-    test_prompts: list[str],
-    few_shot_examples: str,
-    min_scale: int,
-    max_scale: int,
-    chosen_class_names: list[str],
-):
-    client = anthropic.AsyncAnthropic()
-    results = await run_all_prompts(
-        number_of_test_examples,
-        client,
-        model,
-        system_prompt,
-        test_prompts,
-        few_shot_examples,
-        min_scale,
-        max_scale,
-        chosen_class_names,
-    )
-
-    with open("llm_results.pkl", "wb") as f:
-        pickle.dump(results, f)
 
 
 if __name__ == "__main__":
@@ -149,10 +124,13 @@ if __name__ == "__main__":
 
     test_prompts = prompts.create_test_prompts(manual_test_labels)
 
-    asyncio.run(
-        llm_inference(
-            model,
+    client = anthropic.AsyncAnthropic()
+
+    results = asyncio.run(
+        run_all_prompts(
             number_of_test_examples,
+            client,
+            model,
             system_prompt,
             test_prompts,
             few_shot_examples,
@@ -161,3 +139,6 @@ if __name__ == "__main__":
             chosen_class_names,
         )
     )
+
+    with open("llm_results.pkl", "wb") as f:
+        pickle.dump(results, f)
