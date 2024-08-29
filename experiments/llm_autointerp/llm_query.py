@@ -10,7 +10,7 @@ import experiments.llm_autointerp.llm_utils as llm_utils
 import experiments.llm_autointerp.prompts as prompts
 
 
-@retry(stop=stop_after_attempt(1))
+@retry(stop=stop_after_attempt(3))
 async def anthropic_request_prompt_caching(
     client: anthropic.Anthropic,
     system_prompt: str,
@@ -110,14 +110,14 @@ async def run_all_prompts(
             client,
             model,
             system_prompt[0]["text"],
-            test_prompts[prompt_index][0],
-            prompt_index,
+            test_prompts[i][0],
+            test_prompts[i][4],
             few_shot_examples,
             min_scale,
             max_scale,
             chosen_class_names,
         )
-        for prompt_index in range(number_of_test_examples)
+        for i in range(number_of_test_examples)
     ]
 
     results = []
@@ -151,14 +151,19 @@ if __name__ == "__main__":
 
     min_scale = 0
     max_scale = 4
-    number_of_test_examples = 10
     model = "claude-3-5-sonnet-20240620"
-    model = "claude-3-haiku-20240307"
+    # model = "claude-3-haiku-20240307"
+
+    # IMPORTANT NOTE: We are using prompt caching. Before running on many prompts, run a single prompt
+    # two times with number_of_test_examples = 1 and verify that
+    # the cache_creation_input_tokens is 0 and cache_read_input_tokens is > 3000 on the second call.
+    # Then you can run on many prompts with number_of_test_examples > 1.
+    number_of_test_examples = 1
 
     with open(f"{PROMPT_DIR}/manual_labels_few_shot.json", "r") as f:
         few_shot_manual_labels = json.load(f)
 
-    with open(f"{PROMPT_DIR}/manual_labels_adam_corr.json", "r") as f:
+    with open(f"{PROMPT_DIR}/manual_labels_can_final.json", "r") as f:
         manual_test_labels = json.load(f)
 
     few_shot_examples = prompts.create_few_shot_examples(few_shot_manual_labels)
