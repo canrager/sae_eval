@@ -11,9 +11,44 @@ import experiments.llm_autointerp.prompts as prompts
 
 
 @retry(stop=stop_after_attempt(1))
+async def anthropic_request_prompt_caching(
+    client: anthropic.Anthropic,
+    system_prompt: str,
+    few_shot_examples: str,
+    test_prompt: str,
+    model: str,
+) -> str:
+    message = await client.beta.prompt_caching.messages.create(
+        model=model,
+        max_tokens=500,
+        temperature=0,
+        system=system_prompt,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": few_shot_examples,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {"type": "text", "text": test_prompt},
+                ],
+            }
+        ],
+    )
+    # After this is called a second time, cache_creation_input_tokens should be 0
+    # cache_read_input_tokens should be > 3000 (len(few_shot_examples) + len(system_prompt))
+    print(f"Cache creation tokens: {message.usage.cache_creation_input_tokens}")
+    print(f"Cache read tokens: {message.usage.cache_read_input_tokens}")
+    return message.content[0].text
+
+
+@retry(stop=stop_after_attempt(1))
 async def anthropic_request(
     client: anthropic.Anthropic,
     system_prompt: str,
+    few_shot_examples: str,
     test_prompt: str,
     model: str,
 ) -> str:
@@ -22,7 +57,18 @@ async def anthropic_request(
         max_tokens=500,
         temperature=0,
         system=system_prompt,
-        messages=[{"role": "user", "content": [{"type": "text", "text": test_prompt}]}],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": few_shot_examples,
+                    },
+                    {"type": "text", "text": test_prompt},
+                ],
+            }
+        ],
     )
     return message.content[0].text
 
@@ -38,8 +84,9 @@ async def process_prompt(
     max_scale: int,
     chosen_class_names: list[str],
 ) -> tuple[int, str, dict, bool, str]:
-    full_prompt = few_shot_examples + test_prompt
-    llm_response = await anthropic_request(client, system_prompt, full_prompt, model)
+    llm_response = await anthropic_request_prompt_caching(
+        client, system_prompt, few_shot_examples, test_prompt, model
+    )
     json_response = llm_utils.extract_and_validate_json(llm_response)
     good_json, verification_message = llm_utils.verify_json_response(
         json_response, min_scale, max_scale, chosen_class_names
