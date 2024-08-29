@@ -9,12 +9,12 @@ Structure your reasoning as follows:
 Step 1. Give a one-sentence summary of the neuron's behavior.
 Step 2. Score how strongly the neuron's behavior is related to the concept in {concepts} on an integer scale from {min_scale} to {max_scale}.
 
-- For each concept, try to judge whether the neurons behavior is related to the concept. Write a single sentence summary, and format your score as a json object.
+- For each concept, try to judge whether the neurons behavior is related to the concept. Write a single sentence summary.
 - If part of the text examples or predicited tokens are incorrectly formatted, please ignore them.
 - If you are not able to find any coherent description of the neurons behavior, decide that the neuron is not related to any concept.
-- The last part of your response must be your scores on an integer scale from {min_scale} to {max_scale} in json format as shown here:
-"""
 
+- After summarizing all concepts, provide a single json block at the end of your response. The json block should contain your scores on an integer scale from {min_scale} to {max_scale} for each concept as shown in the examples.
+"""
 
 
 # SYSTEM = """You are a meticulous AI researcher conducting an important investigation into a certain neuron in a language model. Your task is to analyze the neuron and decide whether its behavior is related to a concept in {concepts}.
@@ -276,6 +276,7 @@ Step 2. Score how strongly the neuron's behavior is related to the concept in {c
 
 from typing import List
 
+
 def get(item):
     return globals()[item]
 
@@ -319,29 +320,41 @@ def example(n, **kwargs):
 
     return prompt, response
 
+
 def answer_options(concepts: List[str]):
-    ans = '```json\nyes_or_no_decisions = {'
+    ans = "```json\nyes_or_no_decisions = {"
     for concept in concepts:
         ans += f'"{concept}": "your_decision", '
-    ans = ans[:-2] + '}```'
+    ans = ans[:-2] + "}```"
     return ans
+
+
+def integer_answer_json_formatting(concepts: List[str]):
+    ans = "```json\n{\n"
+    for concept in concepts:
+        ans += f'   "{concept}": "integer from 0-4",\n'
+    ans = ans[:-2] + "\n}\n```"
+    return ans
+
 
 def build_system_prompt(
     concepts: List[str],
+    min_scale: int = 0,
+    max_scale: int = 4,
     cot=False,
     logits=False,
     activations=False,
 ):
     prompt = ""
 
-    if cot and activations:
-        prompt += ACTIVATIONS
-    elif cot:
-        prompt += COT
+    # if cot and activations:
+    #     prompt += ACTIVATIONS
+    # elif cot:
+    #     prompt += COT
 
-    if logits:
-        prompt += LOGITS
-        prompt += answer_options(concepts)
+    # if logits:
+    #     prompt += LOGITS
+    #     prompt += answer_options(concepts)
 
     concepts_str = ", ".join(concepts)
     concepts_str = f"({concepts_str})"
@@ -349,6 +362,8 @@ def build_system_prompt(
     return [
         {
             "type": "text",
-            "text": SYSTEM.format(prompt=prompt, concepts=concepts_str) + answer_options(concepts),
+            "text": SYSTEM.format(
+                prompt=prompt, concepts=concepts_str, min_scale=min_scale, max_scale=max_scale
+            ),
         }
     ]
