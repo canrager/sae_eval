@@ -23,10 +23,14 @@ sys.path.append(parent_dir)
 from attribution import patching_effect
 from dictionary_learning.interp import examine_dimension
 from dictionary_learning.utils import hf_dataset_to_generator
+from dictionary_learning.dictionary import AutoEncoder
+
 import experiments.probe_training as probe_training
 import experiments.utils as utils
 import experiments.eval_saes as eval_saes
+import experiments.autointerp as autointerp
 
+from experiments.pipeline_config import PipelineConfig
 from experiments.probe_training import (
     load_and_prepare_dataset,
     get_train_test_data,
@@ -53,7 +57,9 @@ class FeatureSelection(Enum):
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
 
 
-def metric_fn(model, labels, probe, probe_act_submodule):
+def metric_fn(
+    model: LanguageModel, labels: t.Tensor, probe: Probe, probe_act_submodule: utils.submodule_alias
+):
     attn_mask = model.input[1]["attention_mask"]
     acts = probe_act_submodule.output[0]
     acts = acts * attn_mask[:, :, None]
@@ -213,20 +219,22 @@ def get_paired_class_samples(data: dict, class_idx, device: str) -> tuple[list, 
 def get_effects_per_class(
     model: LanguageModel,
     submodules: list[utils.submodule_alias],
-    dictionaries: dict[utils.submodule_alias, nn.Module],
-    probes,
+    dictionaries: dict[utils.submodule_alias, AutoEncoder],
+    probes: dict[int | str, Probe],
     probe_act_submodule: utils.submodule_alias,
     class_idx: int | str,
-    train_bios,
+    train_bios: dict,
     seed: int,
-    device: str,
     batch_size: int = 10,
-    patching_method: str = "ig",
+    patching_method: str = "attrib",
     steps: int = 10,  # only used for ig
-) -> dict[utils.submodule_alias, t.Tensor]:
+) -> t.Tensor:
     """
-    Probe_act_submodule is the submodule where the probe is attached, usually resid_post
+    Probe_act_submodule is the submodule where the probe is attached, usually resid_post.
+    Att the end of the function nodes is a dict of submodules to tensors. This is if we want to intervene on multiple autoencoders.
+    We aren't currently using this feature, so we currently only return the tensor.
     """
+    device = model.device
     probe = probes[class_idx]
 
     if isinstance(class_idx, int):
@@ -273,7 +281,62 @@ def get_effects_per_class(
     nodes = {k: v / running_total for k, v in running_nodes.items()}
     # Convert SparseAct to Tensor
     nodes = {k: v.act for k, v in nodes.items()}
-    return nodes
+
+    assert len(nodes) == 1, "Only one submodule should be intervened on"
+    node_value = next(iter(nodes.values()))
+
+    return node_value
+
+
+def get_all_node_effects_for_one_sae(
+    model: LanguageModel,
+    submodules: list[utils.submodule_alias],
+    dictionaries: dict[utils.submodule_alias, AutoEncoder],
+    ae_path: str,
+    force_recompute: bool,
+    probes: dict[int | str, Probe],
+    probe_act_submodule: utils.submodule_alias,
+    chosen_class_indices: list[int | str],
+    train_bios: dict,
+    seed: int,
+    batch_size: int = 10,
+    patching_method: str = "attrib",
+    steps: int = 10,  # only used for ig
+) -> t.Tensor:
+    node_effects_path = os.path.join(ae_path, "node_effects.pkl")
+
+    if os.path.exists(node_effects_path) and not force_recompute:
+        print(f"Loading node effects from {node_effects_path}")
+
+        with open(node_effects_path, "rb") as f:
+            node_effects = pickle.load(f)
+        return node_effects
+    if not os.path.exists(node_effects_path):
+        print(f"Node effects not found, computing for {ae_path}")
+    elif force_recompute:
+        print(f"Recomputing node effects for {ae_path}")
+
+    node_effects = {}
+
+    for ablated_class_idx in tqdm(chosen_class_indices, "Getting node effects"):
+        node_effects[ablated_class_idx] = get_effects_per_class(
+            model,
+            submodules,
+            dictionaries,
+            probes,
+            probe_act_submodule,
+            ablated_class_idx,
+            train_bios,
+            random_seed,
+            batch_size=batch_size,
+            patching_method=patching_method,
+            steps=steps,
+        )
+    node_effects = utils.to_device(node_effects, "cpu")
+
+    save_log_files(ae_path, node_effects, "node_effects", ".pkl")
+
+    return node_effects
 
 
 # Get the output activations for the submodule where some saes are ablated
@@ -315,9 +378,9 @@ def get_acts_ablated(text, model, submodules, dictionaries, to_ablate):
 def get_all_acts_ablated(
     text_inputs: list[str],
     model: LanguageModel,
-    submodules,
-    dictionaries,
-    to_ablate,
+    submodules: list[utils.submodule_alias],
+    dictionaries: dict[utils.submodule_alias, AutoEncoder],
+    to_ablate: t.Tensor,
     batch_size: int,
     probe_submodule: utils.submodule_alias,
 ):
@@ -333,7 +396,8 @@ def get_all_acts_ablated(
         with t.no_grad(), model.trace(text_batch_BL, **tracer_kwargs):
             for submodule in submodules:
                 dictionary = dictionaries[submodule]
-                feat_idxs = to_ablate[submodule]
+                # feat_idxs = to_ablate[submodule] # Uncomment this line to restore ablating multiple SAEs
+                feat_idxs = to_ablate
                 x = submodule.output
                 if is_tuple[submodule]:
                     x = x[0]
@@ -397,12 +461,10 @@ def select_significant_features(
 
 
 def select_significant_features2(
-    node_effects: dict[int, dict[utils.submodule_alias, t.Tensor]],
-    dict_size: int,
+    node_effects: dict[int | str, t.Tensor],
     T_effect: float = 0.001,
     verbose: bool = True,
-    convert_to_n_hot: bool = True,
-) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
+) -> dict[int | str, t.Tensor]:
     """This function is more idiomatic pytorch and doesn't have the bug of returning an empty dict."""
     # TODO: Switch over to this function, or maybe use the other one for the unique class features.
     feats_above_T = {}
@@ -410,42 +472,38 @@ def select_significant_features2(
     for abl_class_idx in node_effects.keys():
         total_features_per_abl_class = 0
         feats_above_T[abl_class_idx] = {}
-        for submodule in node_effects[abl_class_idx].keys():
-            feats_above_T[abl_class_idx][submodule] = (
-                node_effects[abl_class_idx][submodule] > T_effect
-            )
-            total_features_per_abl_class += feats_above_T[abl_class_idx][submodule].sum().item()
+        feats_above_T[abl_class_idx] = node_effects[abl_class_idx] > T_effect
+        total_features_per_abl_class += feats_above_T[abl_class_idx].sum().item()
 
-        if verbose:
-            print(
-                f"T_effect {T_effect}, class {abl_class_idx}, all submodules, #significant features: {total_features_per_abl_class}"
-            )
+    if verbose:
+        print(
+            f"T_effect {T_effect}, class {abl_class_idx}, all submodules, #significant features: {total_features_per_abl_class}"
+        )
 
     return feats_above_T
 
 
 def select_top_n_features(
-    node_effects: dict[int, dict[utils.submodule_alias, t.Tensor]],
+    node_effects: dict[int | str, t.Tensor],
     n: int,
-) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
+) -> dict[int | str, t.Tensor]:
     top_n_features = {}
 
-    for abl_class_idx, submodules in node_effects.items():
+    for abl_class_idx, effects in node_effects.items():
         top_n_features[abl_class_idx] = {}
 
-        for submodule, effects in submodules.items():
-            assert (
-                n <= effects.numel()
-            ), f"n ({n}) must not be larger than the number of features ({effects.numel()}) for ablation class {abl_class_idx}, submodule {submodule}"
+        assert (
+            n <= effects.numel()
+        ), f"n ({n}) must not be larger than the number of features ({effects.numel()}) for ablation class {abl_class_idx}"
 
-            # Get the indices of the top N effects
-            _, top_indices = t.topk(effects, n)
+        # Get the indices of the top N effects
+        _, top_indices = t.topk(effects, n)
 
-            # Create a boolean mask tensor
-            mask = t.zeros_like(effects, dtype=t.bool)
-            mask[top_indices] = True
+        # Create a boolean mask tensor
+        mask = t.zeros_like(effects, dtype=t.bool)
+        mask[top_indices] = True
 
-            top_n_features[abl_class_idx][submodule] = mask
+        top_n_features[abl_class_idx] = mask
 
     return top_n_features
 
@@ -498,16 +556,16 @@ def select_unique_class_features(
 
 def select_features(
     selection_method: FeatureSelection,
-    node_effects: dict,
+    node_effects: dict[int | str, t.Tensor],
     dict_size: int,
     T_effects: list[float],
     T_max_sideeffect: float,
     verbose: bool = False,
-) -> dict[float, dict[int, dict[utils.submodule_alias, t.Tensor]]]:
-    unique_feats = {}
+) -> dict[int | float, dict[int | str, t.Tensor]]:
+    selected_features = {}
     if selection_method == FeatureSelection.unique:
         for T_effect in T_effects:
-            unique_feats[T_effect] = select_unique_class_features(
+            selected_features[T_effect] = select_unique_class_features(
                 node_effects,
                 dict_size,
                 T_effect=T_effect,
@@ -516,16 +574,16 @@ def select_features(
             )
     elif selection_method == FeatureSelection.above_threshold:
         for T_effect in T_effects:
-            unique_feats[T_effect] = select_significant_features2(
-                node_effects, dict_size, T_effect=T_effect, verbose=verbose
+            selected_features[T_effect] = select_significant_features2(
+                node_effects, T_effect=T_effect, verbose=verbose
             )
     elif selection_method == FeatureSelection.top_n:
-        for T_effect in T_effects:
-            unique_feats[T_effect] = select_top_n_features(node_effects, T_effect)
+        for n in T_effects:
+            selected_features[n] = select_top_n_features(node_effects, n)
     else:
         raise ValueError("Invalid selection method")
 
-    return unique_feats
+    return selected_features
 
 
 def save_log_files(ae_path: str, data: dict, base_filename: str, extension: str):
@@ -552,26 +610,15 @@ def save_log_files(ae_path: str, data: dict, base_filename: str, extension: str)
 
 def run_interventions(
     submodule_trainers: dict,
+    p_config: PipelineConfig,
     sweep_name: str,
-    dictionaries_path: str,
-    probes_dir: str,
     selection_method: FeatureSelection,
-    probe_train_set_size: int,
-    probe_test_set_size: int,
-    train_set_size: int,
-    test_set_size: int,
-    eval_saes_n_inputs: int,
-    probe_batch_size: int,
     T_effects: list[float],
     T_max_sideeffect: float,
-    max_classes: int,
     random_seed: int,
-    include_gender: bool,
-    model_dtype: t.dtype,
-    chosen_class_indices: Optional[list[int]] = None,
+    chosen_class_indices: list[int | str],
     device: str = "cuda",
     verbose: bool = False,
-    reduced_GPU_memory: bool = False,
 ):
     t.manual_seed(random_seed)
     random.seed(random_seed)
@@ -582,11 +629,11 @@ def run_interventions(
 
     llm_batch_size, patching_batch_size, eval_results_batch_size = utils.get_batch_sizes(
         model_eval_config,
-        reduced_GPU_memory,
-        train_set_size,
-        test_set_size,
-        probe_train_set_size,
-        probe_test_set_size,
+        p_config.reduced_GPU_memory,
+        p_config.train_set_size,
+        p_config.test_set_size,
+        p_config.probe_train_set_size,
+        p_config.probe_test_set_size,
     )
 
     model = LanguageModel(
@@ -594,13 +641,15 @@ def run_interventions(
         device_map=device,
         dispatch=True,
         attn_implementation="eager",
-        torch_dtype=model_dtype,
+        torch_dtype=p_config.model_dtype,
     )
 
     probe_layer = model_eval_config.probe_layer
     probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
-    ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
+    ae_group_paths = utils.get_ae_group_paths(
+        p_config.dictionaries_path, sweep_name, submodule_trainers
+    )
     ae_paths = utils.get_ae_paths(ae_group_paths)
 
     # TODO: experiment with different context lengths
@@ -610,58 +659,66 @@ def run_interventions(
     eval_saes.eval_saes(
         model,
         ae_paths,
-        eval_saes_n_inputs,
+        p_config.eval_saes_n_inputs,
         eval_results_batch_size,
         device,
-        overwrite_prev_results=False,
+        overwrite_prev_results=p_config.force_eval_results_recompute,
     )
+
+    if p_config.use_autointerp:
+        autointerp.get_autointerp_inputs_for_all_saes(
+            model,
+            p_config.max_activations_collection_n_inputs,
+            llm_batch_size,
+            context_length,
+            p_config.top_k_activating_inputs,
+            ae_paths,
+            force_rerun=p_config.force_max_activations_recompute,
+        )
 
     dataset, _ = load_and_prepare_dataset()
     train_bios, test_bios = get_train_test_data(
         dataset,
-        train_set_size,
-        test_set_size,
-        include_gender,
+        p_config.train_set_size,
+        p_config.test_set_size,
+        p_config.include_gender,
     )
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
     only_model_name = model_name.split("/")[-1]
-    probe_path = f"{probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
+    probe_path = f"{p_config.probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
-    if not os.path.exists(probe_path):
-        print("Probes not found, training probes")
+    if not os.path.exists(probe_path) or p_config.force_probe_recompute:
+        if p_config.force_probe_recompute:
+            print("Force recomputing probes")
+        else:
+            print("Probes not found, training probes")
         probe_training.train_probes(
-            probe_train_set_size,
-            probe_test_set_size,
+            p_config.probe_train_set_size,
+            p_config.probe_test_set_size,
             model,
             context_length=context_length,
-            probe_batch_size=probe_batch_size,
+            probe_batch_size=p_config.probe_batch_size,
             llm_batch_size=llm_batch_size,
             device=device,
-            probe_dir=probes_dir,
+            probe_dir=p_config.probes_dir,
             llm_model_name=model_name,
-            epochs=10,
-            model_dtype=model_dtype,
-            include_gender=include_gender,
+            epochs=p_config.probe_epochs,
+            model_dtype=p_config.model_dtype,
+            include_gender=p_config.include_gender,
         )
 
     with open(probe_path, "rb") as f:
         probes = pickle.load(f)
 
-    if chosen_class_indices is not None:
-        all_classes_list = chosen_class_indices
-    else:
-        all_classes_list = sorted(list(probes.keys()))[:max_classes]
-    print(f"all_classes_list: {all_classes_list}")
-
     ### Get activations for original model, all classes
     print("Getting activations for original model")
     test_acts = {}
-    for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated class"):
+    for class_idx in tqdm(chosen_class_indices, desc="Getting activations per evaluated class"):
         test_acts[class_idx] = get_all_activations(
             test_bios[class_idx], model, llm_batch_size, probe_act_submodule
         )
@@ -673,7 +730,7 @@ def run_interventions(
             )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
-        probes, all_classes_list, test_acts, probe_batch_size
+        probes, chosen_class_indices, test_acts, p_config.probe_batch_size
     )
     del test_acts
 
@@ -686,59 +743,41 @@ def run_interventions(
         print(f"Running ablation for {ae_path}")
         submodules = []
         dictionaries = {}
-        submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
-        dictionary = dictionary.to(dtype=model_dtype)
+        submodule, dictionary, sae_config = utils.load_dictionary(model, ae_path, device)
+        dictionary = dictionary.to(dtype=p_config.model_dtype)
         submodules.append(submodule)
         dictionaries[submodule] = dictionary
-        dict_size = config["trainer"]["dict_size"]
-        context_length = config["buffer"]["ctx_len"]
+        dict_size = sae_config["trainer"]["dict_size"]
 
-        # ae_name_lookup is useful if we are using attribution patching on multiple submodules
-        ae_name_lookup = {submodule: ae_path}
         class_accuracies = {"clean_acc": test_accuracies.copy()}
 
         # For every class, we get the indirect effects of every SAE feature wrt. the class probe
-        node_effects = {}
-        for ablated_class_idx in tqdm(all_classes_list, "Getting node effects"):
-            node_effects[ablated_class_idx] = {}
-
-            node_effects[ablated_class_idx] = get_effects_per_class(
-                model,
-                submodules,
-                dictionaries,
-                probes,
-                probe_act_submodule,
-                ablated_class_idx,
-                train_bios,
-                random_seed,
-                device,
-                batch_size=patching_batch_size,
-                patching_method="attrib",
-                # patching_method="ig",
-                steps=5,
-            )
-
-        node_effects_cpu = utils.to_device(node_effects, "cpu")
-        # In node_effects, we use submodule keys to give us the option to intervene on multiple autoencoders
-        # When saving, we remove the submodule key to make it easier to load the data later.
-        for abl_class_idx in list(node_effects_cpu.keys()):
-            node_effects_cpu[abl_class_idx] = node_effects_cpu[abl_class_idx][submodule]
-
-        save_log_files(ae_path, node_effects_cpu, "node_effects", ".pkl")
+        node_effects = get_all_node_effects_for_one_sae(
+            model=model,
+            submodules=submodules,
+            dictionaries=dictionaries,
+            ae_path=ae_path,
+            force_recompute=p_config.force_node_effects_recompute,
+            probes=probes,
+            probe_act_submodule=probe_act_submodule,
+            chosen_class_indices=chosen_class_indices,
+            train_bios=train_bios,
+            seed=random_seed,
+            batch_size=patching_batch_size,
+            patching_method=p_config.attribution_patching_method,
+            steps=p_config.ig_steps,
+        )
 
         selected_features = select_features(
             selection_method, node_effects, dict_size, T_effects, T_max_sideeffect, verbose=verbose
         )
-
-        del node_effects_cpu
-        del node_effects
 
         t.cuda.empty_cache()
         gc.collect()
 
         with t.inference_mode():
             # Now that we have collected node effects and selected features, we ablate the selected features and measure the change in probe accuracy
-            for ablated_class_idx in all_classes_list:
+            for ablated_class_idx in chosen_class_indices:
                 class_accuracies[ablated_class_idx] = {}
                 print(f"evaluating class {ablated_class_idx}")
 
@@ -753,7 +792,9 @@ def run_interventions(
                     if verbose:
                         print(f"Running ablation for T_effect = {T_effect}")
                     test_acts_ablated = {}
-                    for evaluated_class_idx in tqdm(all_classes_list, desc="Getting activations"):
+                    for evaluated_class_idx in tqdm(
+                        chosen_class_indices, desc="Getting activations"
+                    ):
                         test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
                             test_bios[evaluated_class_idx],
                             model,
@@ -777,7 +818,7 @@ def run_interventions(
                             )
 
                     ablated_class_accuracies = probe_training.get_probe_test_accuracy(
-                        probes, all_classes_list, test_acts_ablated, probe_batch_size
+                        probes, chosen_class_indices, test_acts_ablated, p_config.probe_batch_size
                     )
 
                     # We must iterate over ablated_class_accuracies because get_probe_test_accuracy tests spurious correlations as well
@@ -801,15 +842,12 @@ def run_interventions(
 # %%
 
 if __name__ == "__main__":
-    import os
-
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     selection_method = FeatureSelection.above_threshold
     selection_method = FeatureSelection.top_n
 
-    random_seed = random.randint(0, 1000)
-    num_classes = 5
+    random_seed = 42
 
     chosen_class_indices = [
         "male / female",
@@ -821,25 +859,6 @@ if __name__ == "__main__":
         2,
         6,
     ]
-    # chosen_class_indices = [-2, -4]
-    # chosen_class_indices = [0, 1]
-
-    include_gender = True
-
-    probe_train_set_size = 4000
-    probe_test_set_size = 500
-
-    # Load datset and probes
-    train_set_size = 100
-    test_set_size = 200
-
-    eval_saes_n_inputs = 250
-
-    probe_batch_size = 100
-
-    model_dtype = t.bfloat16
-
-    reduced_GPU_memory = False
 
     top_n_features = [2, 5, 10, 20, 50, 100, 500, 2000]
     # top_n_features = [5, 10, 20, 50, 500]
@@ -858,9 +877,6 @@ if __name__ == "__main__":
         raise ValueError("Invalid selection method")
 
     T_max_sideeffect = 5e-3
-
-    dictionaries_path = "../dictionary_learning/dictionaries"
-    probes_dir = "trained_bib_probes"
 
     # Use for debugging / any time you need to run from root dir
     # dictionaries_path = "dictionary_learning/dictionaries"
@@ -932,50 +948,44 @@ if __name__ == "__main__":
     }
 
     trainer_ids = None
-    # trainer_ids = [1, 2, 3, 4, 5, 6]
+    trainer_ids = [0, 2, 4, 5]
 
     ae_sweep_paths = {
         "gemma-2-2b_sweep_topk_ctx128_ef8_0824": {
-            "resid_post_layer_3": {"trainer_ids": trainer_ids},
-            "resid_post_layer_7": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_3": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_7": {"trainer_ids": trainer_ids},
             "resid_post_layer_11": {"trainer_ids": trainer_ids},
-            "resid_post_layer_15": {"trainer_ids": trainer_ids},
-            "resid_post_layer_19": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_15": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_19": {"trainer_ids": trainer_ids},
         },
         "gemma-2-2b_sweep_standard_ctx128_ef8_0824": {
-            "resid_post_layer_3": {"trainer_ids": trainer_ids},
-            "resid_post_layer_7": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_3": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_7": {"trainer_ids": trainer_ids},
             "resid_post_layer_11": {"trainer_ids": trainer_ids},
-            "resid_post_layer_15": {"trainer_ids": trainer_ids},
-            "resid_post_layer_19": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_15": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_19": {"trainer_ids": trainer_ids},
         },
     }
 
+    pipeline_config = PipelineConfig()
+
     # This will look for any empty folders in any ae_path and raise an error if it finds any
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
-        ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
+        ae_group_paths = utils.get_ae_group_paths(
+            pipeline_config.dictionaries_path, sweep_name, submodule_trainers
+        )
 
     start_time = time.time()
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
         run_interventions(
             submodule_trainers,
+            pipeline_config,
             sweep_name,
-            dictionaries_path,
-            probes_dir,
             selection_method,
-            probe_train_set_size,
-            probe_test_set_size,
-            train_set_size,
-            test_set_size,
-            eval_saes_n_inputs,
-            probe_batch_size,
             T_effects,
             T_max_sideeffect,
-            num_classes,
             random_seed,
-            include_gender=include_gender,
-            model_dtype=model_dtype,
             chosen_class_indices=chosen_class_indices,
             verbose=True,
         )
@@ -983,5 +993,3 @@ if __name__ == "__main__":
     end_time = time.time()
 
     print(f"Time taken: {end_time - start_time} seconds")
-
-# %%
