@@ -1,3 +1,5 @@
+import json
+
 ### SYSTEM PROMPT ###
 
 SYSTEM = """You are a meticulous AI researcher conducting an important investigation into a certain neuron in a language model. Your task is to analyze the neuron and score how strong its behavior is related to a concept in {concepts} on an integer scale from {min_scale} to {max_scale} in json format as shown below.
@@ -357,7 +359,10 @@ def build_system_prompt(
     ]
 
 
-def create_few_shot_examples(few_shot_manual_labels: dict, verbose: bool = False) -> str:
+def create_few_shot_examples(prompt_dir: str, verbose: bool = False) -> str:
+    with open(f"{prompt_dir}/manual_labels_few_shot.json", "r") as f:
+        few_shot_manual_labels = json.load(f)
+
     if verbose:
         for label in few_shot_manual_labels:
             print(label, few_shot_manual_labels[label]["per_class_scores"])
@@ -384,24 +389,28 @@ def create_few_shot_examples(few_shot_manual_labels: dict, verbose: bool = False
     return few_shot_examples
 
 
-def create_test_prompts(manual_test_labels: dict) -> list[str]:
-    test_prompts = []
+def create_test_prompts(
+    manual_test_labels: dict,
+) -> tuple[dict[int, str], dict[int, tuple[int | str, dict[str, int], str]]]:
+    test_prompts = {}
+    test_prompt_metadata = {}
 
-    for example_feature in manual_test_labels:
-        example_prompts = manual_test_labels[example_feature]["example_prompts"]
-        tokens_string = manual_test_labels[example_feature]["tokens_string"]
-        per_class_scores = manual_test_labels[example_feature]["per_class_scores"]
-        chain_of_thought = manual_test_labels[example_feature]["chain_of_thought"]
-        class_index = manual_test_labels[example_feature]["class_index"]
+    for test_index in manual_test_labels:
+        example_prompts = manual_test_labels[test_index]["example_prompts"]
+        tokens_string = manual_test_labels[test_index]["tokens_string"]
+        per_class_scores = manual_test_labels[test_index]["per_class_scores"]
+        chain_of_thought = manual_test_labels[test_index]["chain_of_thought"]
+        class_index = manual_test_labels[test_index]["class_index"]
 
         llm_prompt = "Okay, now here's the real task.\n"
         llm_prompt += f"Promoted tokens: {tokens_string}\n"
         llm_prompt += f"Example prompts: {example_prompts[0]}\n"
         llm_prompt += "Chain of thought:"
 
-        test_prompts.append((llm_prompt, class_index, per_class_scores, chain_of_thought))
+        test_prompts[test_index] = llm_prompt
+        test_prompt_metadata[test_index] = (class_index, per_class_scores, chain_of_thought)
 
-    return test_prompts
+    return test_prompts, test_prompt_metadata
 
 
 def create_unlabeled_prompts(example_prompts_FK: List[List[str]], dla_FK) -> list[str]:
@@ -409,7 +418,7 @@ def create_unlabeled_prompts(example_prompts_FK: List[List[str]], dla_FK) -> lis
 
     for seqences_K, dla_K in zip(example_prompts_FK, dla_FK):
         llm_prompt = "Okay, now here's the real task.\n"
-        llm_prompt += f"Promoted tokens: ({", ".join(dla_K)})\n"
+        llm_prompt += f"Promoted tokens: ({'', ''.join(dla_K)})\n"
         llm_prompt += f"Example prompts: {seqences_K}\n"
         llm_prompt += "Chain of thought:"
         prompts_F.append(llm_prompt)

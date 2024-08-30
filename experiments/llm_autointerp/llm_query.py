@@ -99,36 +99,88 @@ async def run_all_prompts(
     client: anthropic.Anthropic,
     model: str,
     system_prompt: str,
-    test_prompts: list[str],
+    test_prompts: dict[int, str],
     few_shot_examples: str,
     min_scale: int,
     max_scale: int,
     chosen_class_names: list[str],
-) -> list[tuple[str, dict, bool, str]]:
+) -> dict[int, tuple[str, dict, bool, str]]:
     tasks = [
         process_prompt(
             client,
             model,
             system_prompt[0]["text"],
-            test_prompts[i][0],
-            test_prompts[i][4],
+            test_prompts[idx],
+            idx,
             few_shot_examples,
             min_scale,
             max_scale,
             chosen_class_names,
         )
-        for i in range(number_of_test_examples)
+        for idx in sorted(test_prompts.keys())[:number_of_test_examples]
     ]
 
-    results = []
+    results = {}
     async for result in tqdm(
         asyncio.as_completed(tasks), total=len(tasks), desc="Processing prompts"
     ):
         prompt_index, llm_response, json_response, good_json, verification_message = await result
-        results.append((prompt_index, llm_response, json_response, good_json, verification_message))
+        results[prompt_index] = (llm_response, json_response, good_json, verification_message)
         print(len(results) - 1, good_json, verification_message)
 
     return results
+
+
+def test_llm_vs_manual_labels(
+    api_llm: str,
+    chosen_class_names: list[str],
+    min_scale: int,
+    max_scale: int,
+    number_of_test_examples: int,
+    prompt_dir: str,
+    output_filename: str = "llm_results.pkl",
+):
+    client = anthropic.AsyncAnthropic()
+
+    with open(f"{prompt_dir}/manual_labels_can_final.json", "r") as f:
+        manual_test_labels = json.load(f)
+
+    few_shot_examples = prompts.create_few_shot_examples(prompt_dir=PROMPT_DIR)
+    system_prompt = prompts.build_system_prompt(
+        concepts=chosen_class_names, min_scale=min_scale, max_scale=max_scale
+    )
+
+    print(f"Few shot example is using {llm_utils.count_tokens(few_shot_examples)} tokens")
+    print(f"System prompt is using {llm_utils.count_tokens(system_prompt[0]['text'])} tokens")
+
+    test_prompts, test_prompt_metadata = prompts.create_test_prompts(manual_test_labels)
+
+    test_prompts_tokens = 0
+
+    for idx, test_prompt in test_prompts.items():
+        test_prompts_tokens += llm_utils.count_tokens(test_prompt)
+
+    average_test_prompts_tokens = test_prompts_tokens / len(test_prompts)
+    print(
+        f"Test prompts are using {test_prompts_tokens} tokens total, {average_test_prompts_tokens} tokens on average"
+    )
+
+    results = asyncio.run(
+        run_all_prompts(
+            number_of_test_examples,
+            client,
+            api_llm,
+            system_prompt,
+            test_prompts,
+            few_shot_examples,
+            min_scale,
+            max_scale,
+            chosen_class_names,
+        )
+    )
+
+    with open(output_filename, "wb") as f:
+        pickle.dump(results, f)
 
 
 if __name__ == "__main__":
@@ -151,8 +203,8 @@ if __name__ == "__main__":
 
     min_scale = 0
     max_scale = 4
-    model = "claude-3-5-sonnet-20240620"
-    # model = "claude-3-haiku-20240307"
+    api_llm = "claude-3-5-sonnet-20240620"
+    api_llm = "claude-3-haiku-20240307"
 
     # IMPORTANT NOTE: We are using prompt caching. Before running on many prompts, run a single prompt
     # two times with number_of_test_examples = 1 and verify that
@@ -160,37 +212,12 @@ if __name__ == "__main__":
     # Then you can run on many prompts with number_of_test_examples > 1.
     number_of_test_examples = 1
 
-    with open(f"{PROMPT_DIR}/manual_labels_few_shot.json", "r") as f:
-        few_shot_manual_labels = json.load(f)
-
-    with open(f"{PROMPT_DIR}/manual_labels_can_final.json", "r") as f:
-        manual_test_labels = json.load(f)
-
-    few_shot_examples = prompts.create_few_shot_examples(few_shot_manual_labels)
-    system_prompt = prompts.build_system_prompt(
-        concepts=chosen_class_names, min_scale=min_scale, max_scale=max_scale
+    test_llm_vs_manual_labels(
+        api_llm=api_llm,
+        chosen_class_names=chosen_class_names,
+        min_scale=min_scale,
+        max_scale=max_scale,
+        number_of_test_examples=number_of_test_examples,
+        prompt_dir=PROMPT_DIR,
+        output_filename="llm_results.pkl",
     )
-
-    print(f"Few shot example is using {llm_utils.count_tokens(few_shot_examples)} tokens")
-    print(f"System prompt is using {llm_utils.count_tokens(system_prompt[0]['text'])} tokens")
-
-    test_prompts = prompts.create_test_prompts(manual_test_labels)
-
-    client = anthropic.AsyncAnthropic()
-
-    results = asyncio.run(
-        run_all_prompts(
-            number_of_test_examples,
-            client,
-            model,
-            system_prompt,
-            test_prompts,
-            few_shot_examples,
-            min_scale,
-            max_scale,
-            chosen_class_names,
-        )
-    )
-
-    with open("llm_results.pkl", "wb") as f:
-        pickle.dump(results, f)
