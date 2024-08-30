@@ -842,8 +842,6 @@ def run_interventions(
 # %%
 
 if __name__ == "__main__":
-    import os
-
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     selection_method = FeatureSelection.above_threshold
