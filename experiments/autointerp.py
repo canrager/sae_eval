@@ -274,20 +274,28 @@ def format_examples(
     num_top_emphasized_tokens: int,
     include_activations: bool = False,
 ):
+    # Move tensors to CPU if they're on GPU, seems to be 4x faster on BauLab Machine
+    max_token_idxs_FKL = max_token_idxs_FKL.cpu()
+    max_activations_FKL = max_activations_FKL.cpu()
+
+    # Batch decode all tokens at once, maintaining individual tokens
+    max_token_str_FKL = utils.batch_decode_to_tokens(max_token_idxs_FKL, tokenizer)
+
     example_prompts = []
-    for (
-        feat_idx,
-        (max_token_idxs_KL, max_activations_KL),
-    ) in enumerate(zip(max_token_idxs_FKL, max_activations_FKL)):
-        max_token_str_KL = utils.list_decode(max_token_idxs_KL, tokenizer)
+    for max_token_str_KL, max_activations_KL in tqdm(
+        zip(max_token_str_FKL, max_activations_FKL),
+        desc="Formatting examples",
+        total=len(max_token_str_FKL),
+    ):
         formatted_sequences_K = highlight_top_activations(
             max_token_str_KL,
             max_activations_KL,
             top_n=num_top_emphasized_tokens,
             include_activations=include_activations,
         )
-        formatted_sequences_K = ["".join(tokens) for tokens in formatted_sequences_K]
-        formatted_sequences = [seq for seq in formatted_sequences_K if seq]  # Drop empty sequences
+        formatted_sequences = [
+            "".join(tokens) for tokens in formatted_sequences_K if tokens
+        ]  # Drop empty sequences
 
         example_prompt = []
         for i, seq in enumerate(formatted_sequences):

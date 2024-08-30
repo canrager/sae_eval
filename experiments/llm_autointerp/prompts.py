@@ -15,6 +15,10 @@ Step 2. Score how strongly the neuron's behavior is related to the concept in {c
 
 - After summarizing all concepts, provide a single json block at the end of your response. The json block should contain your scores on an integer scale from {min_scale} to {max_scale} for each concept as shown in the examples.
 """
+# Few shot examples
+
+# actual DLA
+# Actual examples
 
 
 # SYSTEM = """You are a meticulous AI researcher conducting an important investigation into a certain neuron in a language model. Your task is to analyze the neuron and decide whether its behavior is related to a concept in {concepts}.
@@ -341,37 +345,22 @@ def build_system_prompt(
     concepts: List[str],
     min_scale: int = 0,
     max_scale: int = 4,
-    cot=False,
-    logits=False,
-    activations=False,
 ):
-    prompt = ""
-
-    # if cot and activations:
-    #     prompt += ACTIVATIONS
-    # elif cot:
-    #     prompt += COT
-
-    # if logits:
-    #     prompt += LOGITS
-    #     prompt += answer_options(concepts)
-
     concepts_str = ", ".join(concepts)
     concepts_str = f"({concepts_str})"
 
     return [
         {
             "type": "text",
-            "text": SYSTEM.format(
-                prompt=prompt, concepts=concepts_str, min_scale=min_scale, max_scale=max_scale
-            ),
+            "text": SYSTEM.format(concepts=concepts_str, min_scale=min_scale, max_scale=max_scale),
         }
     ]
 
 
-def create_few_shot_examples(few_shot_manual_labels: dict) -> str:
-    for label in few_shot_manual_labels:
-        print(label, few_shot_manual_labels[label]["per_class_scores"])
+def create_few_shot_examples(few_shot_manual_labels: dict, verbose: bool = False) -> str:
+    if verbose:
+        for label in few_shot_manual_labels:
+            print(label, few_shot_manual_labels[label]["per_class_scores"])
 
     few_shot_examples = "Here's a few examples of how to perform the task:\n\n"
 
@@ -413,3 +402,16 @@ def create_test_prompts(manual_test_labels: dict) -> list[str]:
         test_prompts.append((llm_prompt, class_index, per_class_scores, chain_of_thought))
 
     return test_prompts
+
+
+def create_unlabeled_prompts(example_prompts_FK: List[List[str]], dla_FK) -> list[str]:
+    prompts_F = []
+
+    for seqences_K, dla_K in zip(example_prompts_FK, dla_FK):
+        llm_prompt = "Okay, now here's the real task.\n"
+        llm_prompt += f"Promoted tokens: ({", ".join(dla_K)})\n"
+        llm_prompt += f"Example prompts: {seqences_K}\n"
+        llm_prompt += "Chain of thought:"
+        prompts_F.append(llm_prompt)
+
+    return prompts_F

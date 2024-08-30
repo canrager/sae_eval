@@ -1,8 +1,9 @@
 import torch
 import json
 import os
-from typing import TypeAlias, Any, Optional
-from tqdm import tqdm
+from typing import List, TypeAlias, Any, Optional
+from tqdm import tqdm, trange
+from transformers import AutoTokenizer
 
 from dictionary_learning import AutoEncoder, ActivationBuffer
 from dictionary_learning.dictionary import (
@@ -331,3 +332,36 @@ def list_decode(x, tokenizer):
         return tokenizer.decode(x, skip_special_tokens=True)
     else:
         return [list_decode(y, tokenizer) for y in x]
+    
+def batch_decode_to_tokens(x: torch.Tensor, tokenizer: AutoTokenizer, batch_size: int = 10000) -> List[List[str]]:
+    # Flatten the tensor
+    flat_x = x.reshape(-1)
+    
+    # Decode each token individually
+    decoded = []
+    for i in tqdm(range(0, len(flat_x), batch_size), desc="Decoding token ids"):
+        decoded.append(tokenizer.batch_decode(flat_x[i:i+batch_size], skip_special_tokens=True))
+        # print(f'decoded: {decoded}')
+        # break
+    
+    # Reshape the result back to the original shape
+    return [decoded[i:i+x.shape[1]] for i in range(0, len(decoded), x.shape[1])]
+
+def batch_decode_to_tokens(x: torch.Tensor, tokenizer: AutoTokenizer) -> List[List[str]]:
+    total_sequences = x.shape[0]
+    context_length = x.shape[-1]
+    
+    # Iterate over features
+    all_decoded_tokens = []
+    for i in trange(total_sequences, desc="Decoding token idxs"):
+        flat_batch = x[i].reshape(-1)
+        decoded_batch = tokenizer.batch_decode(flat_batch.unsqueeze(-1), skip_special_tokens=True)
+        
+        feature_decoded_tokens = []
+        # Reshape and filter out empty tokens
+        for j in range(0, len(decoded_batch), context_length):
+            sequence = [token for token in decoded_batch[j:j+context_length] if token]
+            feature_decoded_tokens.append(sequence)
+        all_decoded_tokens.append(feature_decoded_tokens)
+
+    return all_decoded_tokens
