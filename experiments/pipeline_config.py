@@ -26,5 +26,13 @@ class PipelineConfig:
 
     use_autointerp: bool = True
 
+    force_eval_results_recompute: bool = False
+    force_max_activations_recompute: bool = False
+    force_probe_recompute: bool = False
+    force_node_effects_recompute: bool = False
+
     dictionaries_path: str = "../dictionary_learning/dictionaries"
     probes_dir: str = "trained_bib_probes"
+
+    attribution_patching_method: str = "attrib"
+    ig_steps: int = 10

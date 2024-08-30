@@ -225,7 +225,6 @@ def get_effects_per_class(
     class_idx: int | str,
     train_bios: dict,
     seed: int,
-    device: str,
     batch_size: int = 10,
     patching_method: str = "attrib",
     steps: int = 10,  # only used for ig
@@ -235,6 +234,7 @@ def get_effects_per_class(
     Att the end of the function nodes is a dict of submodules to tensors. This is if we want to intervene on multiple autoencoders.
     We aren't currently using this feature, so we currently only return the tensor.
     """
+    device = model.device
     probe = probes[class_idx]
 
     if isinstance(class_idx, int):
@@ -286,6 +286,57 @@ def get_effects_per_class(
     node_value = next(iter(nodes.values()))
 
     return node_value
+
+
+def get_all_node_effects_for_one_sae(
+    model: LanguageModel,
+    submodules: list[utils.submodule_alias],
+    dictionaries: dict[utils.submodule_alias, AutoEncoder],
+    ae_path: str,
+    force_recompute: bool,
+    probes: dict[int | str, Probe],
+    probe_act_submodule: utils.submodule_alias,
+    chosen_class_indices: list[int | str],
+    train_bios: dict,
+    seed: int,
+    batch_size: int = 10,
+    patching_method: str = "attrib",
+    steps: int = 10,  # only used for ig
+) -> t.Tensor:
+    node_effects_path = os.path.join(ae_path, "node_effects.pkl")
+
+    if os.path.exists(node_effects_path) and not force_recompute:
+        print(f"Loading node effects from {node_effects_path}")
+
+        with open(node_effects_path, "rb") as f:
+            node_effects = pickle.load(f)
+        return node_effects
+    if not os.path.exists(node_effects_path):
+        print(f"Node effects not found, computing for {ae_path}")
+    elif force_recompute:
+        print(f"Recomputing node effects for {ae_path}")
+
+    node_effects = {}
+
+    for ablated_class_idx in tqdm(chosen_class_indices, "Getting node effects"):
+        node_effects[ablated_class_idx] = get_effects_per_class(
+            model,
+            submodules,
+            dictionaries,
+            probes,
+            probe_act_submodule,
+            ablated_class_idx,
+            train_bios,
+            random_seed,
+            batch_size=batch_size,
+            patching_method=patching_method,
+            steps=steps,
+        )
+    node_effects = utils.to_device(node_effects, "cpu")
+
+    save_log_files(ae_path, node_effects, "node_effects", ".pkl")
+
+    return node_effects
 
 
 # Get the output activations for the submodule where some saes are ablated
@@ -611,7 +662,7 @@ def run_interventions(
         p_config.eval_saes_n_inputs,
         eval_results_batch_size,
         device,
-        overwrite_prev_results=False,
+        overwrite_prev_results=p_config.force_eval_results_recompute,
     )
 
     if p_config.use_autointerp:
@@ -622,7 +673,7 @@ def run_interventions(
             context_length,
             p_config.top_k_activating_inputs,
             ae_paths,
-            force_rerun=False,
+            force_rerun=p_config.force_max_activations_recompute,
         )
 
     dataset, _ = load_and_prepare_dataset()
@@ -641,8 +692,11 @@ def run_interventions(
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
-    if not os.path.exists(probe_path):
-        print("Probes not found, training probes")
+    if not os.path.exists(probe_path) or p_config.force_probe_recompute:
+        if p_config.force_probe_recompute:
+            print("Force recomputing probes")
+        else:
+            print("Probes not found, training probes")
         probe_training.train_probes(
             p_config.probe_train_set_size,
             p_config.probe_test_set_size,
@@ -694,38 +748,29 @@ def run_interventions(
         submodules.append(submodule)
         dictionaries[submodule] = dictionary
         dict_size = sae_config["trainer"]["dict_size"]
-        context_length = sae_config["buffer"]["ctx_len"]
 
         class_accuracies = {"clean_acc": test_accuracies.copy()}
 
         # For every class, we get the indirect effects of every SAE feature wrt. the class probe
-        node_effects = {}
-        for ablated_class_idx in tqdm(chosen_class_indices, "Getting node effects"):
-            node_effects[ablated_class_idx] = {}
-
-            node_effects[ablated_class_idx] = get_effects_per_class(
-                model,
-                submodules,
-                dictionaries,
-                probes,
-                probe_act_submodule,
-                ablated_class_idx,
-                train_bios,
-                random_seed,
-                device,
-                batch_size=patching_batch_size,
-                patching_method="attrib",
-            )
-
-        node_effects = utils.to_device(node_effects, "cpu")
-
-        save_log_files(ae_path, node_effects, "node_effects", ".pkl")
+        node_effects = get_all_node_effects_for_one_sae(
+            model=model,
+            submodules=submodules,
+            dictionaries=dictionaries,
+            ae_path=ae_path,
+            force_recompute=p_config.force_node_effects_recompute,
+            probes=probes,
+            probe_act_submodule=probe_act_submodule,
+            chosen_class_indices=chosen_class_indices,
+            train_bios=train_bios,
+            seed=random_seed,
+            batch_size=patching_batch_size,
+            patching_method=p_config.attribution_patching_method,
+            steps=p_config.ig_steps,
+        )
 
         selected_features = select_features(
             selection_method, node_effects, dict_size, T_effects, T_max_sideeffect, verbose=verbose
         )
-
-        del node_effects
 
         t.cuda.empty_cache()
         gc.collect()
