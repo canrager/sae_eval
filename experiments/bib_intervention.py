@@ -57,7 +57,9 @@ class FeatureSelection(Enum):
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
 
 
-def metric_fn(model, labels, probe, probe_act_submodule):
+def metric_fn(
+    model: LanguageModel, labels: t.Tensor, probe: Probe, probe_act_submodule: utils.submodule_alias
+):
     attn_mask = model.input[1]["attention_mask"]
     acts = probe_act_submodule.output[0]
     acts = acts * attn_mask[:, :, None]
@@ -217,8 +219,8 @@ def get_paired_class_samples(data: dict, class_idx, device: str) -> tuple[list, 
 def get_effects_per_class(
     model: LanguageModel,
     submodules: list[utils.submodule_alias],
-    dictionaries: dict[utils.submodule_alias, nn.Module],
-    probes,
+    dictionaries: dict[utils.submodule_alias, AutoEncoder],
+    probes: dict[int | str, Probe],
     probe_act_submodule: utils.submodule_alias,
     class_idx: int | str,
     train_bios: dict,
@@ -227,9 +229,11 @@ def get_effects_per_class(
     batch_size: int = 10,
     patching_method: str = "attrib",
     steps: int = 10,  # only used for ig
-) -> dict[utils.submodule_alias, t.Tensor]:
+) -> t.Tensor:
     """
-    Probe_act_submodule is the submodule where the probe is attached, usually resid_post
+    Probe_act_submodule is the submodule where the probe is attached, usually resid_post.
+    Att the end of the function nodes is a dict of submodules to tensors. This is if we want to intervene on multiple autoencoders.
+    We aren't currently using this feature, so we currently only return the tensor.
     """
     probe = probes[class_idx]
 
@@ -277,7 +281,11 @@ def get_effects_per_class(
     nodes = {k: v / running_total for k, v in running_nodes.items()}
     # Convert SparseAct to Tensor
     nodes = {k: v.act for k, v in nodes.items()}
-    return nodes
+
+    assert len(nodes) == 1, "Only one submodule should be intervened on"
+    node_value = next(iter(nodes.values()))
+
+    return node_value
 
 
 # Get the output activations for the submodule where some saes are ablated
@@ -710,10 +718,6 @@ def run_interventions(
             )
 
         node_effects = utils.to_device(node_effects, "cpu")
-        # In node_effects, we use submodule keys to give us the option to intervene on multiple autoencoders
-        # When saving, we remove the submodule key to make it easier to load the data later.
-        for abl_class_idx in list(node_effects.keys()):
-            node_effects[abl_class_idx] = node_effects[abl_class_idx][submodule]
 
         save_log_files(ae_path, node_effects, "node_effects", ".pkl")
 
