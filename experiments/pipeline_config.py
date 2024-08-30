@@ -16,13 +16,15 @@ class PipelineConfig:
 
     eval_saes_n_inputs: int = 250
 
-    probe_batch_size: int = min(500, probe_test_set_size)
+    probe_batch_size: int = min(500, test_set_size)
     probe_epochs: int = 10
 
     model_dtype: torch.dtype = torch.bfloat16
 
     reduced_GPU_memory: bool = False
     include_gender: bool = True
+
+    use_autointerp: bool = True
 
     dictionaries_path: str = "../dictionary_learning/dictionaries"
     probes_dir: str = "trained_bib_probes"

@@ -23,6 +23,8 @@ sys.path.append(parent_dir)
 from attribution import patching_effect
 from dictionary_learning.interp import examine_dimension
 from dictionary_learning.utils import hf_dataset_to_generator
+from dictionary_learning.dictionary import AutoEncoder
+
 import experiments.probe_training as probe_training
 import experiments.utils as utils
 import experiments.eval_saes as eval_saes
@@ -219,11 +221,11 @@ def get_effects_per_class(
     probes,
     probe_act_submodule: utils.submodule_alias,
     class_idx: int | str,
-    train_bios,
+    train_bios: dict,
     seed: int,
     device: str,
     batch_size: int = 10,
-    patching_method: str = "ig",
+    patching_method: str = "attrib",
     steps: int = 10,  # only used for ig
 ) -> dict[utils.submodule_alias, t.Tensor]:
     """
@@ -317,9 +319,9 @@ def get_acts_ablated(text, model, submodules, dictionaries, to_ablate):
 def get_all_acts_ablated(
     text_inputs: list[str],
     model: LanguageModel,
-    submodules,
-    dictionaries,
-    to_ablate,
+    submodules: list[utils.submodule_alias],
+    dictionaries: dict[utils.submodule_alias, AutoEncoder],
+    to_ablate: t.Tensor,
     batch_size: int,
     probe_submodule: utils.submodule_alias,
 ):
@@ -335,7 +337,8 @@ def get_all_acts_ablated(
         with t.no_grad(), model.trace(text_batch_BL, **tracer_kwargs):
             for submodule in submodules:
                 dictionary = dictionaries[submodule]
-                feat_idxs = to_ablate[submodule]
+                # feat_idxs = to_ablate[submodule] # Uncomment this line to restore ablating multiple SAEs
+                feat_idxs = to_ablate
                 x = submodule.output
                 if is_tuple[submodule]:
                     x = x[0]
@@ -399,12 +402,10 @@ def select_significant_features(
 
 
 def select_significant_features2(
-    node_effects: dict[int, dict[utils.submodule_alias, t.Tensor]],
-    dict_size: int,
+    node_effects: dict[int | str, t.Tensor],
     T_effect: float = 0.001,
     verbose: bool = True,
-    convert_to_n_hot: bool = True,
-) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
+) -> dict[int | str, t.Tensor]:
     """This function is more idiomatic pytorch and doesn't have the bug of returning an empty dict."""
     # TODO: Switch over to this function, or maybe use the other one for the unique class features.
     feats_above_T = {}
@@ -412,42 +413,38 @@ def select_significant_features2(
     for abl_class_idx in node_effects.keys():
         total_features_per_abl_class = 0
         feats_above_T[abl_class_idx] = {}
-        for submodule in node_effects[abl_class_idx].keys():
-            feats_above_T[abl_class_idx][submodule] = (
-                node_effects[abl_class_idx][submodule] > T_effect
-            )
-            total_features_per_abl_class += feats_above_T[abl_class_idx][submodule].sum().item()
+        feats_above_T[abl_class_idx] = node_effects[abl_class_idx] > T_effect
+        total_features_per_abl_class += feats_above_T[abl_class_idx].sum().item()
 
-        if verbose:
-            print(
-                f"T_effect {T_effect}, class {abl_class_idx}, all submodules, #significant features: {total_features_per_abl_class}"
-            )
+    if verbose:
+        print(
+            f"T_effect {T_effect}, class {abl_class_idx}, all submodules, #significant features: {total_features_per_abl_class}"
+        )
 
     return feats_above_T
 
 
 def select_top_n_features(
-    node_effects: dict[int, dict[utils.submodule_alias, t.Tensor]],
+    node_effects: dict[int | str, t.Tensor],
     n: int,
-) -> dict[int, dict[utils.submodule_alias, t.Tensor]]:
+) -> dict[int | str, t.Tensor]:
     top_n_features = {}
 
-    for abl_class_idx, submodules in node_effects.items():
+    for abl_class_idx, effects in node_effects.items():
         top_n_features[abl_class_idx] = {}
 
-        for submodule, effects in submodules.items():
-            assert (
-                n <= effects.numel()
-            ), f"n ({n}) must not be larger than the number of features ({effects.numel()}) for ablation class {abl_class_idx}, submodule {submodule}"
+        assert (
+            n <= effects.numel()
+        ), f"n ({n}) must not be larger than the number of features ({effects.numel()}) for ablation class {abl_class_idx}"
 
-            # Get the indices of the top N effects
-            _, top_indices = t.topk(effects, n)
+        # Get the indices of the top N effects
+        _, top_indices = t.topk(effects, n)
 
-            # Create a boolean mask tensor
-            mask = t.zeros_like(effects, dtype=t.bool)
-            mask[top_indices] = True
+        # Create a boolean mask tensor
+        mask = t.zeros_like(effects, dtype=t.bool)
+        mask[top_indices] = True
 
-            top_n_features[abl_class_idx][submodule] = mask
+        top_n_features[abl_class_idx] = mask
 
     return top_n_features
 
@@ -500,16 +497,16 @@ def select_unique_class_features(
 
 def select_features(
     selection_method: FeatureSelection,
-    node_effects: dict,
+    node_effects: dict[int | str, t.Tensor],
     dict_size: int,
     T_effects: list[float],
     T_max_sideeffect: float,
     verbose: bool = False,
-) -> dict[float, dict[int, dict[utils.submodule_alias, t.Tensor]]]:
-    unique_feats = {}
+) -> dict[int | float, dict[int | str, t.Tensor]]:
+    selected_features = {}
     if selection_method == FeatureSelection.unique:
         for T_effect in T_effects:
-            unique_feats[T_effect] = select_unique_class_features(
+            selected_features[T_effect] = select_unique_class_features(
                 node_effects,
                 dict_size,
                 T_effect=T_effect,
@@ -518,16 +515,16 @@ def select_features(
             )
     elif selection_method == FeatureSelection.above_threshold:
         for T_effect in T_effects:
-            unique_feats[T_effect] = select_significant_features2(
-                node_effects, dict_size, T_effect=T_effect, verbose=verbose
+            selected_features[T_effect] = select_significant_features2(
+                node_effects, T_effect=T_effect, verbose=verbose
             )
     elif selection_method == FeatureSelection.top_n:
-        for T_effect in T_effects:
-            unique_feats[T_effect] = select_top_n_features(node_effects, T_effect)
+        for n in T_effects:
+            selected_features[n] = select_top_n_features(node_effects, n)
     else:
         raise ValueError("Invalid selection method")
 
-    return unique_feats
+    return selected_features
 
 
 def save_log_files(ae_path: str, data: dict, base_filename: str, extension: str):
@@ -554,7 +551,7 @@ def save_log_files(ae_path: str, data: dict, base_filename: str, extension: str)
 
 def run_interventions(
     submodule_trainers: dict,
-    config: PipelineConfig,
+    p_config: PipelineConfig,
     sweep_name: str,
     selection_method: FeatureSelection,
     T_effects: list[float],
@@ -573,11 +570,11 @@ def run_interventions(
 
     llm_batch_size, patching_batch_size, eval_results_batch_size = utils.get_batch_sizes(
         model_eval_config,
-        config.reduced_GPU_memory,
-        config.train_set_size,
-        config.test_set_size,
-        config.probe_train_set_size,
-        config.probe_test_set_size,
+        p_config.reduced_GPU_memory,
+        p_config.train_set_size,
+        p_config.test_set_size,
+        p_config.probe_train_set_size,
+        p_config.probe_test_set_size,
     )
 
     model = LanguageModel(
@@ -585,14 +582,14 @@ def run_interventions(
         device_map=device,
         dispatch=True,
         attn_implementation="eager",
-        torch_dtype=config.model_dtype,
+        torch_dtype=p_config.model_dtype,
     )
 
     probe_layer = model_eval_config.probe_layer
     probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
     ae_group_paths = utils.get_ae_group_paths(
-        config.dictionaries_path, sweep_name, submodule_trainers
+        p_config.dictionaries_path, sweep_name, submodule_trainers
     )
     ae_paths = utils.get_ae_paths(ae_group_paths)
 
@@ -603,53 +600,54 @@ def run_interventions(
     eval_saes.eval_saes(
         model,
         ae_paths,
-        config.eval_saes_n_inputs,
+        p_config.eval_saes_n_inputs,
         eval_results_batch_size,
         device,
         overwrite_prev_results=False,
     )
 
-    autointerp.get_autointerp_inputs_for_all_saes(
-        model,
-        config.max_activations_collection_n_inputs,
-        llm_batch_size,
-        context_length,
-        config.top_k_activating_inputs,
-        ae_paths,
-        force_rerun=False,
-    )
+    if p_config.use_autointerp:
+        autointerp.get_autointerp_inputs_for_all_saes(
+            model,
+            p_config.max_activations_collection_n_inputs,
+            llm_batch_size,
+            context_length,
+            p_config.top_k_activating_inputs,
+            ae_paths,
+            force_rerun=False,
+        )
 
     dataset, _ = load_and_prepare_dataset()
     train_bios, test_bios = get_train_test_data(
         dataset,
-        config.train_set_size,
-        config.test_set_size,
-        config.include_gender,
+        p_config.train_set_size,
+        p_config.test_set_size,
+        p_config.include_gender,
     )
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
     only_model_name = model_name.split("/")[-1]
-    probe_path = f"{config.probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
+    probe_path = f"{p_config.probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
     if not os.path.exists(probe_path):
         print("Probes not found, training probes")
         probe_training.train_probes(
-            config.probe_train_set_size,
-            config.probe_test_set_size,
+            p_config.probe_train_set_size,
+            p_config.probe_test_set_size,
             model,
             context_length=context_length,
-            probe_batch_size=config.probe_batch_size,
+            probe_batch_size=p_config.probe_batch_size,
             llm_batch_size=llm_batch_size,
             device=device,
-            probe_dir=config.probes_dir,
+            probe_dir=p_config.probes_dir,
             llm_model_name=model_name,
-            epochs=config.probe_epochs,
-            model_dtype=config.model_dtype,
-            include_gender=config.include_gender,
+            epochs=p_config.probe_epochs,
+            model_dtype=p_config.model_dtype,
+            include_gender=p_config.include_gender,
         )
 
     with open(probe_path, "rb") as f:
@@ -670,7 +668,7 @@ def run_interventions(
             )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
-        probes, chosen_class_indices, test_acts, config.probe_batch_size
+        probes, chosen_class_indices, test_acts, p_config.probe_batch_size
     )
     del test_acts
 
@@ -683,12 +681,12 @@ def run_interventions(
         print(f"Running ablation for {ae_path}")
         submodules = []
         dictionaries = {}
-        submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
-        dictionary = dictionary.to(dtype=config.model_dtype)
+        submodule, dictionary, sae_config = utils.load_dictionary(model, ae_path, device)
+        dictionary = dictionary.to(dtype=p_config.model_dtype)
         submodules.append(submodule)
         dictionaries[submodule] = dictionary
-        dict_size = config["trainer"]["dict_size"]
-        context_length = config["buffer"]["ctx_len"]
+        dict_size = sae_config["trainer"]["dict_size"]
+        context_length = sae_config["buffer"]["ctx_len"]
 
         class_accuracies = {"clean_acc": test_accuracies.copy()}
 
@@ -709,23 +707,20 @@ def run_interventions(
                 device,
                 batch_size=patching_batch_size,
                 patching_method="attrib",
-                # patching_method="ig",
-                steps=5,
             )
 
-        node_effects_cpu = utils.to_device(node_effects, "cpu")
+        node_effects = utils.to_device(node_effects, "cpu")
         # In node_effects, we use submodule keys to give us the option to intervene on multiple autoencoders
         # When saving, we remove the submodule key to make it easier to load the data later.
-        for abl_class_idx in list(node_effects_cpu.keys()):
-            node_effects_cpu[abl_class_idx] = node_effects_cpu[abl_class_idx][submodule]
+        for abl_class_idx in list(node_effects.keys()):
+            node_effects[abl_class_idx] = node_effects[abl_class_idx][submodule]
 
-        save_log_files(ae_path, node_effects_cpu, "node_effects", ".pkl")
+        save_log_files(ae_path, node_effects, "node_effects", ".pkl")
 
         selected_features = select_features(
             selection_method, node_effects, dict_size, T_effects, T_max_sideeffect, verbose=verbose
         )
 
-        del node_effects_cpu
         del node_effects
 
         t.cuda.empty_cache()
@@ -774,7 +769,7 @@ def run_interventions(
                             )
 
                     ablated_class_accuracies = probe_training.get_probe_test_accuracy(
-                        probes, chosen_class_indices, test_acts_ablated, config.probe_batch_size
+                        probes, chosen_class_indices, test_acts_ablated, p_config.probe_batch_size
                     )
 
                     # We must iterate over ablated_class_accuracies because get_probe_test_accuracy tests spurious correlations as well
