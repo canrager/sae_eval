@@ -614,6 +614,9 @@ def run_interventions(
         config.max_activations_collection_n_inputs,
         llm_batch_size,
         context_length,
+        config.top_k_activating_inputs,
+        ae_paths,
+        force_rerun=False,
     )
 
     dataset, _ = load_and_prepare_dataset()
