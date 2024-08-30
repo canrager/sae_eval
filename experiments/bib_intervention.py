@@ -26,7 +26,9 @@ from dictionary_learning.utils import hf_dataset_to_generator
 import experiments.probe_training as probe_training
 import experiments.utils as utils
 import experiments.eval_saes as eval_saes
+import experiments.autointerp as autointerp
 
+from experiments.pipeline_config import PipelineConfig
 from experiments.probe_training import (
     load_and_prepare_dataset,
     get_train_test_data,
@@ -552,26 +554,15 @@ def save_log_files(ae_path: str, data: dict, base_filename: str, extension: str)
 
 def run_interventions(
     submodule_trainers: dict,
+    config: PipelineConfig,
     sweep_name: str,
-    dictionaries_path: str,
-    probes_dir: str,
     selection_method: FeatureSelection,
-    probe_train_set_size: int,
-    probe_test_set_size: int,
-    train_set_size: int,
-    test_set_size: int,
-    eval_saes_n_inputs: int,
-    probe_batch_size: int,
     T_effects: list[float],
     T_max_sideeffect: float,
-    max_classes: int,
     random_seed: int,
-    include_gender: bool,
-    model_dtype: t.dtype,
-    chosen_class_indices: Optional[list[int]] = None,
+    chosen_class_indices: list[int | str],
     device: str = "cuda",
     verbose: bool = False,
-    reduced_GPU_memory: bool = False,
 ):
     t.manual_seed(random_seed)
     random.seed(random_seed)
@@ -582,11 +573,11 @@ def run_interventions(
 
     llm_batch_size, patching_batch_size, eval_results_batch_size = utils.get_batch_sizes(
         model_eval_config,
-        reduced_GPU_memory,
-        train_set_size,
-        test_set_size,
-        probe_train_set_size,
-        probe_test_set_size,
+        config.reduced_GPU_memory,
+        config.train_set_size,
+        config.test_set_size,
+        config.probe_train_set_size,
+        config.probe_test_set_size,
     )
 
     model = LanguageModel(
@@ -594,13 +585,15 @@ def run_interventions(
         device_map=device,
         dispatch=True,
         attn_implementation="eager",
-        torch_dtype=model_dtype,
+        torch_dtype=config.model_dtype,
     )
 
     probe_layer = model_eval_config.probe_layer
     probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
-    ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
+    ae_group_paths = utils.get_ae_group_paths(
+        config.dictionaries_path, sweep_name, submodule_trainers
+    )
     ae_paths = utils.get_ae_paths(ae_group_paths)
 
     # TODO: experiment with different context lengths
@@ -610,58 +603,59 @@ def run_interventions(
     eval_saes.eval_saes(
         model,
         ae_paths,
-        eval_saes_n_inputs,
+        config.eval_saes_n_inputs,
         eval_results_batch_size,
         device,
         overwrite_prev_results=False,
     )
 
+    autointerp.get_autointerp_inputs_for_all_saes(
+        model,
+        config.max_activations_collection_n_inputs,
+        llm_batch_size,
+        context_length,
+    )
+
     dataset, _ = load_and_prepare_dataset()
     train_bios, test_bios = get_train_test_data(
         dataset,
-        train_set_size,
-        test_set_size,
-        include_gender,
+        config.train_set_size,
+        config.test_set_size,
+        config.include_gender,
     )
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
     only_model_name = model_name.split("/")[-1]
-    probe_path = f"{probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
+    probe_path = f"{config.probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
     if not os.path.exists(probe_path):
         print("Probes not found, training probes")
         probe_training.train_probes(
-            probe_train_set_size,
-            probe_test_set_size,
+            config.probe_train_set_size,
+            config.probe_test_set_size,
             model,
             context_length=context_length,
-            probe_batch_size=probe_batch_size,
+            probe_batch_size=config.probe_batch_size,
             llm_batch_size=llm_batch_size,
             device=device,
-            probe_dir=probes_dir,
+            probe_dir=config.probes_dir,
             llm_model_name=model_name,
-            epochs=10,
-            model_dtype=model_dtype,
-            include_gender=include_gender,
+            epochs=config.probe_epochs,
+            model_dtype=config.model_dtype,
+            include_gender=config.include_gender,
         )
 
     with open(probe_path, "rb") as f:
         probes = pickle.load(f)
 
-    if chosen_class_indices is not None:
-        all_classes_list = chosen_class_indices
-    else:
-        all_classes_list = sorted(list(probes.keys()))[:max_classes]
-    print(f"all_classes_list: {all_classes_list}")
-
     ### Get activations for original model, all classes
     print("Getting activations for original model")
     test_acts = {}
-    for class_idx in tqdm(all_classes_list, desc="Getting activations per evaluated class"):
+    for class_idx in tqdm(chosen_class_indices, desc="Getting activations per evaluated class"):
         test_acts[class_idx] = get_all_activations(
             test_bios[class_idx], model, llm_batch_size, probe_act_submodule
         )
@@ -673,7 +667,7 @@ def run_interventions(
             )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
-        probes, all_classes_list, test_acts, probe_batch_size
+        probes, chosen_class_indices, test_acts, config.probe_batch_size
     )
     del test_acts
 
@@ -687,19 +681,17 @@ def run_interventions(
         submodules = []
         dictionaries = {}
         submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
-        dictionary = dictionary.to(dtype=model_dtype)
+        dictionary = dictionary.to(dtype=config.model_dtype)
         submodules.append(submodule)
         dictionaries[submodule] = dictionary
         dict_size = config["trainer"]["dict_size"]
         context_length = config["buffer"]["ctx_len"]
 
-        # ae_name_lookup is useful if we are using attribution patching on multiple submodules
-        ae_name_lookup = {submodule: ae_path}
         class_accuracies = {"clean_acc": test_accuracies.copy()}
 
         # For every class, we get the indirect effects of every SAE feature wrt. the class probe
         node_effects = {}
-        for ablated_class_idx in tqdm(all_classes_list, "Getting node effects"):
+        for ablated_class_idx in tqdm(chosen_class_indices, "Getting node effects"):
             node_effects[ablated_class_idx] = {}
 
             node_effects[ablated_class_idx] = get_effects_per_class(
@@ -738,7 +730,7 @@ def run_interventions(
 
         with t.inference_mode():
             # Now that we have collected node effects and selected features, we ablate the selected features and measure the change in probe accuracy
-            for ablated_class_idx in all_classes_list:
+            for ablated_class_idx in chosen_class_indices:
                 class_accuracies[ablated_class_idx] = {}
                 print(f"evaluating class {ablated_class_idx}")
 
@@ -753,7 +745,9 @@ def run_interventions(
                     if verbose:
                         print(f"Running ablation for T_effect = {T_effect}")
                     test_acts_ablated = {}
-                    for evaluated_class_idx in tqdm(all_classes_list, desc="Getting activations"):
+                    for evaluated_class_idx in tqdm(
+                        chosen_class_indices, desc="Getting activations"
+                    ):
                         test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
                             test_bios[evaluated_class_idx],
                             model,
@@ -777,7 +771,7 @@ def run_interventions(
                             )
 
                     ablated_class_accuracies = probe_training.get_probe_test_accuracy(
-                        probes, all_classes_list, test_acts_ablated, probe_batch_size
+                        probes, chosen_class_indices, test_acts_ablated, config.probe_batch_size
                     )
 
                     # We must iterate over ablated_class_accuracies because get_probe_test_accuracy tests spurious correlations as well
@@ -808,8 +802,7 @@ if __name__ == "__main__":
     selection_method = FeatureSelection.above_threshold
     selection_method = FeatureSelection.top_n
 
-    random_seed = random.randint(0, 1000)
-    num_classes = 5
+    random_seed = 42
 
     chosen_class_indices = [
         "male / female",
@@ -821,25 +814,6 @@ if __name__ == "__main__":
         2,
         6,
     ]
-    # chosen_class_indices = [-2, -4]
-    # chosen_class_indices = [0, 1]
-
-    include_gender = True
-
-    probe_train_set_size = 4000
-    probe_test_set_size = 500
-
-    # Load datset and probes
-    train_set_size = 100
-    test_set_size = 200
-
-    eval_saes_n_inputs = 250
-
-    probe_batch_size = 100
-
-    model_dtype = t.bfloat16
-
-    reduced_GPU_memory = False
 
     top_n_features = [2, 5, 10, 20, 50, 100, 500, 2000]
     # top_n_features = [5, 10, 20, 50, 500]
@@ -858,9 +832,6 @@ if __name__ == "__main__":
         raise ValueError("Invalid selection method")
 
     T_max_sideeffect = 5e-3
-
-    dictionaries_path = "../dictionary_learning/dictionaries"
-    probes_dir = "trained_bib_probes"
 
     # Use for debugging / any time you need to run from root dir
     # dictionaries_path = "dictionary_learning/dictionaries"
@@ -932,50 +903,44 @@ if __name__ == "__main__":
     }
 
     trainer_ids = None
-    # trainer_ids = [1, 2, 3, 4, 5, 6]
+    trainer_ids = [0, 2, 4, 5]
 
     ae_sweep_paths = {
         "gemma-2-2b_sweep_topk_ctx128_ef8_0824": {
-            "resid_post_layer_3": {"trainer_ids": trainer_ids},
-            "resid_post_layer_7": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_3": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_7": {"trainer_ids": trainer_ids},
             "resid_post_layer_11": {"trainer_ids": trainer_ids},
-            "resid_post_layer_15": {"trainer_ids": trainer_ids},
-            "resid_post_layer_19": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_15": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_19": {"trainer_ids": trainer_ids},
         },
         "gemma-2-2b_sweep_standard_ctx128_ef8_0824": {
-            "resid_post_layer_3": {"trainer_ids": trainer_ids},
-            "resid_post_layer_7": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_3": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_7": {"trainer_ids": trainer_ids},
             "resid_post_layer_11": {"trainer_ids": trainer_ids},
-            "resid_post_layer_15": {"trainer_ids": trainer_ids},
-            "resid_post_layer_19": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_15": {"trainer_ids": trainer_ids},
+            # "resid_post_layer_19": {"trainer_ids": trainer_ids},
         },
     }
 
+    pipeline_config = PipelineConfig()
+
     # This will look for any empty folders in any ae_path and raise an error if it finds any
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
-        ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
+        ae_group_paths = utils.get_ae_group_paths(
+            pipeline_config.dictionaries_path, sweep_name, submodule_trainers
+        )
 
     start_time = time.time()
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
         run_interventions(
             submodule_trainers,
+            pipeline_config,
             sweep_name,
-            dictionaries_path,
-            probes_dir,
             selection_method,
-            probe_train_set_size,
-            probe_test_set_size,
-            train_set_size,
-            test_set_size,
-            eval_saes_n_inputs,
-            probe_batch_size,
             T_effects,
             T_max_sideeffect,
-            num_classes,
             random_seed,
-            include_gender=include_gender,
-            model_dtype=model_dtype,
             chosen_class_indices=chosen_class_indices,
             verbose=True,
         )
@@ -983,5 +948,3 @@ if __name__ == "__main__":
     end_time = time.time()
 
     print(f"Time taken: {end_time - start_time} seconds")
-
-# %%
