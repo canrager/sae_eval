@@ -517,7 +517,7 @@ def select_top_n_features(
             top_n_features[abl_class_idx] = t.zeros_like(effects, dtype=t.bool)
         else:
             # Get the indices of the top N effects
-            _, top_indices = t.topk(effects, n)
+            _, top_indices = t.topk(effects, k)
 
             # Create a boolean mask tensor
             mask = t.zeros_like(effects, dtype=t.bool)
@@ -806,18 +806,18 @@ def run_interventions(
                 )
             )
             all_node_effects = [
-                node_effects,
-                node_effects_auto_interp,
-                node_effects_bias_shift_dir1,
-                node_effects_bias_shift_dir2,
+                (node_effects_auto_interp, "_auto_interp"),
+                (node_effects_bias_shift_dir1, "_bias_shift_dir1"),
+                (node_effects_bias_shift_dir2, "_bias_shift_dir2"),
+                (node_effects, "_attrib"),
             ]
         else:
-            all_node_effects = [node_effects]
+            all_node_effects = [(node_effects, "_attrib")]
 
         t.cuda.empty_cache()
         gc.collect()
 
-        for node_effects_group in all_node_effects:
+        for node_effects_group, effects_group_name in all_node_effects:
             selected_features = select_features(
                 selection_method,
                 node_effects_group,
@@ -827,9 +827,11 @@ def run_interventions(
                 verbose=verbose,
             )
 
+            node_effects_group_classes = list(node_effects_group.keys())
+
             with t.inference_mode():
                 # Now that we have collected node effects and selected features, we ablate the selected features and measure the change in probe accuracy
-                for ablated_class_idx in chosen_class_indices:
+                for ablated_class_idx in node_effects_group_classes:
                     class_accuracies[ablated_class_idx] = {}
                     print(f"evaluating class {ablated_class_idx}")
 
@@ -846,9 +848,10 @@ def run_interventions(
 
                         if verbose:
                             print(f"Running ablation for T_effect = {T_effect}")
+                            print(f"Ablating {selected_features_mask.sum()} features")
                         test_acts_ablated = {}
                         for evaluated_class_idx in tqdm(
-                            chosen_class_indices, desc="Getting activations"
+                            node_effects_group_classes, desc="Getting activations"
                         ):
                             test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
                                 test_bios[evaluated_class_idx],
@@ -874,7 +877,7 @@ def run_interventions(
 
                         ablated_class_accuracies = probe_training.get_probe_test_accuracy(
                             probes,
-                            chosen_class_indices,
+                            node_effects_group_classes,
                             test_acts_ablated,
                             p_config.probe_batch_size,
                         )
@@ -889,7 +892,9 @@ def run_interventions(
 
             class_accuracies = utils.to_device(class_accuracies, "cpu")
 
-            save_log_files(ae_path, class_accuracies, "class_accuracies", ".pkl")
+            save_log_files(
+                ae_path, class_accuracies, f"class_accuracies{effects_group_name}", ".pkl"
+            )
 
 
 # %%
@@ -915,7 +920,7 @@ if __name__ == "__main__":
 
     top_n_features = [2, 5, 10, 20, 50, 100, 500, 2000]
     # top_n_features = [5, 10, 20, 50, 500]
-    # top_n_features = [10]
+    top_n_features = [2, 5, 10, 20]
     T_effects_all_classes = [0.1, 0.05, 0.025, 0.01, 0.001]
     T_effects_all_classes = [0.1, 0.01]
     T_effects_unique_class = [1e-4, 1e-8]
