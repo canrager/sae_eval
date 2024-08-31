@@ -391,26 +391,25 @@ def create_few_shot_examples(prompt_dir: str, verbose: bool = False) -> str:
 
 def create_test_prompts(
     manual_test_labels: dict,
-) -> tuple[dict[int, str], dict[int, tuple[int | str, dict[str, int], str]]]:
+) -> dict[int, str]:
     test_prompts = {}
-    test_prompt_metadata = {}
-
     for test_index in manual_test_labels:
-        example_prompts = manual_test_labels[test_index]["example_prompts"]
+        # TODO Why is this [0]?
+        example_prompts = manual_test_labels[test_index]["example_prompts"][0]
         tokens_string = manual_test_labels[test_index]["tokens_string"]
-        per_class_scores = manual_test_labels[test_index]["per_class_scores"]
-        chain_of_thought = manual_test_labels[test_index]["chain_of_thought"]
-        class_index = manual_test_labels[test_index]["class_index"]
 
-        llm_prompt = "Okay, now here's the real task.\n"
-        llm_prompt += f"Promoted tokens: {tokens_string}\n"
-        llm_prompt += f"Example prompts: {example_prompts[0]}\n"
-        llm_prompt += "Chain of thought:"
+        test_prompts[test_index] = create_feature_prompt(example_prompts, tokens_string)
 
-        test_prompts[test_index] = llm_prompt
-        test_prompt_metadata[test_index] = (class_index, per_class_scores, chain_of_thought)
+    return test_prompts
 
-    return test_prompts, test_prompt_metadata
+
+def create_feature_prompt(example_prompts: str, tokens_string: str) -> str:
+    llm_prompt = "Okay, now here's the real task.\n"
+    llm_prompt += f"Promoted tokens: {tokens_string}\n"
+    llm_prompt += f"Example prompts: {example_prompts}\n"
+    llm_prompt += "Chain of thought:"
+
+    return llm_prompt
 
 
 def create_unlabeled_prompts(example_prompts_FK: List[List[str]], dla_FK) -> list[str]:
