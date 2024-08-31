@@ -72,7 +72,7 @@ def node_effects_autointerp(
 
     llm_out = llm_query.run_all_prompts(
         number_of_test_examples=len(unlabeled_prompts),
-        model=cfg["llm_judge_name"],
+        api_llm=cfg["llm_judge_name"],
         system_prompt=system_prompt,
         test_prompts=unlabeled_prompts,
         test_prompts_indices=unlabeled_prompt_idxs,

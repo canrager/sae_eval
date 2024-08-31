@@ -36,3 +36,25 @@ class PipelineConfig:
 
     attribution_patching_method: str = "attrib"
     ig_steps: int = 10
+
+    # Autointerp stuff
+
+    # api_llm: str = "claude-3-5-sonnet-20240620"
+    api_llm: str = "claude-3-haiku-20240307"
+
+    prompt_dir: str = "llm_autointerp"
+    node_effects_attrib_filename: str = "node_effects.pkl"
+    autointerp_filename: str = "node_effects_auto_interp.pkl"
+    bias_shift_dir1_filename: str = "node_effects_bias_shift_dir1.pkl"
+    bias_shift_dir2_filename: str = "node_effects_bias_shift_dir2.pkl"
+
+    num_top_emphasized_tokens: int = 5
+    num_top_inputs_per_feature: int = 5
+    num_top_features_per_class: int = 10
+    num_top_features_per_class: int = 1
+
+    llm_judge_min_scale: int = 0
+    llm_judge_max_scale: int = 4
+    llm_judge_binary_threshold: float = 0.5
+
+    include_activation_values_in_prompt: bool = True
