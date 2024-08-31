@@ -273,13 +273,13 @@ def format_examples(
     max_activations_FKL: torch.Tensor,
     num_top_emphasized_tokens: int,
     include_activations: bool = False,
-):
+) -> list[str]:
     # Move tensors to CPU if they're on GPU, seems to be 4x faster on BauLab Machine
     max_token_idxs_FKL = max_token_idxs_FKL.cpu()
     max_activations_FKL = max_activations_FKL.cpu()
 
     # Batch decode all tokens at once, maintaining individual tokens
-    max_token_str_FKL = utils.batch_decode_to_tokens(max_token_idxs_FKL, tokenizer)
+    max_token_str_FKL = utils.list_decode(max_token_idxs_FKL, tokenizer)
 
     example_prompts = []
     for max_token_str_KL, max_activations_KL in tqdm(
@@ -293,28 +293,19 @@ def format_examples(
             top_n=num_top_emphasized_tokens,
             include_activations=include_activations,
         )
-        formatted_sequences = [
-            "".join(tokens) for tokens in formatted_sequences_K if tokens
-        ]  # Drop empty sequences
 
-        example_prompt = []
+        for tokens in formatted_sequences_K:
+            if not tokens:
+                raise ValueError("Empty sequence found")
+
+        formatted_sequences = ["".join(tokens) for tokens in formatted_sequences_K] 
+
+        example_prompt = ""
         for i, seq in enumerate(formatted_sequences):
-            example_prompt.append(f"\n\n\nExample {i+1}: {seq}\n\n")
-        example_prompt = "".join(example_prompt)
+            example_prompt += f"\n\n\nExample {i+1}: {seq}\n\n"
         example_prompts.append(example_prompt)
 
     return example_prompts
-
-
-def evaluate_binary_llm_output(string: str) -> bool:
-    if "yes" in string and "no" in string:
-        raise ValueError("String contains both 'yes' and 'no'")
-    elif "yes" in string:
-        return True
-    elif "no" in string:
-        return False
-    else:
-        raise ValueError("String does not contain 'yes' or 'no'")
 
 
 if __name__ == "__main__":
