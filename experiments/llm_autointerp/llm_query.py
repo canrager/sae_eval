@@ -341,11 +341,15 @@ def llm_json_response_to_node_effects(
     node_effects_bias_shift_dir1 = {
         "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
         "biased_male / biased_female": torch.zeros(dict_size, device="cpu"),
+        "male / female": torch.zeros(dict_size, device="cpu"),
+        "professor / nurse": torch.zeros(dict_size, device="cpu"),
     }
 
     node_effects_bias_shift_dir2 = {
         "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
         "biased_male / biased_female": torch.zeros(dict_size, device="cpu"),
+        "male / female": torch.zeros(dict_size, device="cpu"),
+        "professor / nurse": torch.zeros(dict_size, device="cpu"),
     }
 
     # Step 1: Regular class names, no bias shift
@@ -382,8 +386,12 @@ def llm_json_response_to_node_effects(
 
             if class_name == "male / female":
                 node_effects_auto_interp[class_name][sae_feature_idx] = gender_value
+                node_effects_bias_shift_dir1[class_name][sae_feature_idx] = gender_value
+                node_effects_bias_shift_dir2[class_name][sae_feature_idx] = gender_value
             elif class_name == "professor / nurse":
                 node_effects_auto_interp[class_name][sae_feature_idx] = professor_nurse_value
+                node_effects_bias_shift_dir1[class_name][sae_feature_idx] = professor_nurse_value
+                node_effects_bias_shift_dir2[class_name][sae_feature_idx] = professor_nurse_value
             elif (
                 class_name == "male_professor / female_nurse"
                 or class_name == "biased_male / biased_female"
