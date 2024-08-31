@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 import torch
+from typing import Optional
 
 
 @dataclass
 class PipelineConfig:
     max_activations_collection_n_inputs: int = 5000
-    top_k_activating_inputs: int = 10
+    top_k_inputs_act_collect: int = 5
 
     probe_train_set_size: int = 4000
     probe_test_set_size: int = 500
@@ -43,7 +44,13 @@ class PipelineConfig:
     api_llm: str = "claude-3-5-sonnet-20240620"
     # api_llm: str = "claude-3-haiku-20240307"
 
-    prompt_dir: str = "llm_autointerp"
+    autointerp_api_total_token_per_minute_limit: int = 400_000
+    autointerp_api_total_requests_per_minute_limit: int = 4_000
+    num_allowed_tokens_per_minute: int = int(0.5 * autointerp_api_total_token_per_minute_limit)
+    num_allowed_requests_per_minute: int = int(0.5 * autointerp_api_total_requests_per_minute_limit)
+    num_tokens_system_prompt: Optional[int] = None
+
+    prompt_dir: str = "llm_autointerp/"
     node_effects_attrib_filename: str = "node_effects.pkl"
     autointerp_filename: str = "node_effects_auto_interp.pkl"
     bias_shift_dir1_filename: str = "node_effects_bias_shift_dir1.pkl"
@@ -58,9 +65,8 @@ class PipelineConfig:
     ]
 
     num_top_emphasized_tokens: int = 5
-    num_top_inputs_per_feature: int = 5
-    num_top_features_per_class: int = 10
-    num_top_features_per_class: int = 1
+    num_top_inputs_autointerp: int = top_k_inputs_act_collect
+    num_top_features_per_class: int = 20
 
     llm_judge_min_scale: int = 0
     llm_judge_max_scale: int = 4

@@ -1,4 +1,5 @@
 import asyncio
+import time
 import anthropic
 from tenacity import retry, stop_after_attempt
 import json
@@ -145,6 +146,7 @@ async def run_all_prompts(
     max_scale: int,
     chosen_class_names: list[str],
     debug_mode: bool = False,
+    ae_path: str = None,
 ) -> dict[int, tuple[str, dict, bool, str]]:
     tasks = [
         process_prompt(
@@ -185,7 +187,7 @@ async def run_all_prompts(
         print(len(results) - 1, good_json, verification_message)
 
     if debug_mode:
-        with open("llm_debug_results.json", "w") as f:
+        with open(os.path.join(ae_path, "llm_debug_results.json"), "w") as f:
             json.dump(results, f)
 
     return results
@@ -199,7 +201,7 @@ def test_llm_vs_manual_labels(
 ):
     client = anthropic.AsyncAnthropic()
 
-    with open(f"{p_config.prompt_dir}/manual_labels_can_final.json", "r") as f:
+    with open(os.path.join(p_config, "manual_labels_can_final.json"), "r") as f:
         manual_test_labels = json.load(f)
 
     few_shot_examples = prompts.create_few_shot_examples(prompt_dir=p_config.prompt_dir)
@@ -272,10 +274,10 @@ def construct_llm_features_prompts(
 
     for feature_idx in all_unique_feature_indices:
         feature_token_idxs_1KL = max_token_idxs_FKL[
-            feature_idx, : p_config.num_top_inputs_per_feature, :
+            feature_idx, : p_config.num_top_inputs_autointerp, :
         ].unsqueeze(0)
         feature_activations_1KL = max_activations_FKL[
-            feature_idx, : p_config.num_top_inputs_per_feature, :
+            feature_idx, : p_config.num_top_inputs_autointerp, :
         ].unsqueeze(0)
         feature_dla_token_idxs_K = top_dla_token_idxs_FK[feature_idx]
 
@@ -445,6 +447,9 @@ def llm_json_response_to_node_effects(
     with open(f"{ae_path}/{p_config.bias_shift_dir2_filename}", "wb") as f:
         pickle.dump(node_effects_bias_shift_dir2, f)
 
+    with open(os.path.join(ae_path, "autointerp_pipeline_config.json"), "w") as f:
+        json.dump(p_config.__dict__, f)
+
     return node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2
 
 
@@ -453,9 +458,10 @@ def perform_llm_autointerp(
     p_config: PipelineConfig,
     ae_path: str,
     debug_mode: bool = False,
-    force_recompute: bool = False,
 ) -> tuple[dict[int, torch.Tensor], dict[int, torch.Tensor], dict[int, torch.Tensor]]:
-    if not force_recompute and os.path.exists(f"{ae_path}/{p_config.autointerp_filename}"):
+    if not p_config.force_autointerp_recompute and os.path.exists(
+        f"{ae_path}/{p_config.autointerp_filename}"
+    ):
         print("Loading auto interp results from file")
         with open(f"{ae_path}/{p_config.autointerp_filename}", "rb") as f:
             node_effects_auto_interp = pickle.load(f)
@@ -470,7 +476,7 @@ def perform_llm_autointerp(
 
     elif not os.path.exists(f"{ae_path}/{p_config.autointerp_filename}"):
         print("Auto interp results not found, performing LLM query")
-    elif force_recompute:
+    elif p_config.force_autointerp_recompute:
         print("Recomputing auto interp results")
 
     client = anthropic.AsyncAnthropic()
@@ -490,20 +496,31 @@ def perform_llm_autointerp(
 
     features_prompts = construct_llm_features_prompts(ae_path, tokenizer, p_config)
 
-    results = asyncio.run(
-        run_all_prompts(
-            number_of_test_examples=len(features_prompts),
-            client=client,
-            api_llm=p_config.api_llm,
-            system_prompt=system_prompt,
-            test_prompts=features_prompts,
-            few_shot_examples=few_shot_examples,
-            min_scale=p_config.llm_judge_min_scale,
-            max_scale=p_config.llm_judge_max_scale,
-            chosen_class_names=p_config.chosen_autointerp_class_names,
-            debug_mode=debug_mode,
+    batches_prompt_indices = llm_utils.get_prompt_batch_indices(features_prompts, p_config)
+
+    results = {} 
+    
+    for batch_indices in batches_prompt_indices:
+        test_prompts = {idx: features_prompts[idx] for idx in batch_indices}
+        results.update(
+            asyncio.run(
+                run_all_prompts(
+                    len(test_prompts),
+                    client,
+                    p_config.api_llm,
+                    system_prompt,
+                    test_prompts,
+                    few_shot_examples,
+                    p_config.llm_judge_min_scale,
+                    p_config.llm_judge_max_scale,
+                    p_config.chosen_autointerp_class_names,
+                    debug_mode,
+                    ae_path,
+                )
+            )
         )
-    )
+        time.sleep(60)
+    
 
     # 1 is the index of the extracted json from the llm's response
     json_results = {idx: result[1] for idx, result in results.items()}
@@ -516,19 +533,6 @@ if __name__ == "__main__":
         api_key = f.read().strip()
 
     os.environ["ANTHROPIC_API_KEY"] = api_key
-
-    PROMPT_DIR = "llm_autointerp"
-
-    min_scale = 0
-    max_scale = 4
-    api_llm = "claude-3-5-sonnet-20240620"
-    api_llm = "claude-3-haiku-20240307"
-
-    # IMPORTANT NOTE: We are using prompt caching. Before running on many prompts, run a single prompt
-    # two times with number_of_test_examples = 1 and verify that
-    # the cache_creation_input_tokens is 0 and cache_read_input_tokens is > 3000 on the second call.
-    # Then you can run on many prompts with number_of_test_examples > 1.
-    number_of_test_examples = 1
 
     debug_mode = True
 

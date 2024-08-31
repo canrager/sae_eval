@@ -697,7 +697,7 @@ def run_interventions(
             p_config.max_activations_collection_n_inputs,
             llm_batch_size,
             context_length,
-            p_config.top_k_activating_inputs,
+            p_config.top_k_inputs_act_collect,
             ae_paths,
             force_rerun=p_config.force_max_activations_recompute,
         )

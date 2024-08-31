@@ -1,4 +1,5 @@
 import json
+import os
 
 ### SYSTEM PROMPT ###
 
@@ -360,7 +361,7 @@ def build_system_prompt(
 
 
 def create_few_shot_examples(prompt_dir: str, verbose: bool = False) -> str:
-    with open(f"{prompt_dir}/manual_labels_few_shot.json", "r") as f:
+    with open(os.path.join(prompt_dir, 'manual_labels_few_shot.json'), "r") as f:
         few_shot_manual_labels = json.load(f)
 
     if verbose:
