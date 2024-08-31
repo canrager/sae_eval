@@ -1,3 +1,5 @@
+# TODO: Consolidate all bias in bios utility stuff
+# TODO: Only use strings for keys, only use ints when initializing the dictionary datasets
 profession_dict = {
     "gender": -2,
     "accountant": 0,
