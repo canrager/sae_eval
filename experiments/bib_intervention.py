@@ -29,6 +29,7 @@ import experiments.probe_training as probe_training
 import experiments.utils as utils
 import experiments.eval_saes as eval_saes
 import experiments.autointerp as autointerp
+import experiments.llm_autointerp.llm_query as llm_query
 
 from experiments.pipeline_config import PipelineConfig
 from experiments.probe_training import (
@@ -496,14 +497,33 @@ def select_top_n_features(
             n <= effects.numel()
         ), f"n ({n}) must not be larger than the number of features ({effects.numel()}) for ablation class {abl_class_idx}"
 
-        # Get the indices of the top N effects
-        _, top_indices = t.topk(effects, n)
+        # Find non-zero effects
+        non_zero_mask = effects != 0
+        non_zero_effects = effects[non_zero_mask]
+        num_non_zero = non_zero_effects.numel()
 
-        # Create a boolean mask tensor
-        mask = t.zeros_like(effects, dtype=t.bool)
-        mask[top_indices] = True
+        if num_non_zero < n:
+            print(
+                f"WARNING: only {num_non_zero} non-zero effects found for ablation class {abl_class_idx}, which is less than the requested {n}."
+            )
 
-        top_n_features[abl_class_idx] = mask
+        # Select top n or all non-zero effects, whichever is smaller
+        k = min(n, num_non_zero)
+
+        if k == 0:
+            print(
+                f"WARNING: No non-zero effects found for ablation class {abl_class_idx}. Returning an empty mask."
+            )
+            top_n_features[abl_class_idx] = t.zeros_like(effects, dtype=t.bool)
+        else:
+            # Get the indices of the top N effects
+            _, top_indices = t.topk(effects, n)
+
+            # Create a boolean mask tensor
+            mask = t.zeros_like(effects, dtype=t.bool)
+            mask[top_indices] = True
+
+            top_n_features[abl_class_idx] = mask
 
     return top_n_features
 
@@ -582,6 +602,12 @@ def select_features(
             selected_features[n] = select_top_n_features(node_effects, n)
     else:
         raise ValueError("Invalid selection method")
+
+    for T_effect in T_effects:
+        for ablated_class_idx in selected_features[T_effect]:
+            mask = selected_features[T_effect][ablated_class_idx]
+            effects = node_effects[ablated_class_idx]
+            assert mask.size() == effects.size(), "Mask and effects must have the same size"
 
     return selected_features
 
@@ -749,7 +775,7 @@ def run_interventions(
         dictionaries[submodule] = dictionary
         dict_size = sae_config["trainer"]["dict_size"]
 
-        class_accuracies = {"clean_acc": test_accuracies.copy()}
+        class_accuracies = {"clean_acc": test_accuracies}
 
         # For every class, we get the indirect effects of every SAE feature wrt. the class probe
         node_effects = get_all_node_effects_for_one_sae(
@@ -768,75 +794,102 @@ def run_interventions(
             steps=p_config.ig_steps,
         )
 
-        selected_features = select_features(
-            selection_method, node_effects, dict_size, T_effects, T_max_sideeffect, verbose=verbose
-        )
+        if p_config.use_autointerp:
+            # This will save node_effects_auto_interp.pkl, node_effects_bias_shift_dir1.pkl, and node_effects_bias_shift_dir2.pkl alongside each SAE
+            node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = (
+                llm_query.perform_llm_autointerp(
+                    tokenizer=model.tokenizer,
+                    p_config=p_config,
+                    ae_path=ae_path,
+                    debug_mode=True,
+                    force_recompute=p_config.force_autointerp_recompute,
+                )
+            )
+            all_node_effects = [
+                node_effects,
+                node_effects_auto_interp,
+                node_effects_bias_shift_dir1,
+                node_effects_bias_shift_dir2,
+            ]
+        else:
+            all_node_effects = [node_effects]
 
         t.cuda.empty_cache()
         gc.collect()
 
-        with t.inference_mode():
-            # Now that we have collected node effects and selected features, we ablate the selected features and measure the change in probe accuracy
-            for ablated_class_idx in chosen_class_indices:
-                class_accuracies[ablated_class_idx] = {}
-                print(f"evaluating class {ablated_class_idx}")
+        for node_effects_group in all_node_effects:
+            selected_features = select_features(
+                selection_method,
+                node_effects_group,
+                dict_size,
+                T_effects,
+                T_max_sideeffect,
+                verbose=verbose,
+            )
 
-                for T_effect in T_effects:
-                    feats = selected_features[T_effect][ablated_class_idx]
+            with t.inference_mode():
+                # Now that we have collected node effects and selected features, we ablate the selected features and measure the change in probe accuracy
+                for ablated_class_idx in chosen_class_indices:
+                    class_accuracies[ablated_class_idx] = {}
+                    print(f"evaluating class {ablated_class_idx}")
 
-                    if len(feats) == 0:
-                        print(f"No features selected for T_effect = {T_effect}")
-                        continue
+                    for T_effect in T_effects:
+                        class_accuracies[ablated_class_idx][T_effect] = {}
+                        selected_features_mask = selected_features[T_effect][ablated_class_idx]
 
-                    class_accuracies[ablated_class_idx][T_effect] = {}
-                    if verbose:
-                        print(f"Running ablation for T_effect = {T_effect}")
-                    test_acts_ablated = {}
-                    for evaluated_class_idx in tqdm(
-                        chosen_class_indices, desc="Getting activations"
-                    ):
-                        test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
-                            test_bios[evaluated_class_idx],
-                            model,
-                            submodules,
-                            dictionaries,
-                            feats,
-                            llm_batch_size,
-                            probe_act_submodule,
-                        )
+                        if t.all(selected_features_mask == 0):
+                            print(f"No features selected for T_effect = {T_effect}")
+                            # If no features are selected, we skip the ablation
+                            # We set the accuracy to the clean accuracy for ease of plotting later
+                            class_accuracies[ablated_class_idx][T_effect] = test_accuracies
+                            continue
 
-                        if evaluated_class_idx in utils.PAIRED_CLASS_KEYS:
-                            paired_class_idx = utils.PAIRED_CLASS_KEYS[evaluated_class_idx]
-                            test_acts_ablated[paired_class_idx] = get_all_acts_ablated(
-                                test_bios[paired_class_idx],
+                        if verbose:
+                            print(f"Running ablation for T_effect = {T_effect}")
+                        test_acts_ablated = {}
+                        for evaluated_class_idx in tqdm(
+                            chosen_class_indices, desc="Getting activations"
+                        ):
+                            test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
+                                test_bios[evaluated_class_idx],
                                 model,
                                 submodules,
                                 dictionaries,
-                                feats,
+                                selected_features_mask,
                                 llm_batch_size,
                                 probe_act_submodule,
                             )
 
-                    ablated_class_accuracies = probe_training.get_probe_test_accuracy(
-                        probes, chosen_class_indices, test_acts_ablated, p_config.probe_batch_size
-                    )
+                            if evaluated_class_idx in utils.PAIRED_CLASS_KEYS:
+                                paired_class_idx = utils.PAIRED_CLASS_KEYS[evaluated_class_idx]
+                                test_acts_ablated[paired_class_idx] = get_all_acts_ablated(
+                                    test_bios[paired_class_idx],
+                                    model,
+                                    submodules,
+                                    dictionaries,
+                                    selected_features_mask,
+                                    llm_batch_size,
+                                    probe_act_submodule,
+                                )
 
-                    # We must iterate over ablated_class_accuracies because get_probe_test_accuracy tests spurious correlations as well
-                    for evaluated_class_idx in ablated_class_accuracies:
-                        if verbose:
-                            print(
-                                f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {ablated_class_accuracies[evaluated_class_idx]['acc']}"
-                            )
-                        class_accuracies[ablated_class_idx][T_effect][evaluated_class_idx] = {
-                            "acc": ablated_class_accuracies[evaluated_class_idx]["acc"],
-                            "acc_0": ablated_class_accuracies[evaluated_class_idx]["acc_0"],
-                            "acc_1": ablated_class_accuracies[evaluated_class_idx]["acc_1"],
-                            "loss": ablated_class_accuracies[evaluated_class_idx]["loss"],
-                        }
+                        ablated_class_accuracies = probe_training.get_probe_test_accuracy(
+                            probes,
+                            chosen_class_indices,
+                            test_acts_ablated,
+                            p_config.probe_batch_size,
+                        )
 
-        class_accuracies = utils.to_device(class_accuracies, "cpu")
+                        class_accuracies[ablated_class_idx][T_effect] = ablated_class_accuracies
 
-        save_log_files(ae_path, class_accuracies, "class_accuracies", ".pkl")
+                        for evaluated_class_idx in ablated_class_accuracies:
+                            if verbose:
+                                print(
+                                    f"Ablated {ablated_class_idx}, evaluated {evaluated_class_idx} test accuracy: {ablated_class_accuracies[evaluated_class_idx]['acc']}"
+                                )
+
+            class_accuracies = utils.to_device(class_accuracies, "cpu")
+
+            save_log_files(ae_path, class_accuracies, "class_accuracies", ".pkl")
 
 
 # %%

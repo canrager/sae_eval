@@ -321,7 +321,7 @@ def llm_json_response_to_node_effects(
     llm_json_response: dict[int, dict[int | str, int]],
     ae_path: str,
     p_config: PipelineConfig,
-):
+) -> tuple[dict[int, torch.Tensor], dict[int, torch.Tensor], dict[int, torch.Tensor]]:
     """Challenges with this function that should be addressed:
     node_effects.pkl has keys of ints 0-27 + utils.PAIRED_CLASS_KEYS
     llm_json_response has keys of 'doctor', 'accountant', etc. + professor, nurse, and gender.
@@ -336,14 +336,17 @@ def llm_json_response_to_node_effects(
     dict_size = first_node_effect.size(0)
 
     for class_name in node_effects_attrib_patching.keys():
-        node_effects_auto_interp[class_name] = torch.zeros(dict_size)
+        node_effects_auto_interp[class_name] = torch.zeros(dict_size, device="cpu")
 
     node_effects_bias_shift_dir1 = {
-        "male_professor / female_nurse": torch.zeros(dict_size),
-        "biased_male / biased_female": torch.zeros(dict_size),
+        "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
+        "biased_male / biased_female": torch.zeros(dict_size, device="cpu"),
     }
 
-    node_effects_bias_shift_dir2 = node_effects_bias_shift_dir1.copy()
+    node_effects_bias_shift_dir2 = {
+        "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
+        "biased_male / biased_female": torch.zeros(dict_size, device="cpu"),
+    }
 
     # Step 1: Regular class names, no bias shift
     for sae_feature_idx in llm_json_response:
@@ -434,19 +437,39 @@ def llm_json_response_to_node_effects(
     with open(f"{ae_path}/{p_config.bias_shift_dir2_filename}", "wb") as f:
         pickle.dump(node_effects_bias_shift_dir2, f)
 
+    return node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2
+
 
 def perform_llm_autointerp(
     tokenizer: AutoTokenizer,
     p_config: PipelineConfig,
-    chosen_class_names: list[str],
     ae_path: str,
     debug_mode: bool = False,
-):
+    force_recompute: bool = False,
+) -> tuple[dict[int, torch.Tensor], dict[int, torch.Tensor], dict[int, torch.Tensor]]:
+    if not force_recompute and os.path.exists(f"{ae_path}/{p_config.autointerp_filename}"):
+        print("Loading auto interp results from file")
+        with open(f"{ae_path}/{p_config.autointerp_filename}", "rb") as f:
+            node_effects_auto_interp = pickle.load(f)
+
+        with open(f"{ae_path}/{p_config.bias_shift_dir1_filename}", "rb") as f:
+            node_effects_bias_shift_dir1 = pickle.load(f)
+
+        with open(f"{ae_path}/{p_config.bias_shift_dir2_filename}", "rb") as f:
+            node_effects_bias_shift_dir2 = pickle.load(f)
+
+        return node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2
+
+    elif not os.path.exists(f"{ae_path}/{p_config.autointerp_filename}"):
+        print("Auto interp results not found, performing LLM query")
+    elif force_recompute:
+        print("Recomputing auto interp results")
+
     client = anthropic.AsyncAnthropic()
 
     few_shot_examples = prompts.create_few_shot_examples(prompt_dir=p_config.prompt_dir)
     system_prompt = prompts.build_system_prompt(
-        concepts=chosen_class_names,
+        concepts=p_config.chosen_autointerp_class_names,
         min_scale=p_config.llm_judge_min_scale,
         max_scale=p_config.llm_judge_max_scale,
     )
@@ -469,7 +492,7 @@ def perform_llm_autointerp(
             few_shot_examples=few_shot_examples,
             min_scale=p_config.llm_judge_min_scale,
             max_scale=p_config.llm_judge_max_scale,
-            chosen_class_names=chosen_class_names,
+            chosen_class_names=p_config.chosen_autointerp_class_names,
             debug_mode=debug_mode,
         )
     )
@@ -477,7 +500,7 @@ def perform_llm_autointerp(
     # 1 is the index of the extracted json from the llm's response
     json_results = {idx: result[1] for idx, result in results.items()}
 
-    llm_json_response_to_node_effects(json_results, ae_path, p_config)
+    return llm_json_response_to_node_effects(json_results, ae_path, p_config)
 
 
 if __name__ == "__main__":
@@ -486,16 +509,6 @@ if __name__ == "__main__":
 
     os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    chosen_class_names = [
-        "gender",
-        "professor",
-        "nurse",
-        "accountant",
-        "architect",
-        "attorney",
-        "dentist",
-        "filmmaker",
-    ]
     PROMPT_DIR = "llm_autointerp"
 
     min_scale = 0
@@ -516,9 +529,7 @@ if __name__ == "__main__":
 
     p_config = PipelineConfig()
 
-    perform_llm_autointerp(
-        pythia_tokenizer, p_config, chosen_class_names, ae_path, debug_mode=debug_mode
-    )
+    perform_llm_autointerp(pythia_tokenizer, p_config, ae_path, debug_mode=debug_mode)
 
 # if __name__ == "__main__":
 #     with open("../anthropic_api_key.txt", "r") as f:
