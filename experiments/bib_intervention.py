@@ -1022,6 +1022,12 @@ if __name__ == "__main__":
 
     pipeline_config = PipelineConfig()
 
+    if pipeline_config.use_autointerp:
+        with open("../anthropic_api_key.txt", "r") as f:
+            api_key = f.read().strip()
+
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+
     # This will look for any empty folders in any ae_path and raise an error if it finds any
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
         ae_group_paths = utils.get_ae_group_paths(
