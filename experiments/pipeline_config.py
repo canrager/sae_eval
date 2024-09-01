@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import torch
 from typing import Optional
 
@@ -67,6 +67,7 @@ class PipelineConfig:
     num_top_emphasized_tokens: int = 5
     num_top_inputs_autointerp: int = top_k_inputs_act_collect
     num_top_features_per_class: int = 20
+    num_top_features_per_class: int = 1
 
     llm_judge_min_scale: int = 0
     llm_judge_max_scale: int = 4
@@ -84,3 +85,6 @@ class PipelineConfig:
         "dentist",
         "filmmaker",
     ]
+
+    def to_dict(self):
+        return {k: str(v) if isinstance(v, torch.dtype) else v for k, v in asdict(self).items()}

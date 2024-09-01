@@ -25,6 +25,7 @@ async def anthropic_request_prompt_caching(
     few_shot_examples: str,
     test_prompt: str,
     model: str,
+    verbose: bool = False,
 ) -> str:
     message = await client.beta.prompt_caching.messages.create(
         model=model,
@@ -45,10 +46,11 @@ async def anthropic_request_prompt_caching(
             }
         ],
     )
-    # After this is called a second time, cache_creation_input_tokens should be 0
-    # cache_read_input_tokens should be > 3000 (len(few_shot_examples) + len(system_prompt))
-    print(f"Cache creation tokens: {message.usage.cache_creation_input_tokens}")
-    print(f"Cache read tokens: {message.usage.cache_read_input_tokens}")
+    if verbose:
+        # After this is called a second time, cache_creation_input_tokens should be 0
+        # cache_read_input_tokens should be > 3000 (len(few_shot_examples) + len(system_prompt))
+        print(f"Cache creation tokens: {message.usage.cache_creation_input_tokens}")
+        print(f"Cache read tokens: {message.usage.cache_read_input_tokens}")
     return message.content[0].text
 
 
@@ -447,8 +449,8 @@ def llm_json_response_to_node_effects(
     with open(f"{ae_path}/{p_config.bias_shift_dir2_filename}", "wb") as f:
         pickle.dump(node_effects_bias_shift_dir2, f)
 
-    with open(os.path.join(ae_path, "autointerp_pipeline_config.json"), "w") as f:
-        json.dump(p_config.__dict__, f)
+    with open(os.path.join(ae_path, "autointerp_pipeline_config.pkl"), "wb") as f:
+        pickle.dump(p_config, f)
 
     return node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2
 
@@ -487,6 +489,9 @@ def perform_llm_autointerp(
         min_scale=p_config.llm_judge_min_scale,
         max_scale=p_config.llm_judge_max_scale,
     )
+    system_prompt_tokens = llm_utils.count_tokens(system_prompt[0]["text"])
+    few_shot_examples_tokens = llm_utils.count_tokens(few_shot_examples)
+    p_config.num_tokens_system_prompt = system_prompt_tokens + few_shot_examples_tokens
 
     asyncio.run(
         fill_anthropic_prompt_cache(
@@ -497,10 +502,11 @@ def perform_llm_autointerp(
     features_prompts = construct_llm_features_prompts(ae_path, tokenizer, p_config)
 
     batches_prompt_indices = llm_utils.get_prompt_batch_indices(features_prompts, p_config)
+    print(batches_prompt_indices)
 
     results = {} 
     
-    for batch_indices in batches_prompt_indices:
+    for b, batch_indices in enumerate(batches_prompt_indices):
         test_prompts = {idx: features_prompts[idx] for idx in batch_indices}
         results.update(
             asyncio.run(
@@ -519,8 +525,12 @@ def perform_llm_autointerp(
                 )
             )
         )
-        time.sleep(60)
+        num_batches_left = len(batches_prompt_indices) - b - 1
+        if num_batches_left > 0:
+            print(f'Finished batch of {len(test_prompts)} prompts. Waiting for 60 seconds to obey API limits... There are {num_batches_left} batches left.')
+            time.sleep(60)
     
+    print(results)
 
     # 1 is the index of the extracted json from the llm's response
     json_results = {idx: result[1] for idx, result in results.items()}

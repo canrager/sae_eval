@@ -52,11 +52,10 @@ def count_tokens(prompt: str, model: str = "gpt-4") -> int:
     num_tokens = len(encoding.encode(prompt))
     return num_tokens
 
-def get_prompt_batch_indices(prompts: Dict[str: str], p_config: PipelineConfig):
+def get_prompt_batch_indices(prompts: Dict[str, str], p_config: PipelineConfig):
     '''Given a dictionary of prompts, return a list of lists of indices of the prompts to be queried in each batch.'''
     assert p_config.num_tokens_system_prompt is not None, "num_tokens_system_prompt must be set in the config during the pipeline"
-    prompts_num_tokens = {k: count_tokens(v) + p_config.num_tokens_system_prompt 
-                          for k, v in prompts.items()}
+    prompts_num_tokens = {k: (count_tokens(v) + p_config.num_tokens_system_prompt) for k, v in prompts.items()}
 
     running_token_count = 0
     running_feat_idx_batch = []
