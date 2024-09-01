@@ -147,8 +147,6 @@ async def run_all_prompts(
     min_scale: int,
     max_scale: int,
     chosen_class_names: list[str],
-    debug_mode: bool = False,
-    ae_path: str = None,
 ) -> dict[int, tuple[str, dict, bool, str]]:
     tasks = [
         process_prompt(
@@ -187,10 +185,6 @@ async def run_all_prompts(
         )
 
         print(len(results) - 1, good_json, verification_message)
-
-    if debug_mode:
-        with open(os.path.join(ae_path, "llm_debug_results.json"), "w") as f:
-            json.dump(results, f)
 
     return results
 
@@ -502,7 +496,6 @@ def perform_llm_autointerp(
     features_prompts = construct_llm_features_prompts(ae_path, tokenizer, p_config)
 
     batches_prompt_indices = llm_utils.get_prompt_batch_indices(features_prompts, p_config)
-    print(batches_prompt_indices)
 
     results = {} 
     
@@ -529,11 +522,16 @@ def perform_llm_autointerp(
         if num_batches_left > 0:
             print(f'Finished batch of {len(test_prompts)} prompts. Waiting for 60 seconds to obey API limits... There are {num_batches_left} batches left.')
             time.sleep(60)
-    
-    print(results)
 
     # 1 is the index of the extracted json from the llm's response
     json_results = {idx: result[1] for idx, result in results.items()}
+
+    if debug_mode:
+        with open(os.path.join(ae_path, "raw_llm_outputs.json"), "w") as f:
+            json.dump(results, f)
+            
+        with open(os.path.join(ae_path, "extracted_json_llm_outputs.json"), "w") as f:
+            json.dump(json_results, f)
 
     return llm_json_response_to_node_effects(json_results, ae_path, p_config)
 
