@@ -513,8 +513,6 @@ def perform_llm_autointerp(
                     p_config.llm_judge_min_scale,
                     p_config.llm_judge_max_scale,
                     p_config.chosen_autointerp_class_names,
-                    debug_mode,
-                    ae_path,
                 )
             )
         )
@@ -529,7 +527,7 @@ def perform_llm_autointerp(
     if debug_mode:
         with open(os.path.join(ae_path, "raw_llm_outputs.json"), "w") as f:
             json.dump(results, f)
-            
+
         with open(os.path.join(ae_path, "extracted_json_llm_outputs.json"), "w") as f:
             json.dump(json_results, f)
 
