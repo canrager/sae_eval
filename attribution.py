@@ -54,6 +54,7 @@ def _pe_attrib(
                 submodule.output[0][:] = x_recon
             else:
                 submodule.output = x_recon
+            x_recon[:, 0, :] = x[:, 0, :]
             x.grad = x_recon.grad
         metric_clean = metric_fn(model, **metric_kwargs).save()
         metric_clean.sum().backward()
@@ -93,6 +94,7 @@ def _pe_attrib(
         delta = (
             patch_state - clean_state.detach() if patch_state is not None else -clean_state.detach()
         )
+        # delta.act[:, 0, :] = 0  # zero out the first token
         effect = delta @ grad
         effects[submodule] = effect
         deltas[submodule] = delta
