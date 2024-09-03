@@ -39,7 +39,12 @@ def _pe_attrib(
             if is_tuple[submodule]:
                 x = x[0]
             x = x.to(dtype=model.dtype)
-            x_hat, f = dictionary(x, output_features=True)  # x_hat implicitly depends on f
+
+            # I have no idea why (x - 0.0) is necessary
+            # Without it, we get this error from the JumpReluAutoEncoder class
+            # RuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation
+            # It can also be fixed by setting pre_jump = self.encoder(x - 0.0) + self.b_enc in the JumpReluAutoEncoder class
+            x_hat, f = dictionary((x - 0.0), output_features=True)  # x_hat implicitly depends on f
             residual = x - x_hat
             hidden_states_clean[submodule] = SparseAct(act=f, res=residual).save()
             grads[submodule] = hidden_states_clean[submodule].grad.save()
@@ -49,6 +54,7 @@ def _pe_attrib(
                 submodule.output[0][:] = x_recon
             else:
                 submodule.output = x_recon
+            x_recon[:, 0, :] = x[:, 0, :]
             x.grad = x_recon.grad
         metric_clean = metric_fn(model, **metric_kwargs).save()
         metric_clean.sum().backward()
@@ -88,6 +94,7 @@ def _pe_attrib(
         delta = (
             patch_state - clean_state.detach() if patch_state is not None else -clean_state.detach()
         )
+        # delta.act[:, 0, :] = 0  # zero out the first token
         effect = delta @ grad
         effects[submodule] = effect
         deltas[submodule] = delta

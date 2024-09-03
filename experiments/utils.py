@@ -10,6 +10,7 @@ from dictionary_learning.dictionary import (
     IdentityDict,
     GatedAutoEncoder,
     AutoEncoderNew,
+    JumpReluAutoEncoder,
 )
 from dictionary_learning.trainers.top_k import AutoEncoderTopK
 from dictionary_learning.interp import examine_dimension
@@ -224,6 +225,8 @@ def load_dictionary(model, base_path: str, device: str, verbose: bool = True):
     elif dict_class == "AutoEncoderTopK":
         k = config["trainer"]["k"]
         dictionary = AutoEncoderTopK.from_pretrained(ae_path, k=k, device=device)
+    elif dict_class == "JumpReluAutoEncoder":
+        dictionary = JumpReluAutoEncoder.from_pretrained(ae_path, device=device)
     else:
         raise ValueError(f"Dictionary class {dict_class} not supported")
 

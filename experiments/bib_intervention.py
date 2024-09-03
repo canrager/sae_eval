@@ -802,7 +802,6 @@ def run_interventions(
                     p_config=p_config,
                     ae_path=ae_path,
                     debug_mode=True,
-                    force_recompute=p_config.force_autointerp_recompute,
                 )
             )
             all_node_effects = [
