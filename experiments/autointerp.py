@@ -142,6 +142,15 @@ def compute_dla(
     return topk_indices_FK
 
 
+def get_decoder_weight(autoencoder):
+    if hasattr(autoencoder, "decoder"):
+        return autoencoder.decoder.weight
+    elif hasattr(autoencoder, "W_dec"):
+        return autoencoder.W_dec.T
+    else:
+        raise ValueError("No decoder found")
+
+
 def get_autointerp_inputs_for_one_sae(
     model: LanguageModel,
     batched_data: dict,
@@ -172,9 +181,11 @@ def get_autointerp_inputs_for_one_sae(
 
     unembed_VD = utils.get_submodule(model, "unembed", -1).weight
 
-    dla_results_FK = compute_dla(
-        all_feature_indices, autoencoder.decoder.weight, unembed_VD, top_k_prompts
-    ).to(dtype=torch.int32)
+    decoder_weight = get_decoder_weight(autoencoder)
+
+    dla_results_FK = compute_dla(all_feature_indices, decoder_weight, unembed_VD, top_k_prompts).to(
+        dtype=torch.int32
+    )
 
     assert max_tokens_FKL.dtype == torch.int32
     assert max_activations_FKL.dtype == torch.bfloat16
