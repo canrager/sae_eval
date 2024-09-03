@@ -5,7 +5,7 @@ import json
 import os
 
 import experiments.utils as utils
-from dictionary_learning.buffer import ActivationBuffer
+from dictionary_learning.buffer import EvaluationActivationBuffer
 from dictionary_learning.evaluation import evaluate
 
 DEBUGGING = False
@@ -52,13 +52,15 @@ def eval_saes(
 
         submodule, dictionary, config = utils.load_dictionary(model, ae_path, device)
 
+        dictionary = dictionary.to(dtype=model.dtype)
+
         activation_dim = config["trainer"]["activation_dim"]
         # TODO: Think about how to handle context length... should we instead use the same context length for all dictionaries?
         context_length = config["buffer"]["ctx_len"]
 
         activation_buffer_data = iter(input_strings)
 
-        activation_buffer = ActivationBuffer(
+        activation_buffer = EvaluationActivationBuffer(
             activation_buffer_data,
             model,
             submodule,
@@ -72,7 +74,13 @@ def eval_saes(
         )
 
         eval_results = evaluate(
-            dictionary, activation_buffer, context_length, llm_batch_size, io=io, device=device, n_batches=n_batches
+            dictionary,
+            activation_buffer,
+            context_length,
+            llm_batch_size,
+            io=io,
+            device=device,
+            n_batches=n_batches,
         )
 
         hyperparameters = {
