@@ -46,9 +46,9 @@ class PipelineConfig:
 
     autointerp_api_total_token_per_minute_limit: int = 400_000
     autointerp_api_total_requests_per_minute_limit: int = 4_000
-    num_allowed_tokens_per_minute: int = int(0.8 * autointerp_api_total_token_per_minute_limit)
-    num_allowed_requests_per_minute: int = int(0.8 * autointerp_api_total_requests_per_minute_limit)
-    num_tokens_system_prompt: Optional[int] = None # Will be set during llm_query
+    num_allowed_tokens_per_minute: int = int(0.3 * autointerp_api_total_token_per_minute_limit)
+    num_allowed_requests_per_minute: int = int(0.3 * autointerp_api_total_requests_per_minute_limit)
+    num_tokens_system_prompt: Optional[int] = None  # Will be set during llm_query
 
     prompt_dir: str = "llm_autointerp/"
     node_effects_attrib_filename: str = "node_effects.pkl"
