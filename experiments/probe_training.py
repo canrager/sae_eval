@@ -513,6 +513,7 @@ def train_probes(
     probe_batch_size: int,
     llm_batch_size: int,
     device: str,
+    probe_output_filename: str,
     probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
     epochs: int = 10,
@@ -598,8 +599,6 @@ def train_probes(
         os.makedirs(f"{probe_dir}", exist_ok=True)
         os.makedirs(f"{probe_dir}/{only_model_name}", exist_ok=True)
 
-        probe_output_filename = f"{probe_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
-
         with open(probe_output_filename, "wb") as f:
             pickle.dump(probes, f)
 
@@ -616,6 +615,10 @@ if __name__ == "__main__":
 
     # TODO: I think there may be a scoping issue with model and get_acts(), but we currently aren't using get_acts()
     model = LanguageModel(llm_model_name, device_map=device, dispatch=True)
+    probe_dir = "trained_bib_probes"
+    only_model_name = llm_model_name.split("/")[-1]
+
+    probe_output_filename = f"{probe_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
 
     test_accuracies = train_probes(
         train_set_size=1000,
@@ -627,6 +630,8 @@ if __name__ == "__main__":
         llm_model_name=llm_model_name,
         epochs=10,
         device=device,
+        probe_output_filename=probe_output_filename,
+        probe_dir=probe_dir,
         seed=SEED,
         include_gender=include_gender,
     )

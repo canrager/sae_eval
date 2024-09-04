@@ -714,7 +714,7 @@ def run_interventions(
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
     only_model_name = model_name.split("/")[-1]
-    probe_path = f"{p_config.probes_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
+    probe_path = f"{p_config.probes_dir}/{only_model_name}/probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
@@ -731,6 +731,7 @@ def run_interventions(
             probe_batch_size=p_config.probe_batch_size,
             llm_batch_size=llm_batch_size,
             device=device,
+            probe_output_filename=probe_path,
             probe_dir=p_config.probes_dir,
             llm_model_name=model_name,
             epochs=p_config.probe_epochs,
