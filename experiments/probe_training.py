@@ -302,16 +302,46 @@ def get_all_activations(
     return all_acts_bD
 
 
+def get_activation_distribution_diff(
+    all_activations: dict[int | str, t.Tensor], class_idx: int | str
+) -> t.Tensor:
+    positive_acts_BD = all_activations[class_idx]
+
+    positive_distribution_D = positive_acts_BD.mean(dim=0)
+
+    if isinstance(class_idx, int):
+        # Calculate negative distribution without concatenation
+        negative_sum = t.zeros_like(positive_distribution_D)
+        negative_count = 0
+        for idx, acts in all_activations.items():
+            if idx != class_idx and isinstance(idx, int):
+                negative_sum += acts.sum(dim=0)
+                negative_count += acts.shape[0]
+        negative_distribution_D = negative_sum / negative_count
+        distribution_diff_D = positive_distribution_D - negative_distribution_D
+    else:
+        if class_idx not in utils.PAIRED_CLASS_KEYS:
+            raise ValueError(f"Class index {class_idx} is not a valid class index.")
+
+        negative_acts = all_activations[utils.PAIRED_CLASS_KEYS[class_idx]]
+        negative_distribution_D = negative_acts.mean(dim=0)
+
+        distribution_diff_D = (positive_distribution_D - negative_distribution_D).abs()
+
+    return distribution_diff_D
+
+
 def prepare_probe_data(
     all_activations: dict[int | str, t.Tensor],
     class_idx: int | str,
     batch_size: int,
+    select_top_k: Optional[int] = None,
 ) -> tuple[list[t.Tensor], list[t.Tensor]]:
     """If class_idx is a string, there is a paired class idx in utils.py."""
-    positive_acts = all_activations[class_idx]
-    device = positive_acts.device
+    positive_acts_BD = all_activations[class_idx]
+    device = positive_acts_BD.device
 
-    num_positive = len(positive_acts)
+    num_positive = len(positive_acts_BD)
 
     if isinstance(class_idx, int):
         # Collect all negative class activations and labels
@@ -329,12 +359,30 @@ def prepare_probe_data(
 
     # Randomly select num_positive samples from negative class
     indices = t.randperm(len(negative_acts))[:num_positive]
-    selected_negative_acts = negative_acts[indices]
+    selected_negative_acts_BD = negative_acts[indices]
 
-    assert selected_negative_acts.shape == positive_acts.shape
+    assert selected_negative_acts_BD.shape == positive_acts_BD.shape
+
+    if select_top_k is not None:
+        positive_distribution_D = positive_acts_BD.mean(dim=(0))
+        negative_distribution_D = negative_acts.mean(dim=(0))
+        distribution_diff_D = (positive_distribution_D - negative_distribution_D).abs()
+        top_k_indices_D = t.argsort(distribution_diff_D, descending=True)[:select_top_k]
+
+        mask_D = t.ones(distribution_diff_D.shape[0], dtype=t.bool, device=positive_acts_BD.device)
+        mask_D[top_k_indices_D] = False
+
+        masked_positive_acts_BD = positive_acts_BD.clone()
+        masked_negative_acts_BD = selected_negative_acts_BD.clone()
+
+        masked_positive_acts_BD[:, mask_D] = 0.0
+        masked_negative_acts_BD[:, mask_D] = 0.0
+    else:
+        masked_positive_acts_BD = positive_acts_BD
+        masked_negative_acts_BD = selected_negative_acts_BD
 
     # Combine positive and negative samples
-    combined_acts = t.cat([positive_acts, selected_negative_acts])
+    combined_acts = t.cat([masked_positive_acts_BD, masked_negative_acts_BD])
 
     combined_labels = t.empty(len(combined_acts), dtype=t.int, device=device)
     combined_labels[:num_positive] = utils.POSITIVE_CLASS_LABEL
@@ -418,7 +466,7 @@ def test_probe(
     probe: Probe,
     precomputed_acts: bool,
     get_acts: Optional[Callable] = None,
-) -> float:
+) -> tuple[float, float, float, float]:
     if precomputed_acts is True:
         assert get_acts is None, "get_acts will not be used if precomputed_acts is True."
 
@@ -449,9 +497,9 @@ def test_probe(
             losses.append(loss)
 
         accuracy_all = t.cat(all_corrects).mean().item()
-        loss = t.stack(losses).mean().item()
         accuracy_0 = t.cat(corrects_0).mean().item() if corrects_0 else 0.0
         accuracy_1 = t.cat(corrects_1).mean().item() if corrects_1 else 0.0
+        loss = t.stack(losses).mean().item()
 
     return accuracy_all, accuracy_0, accuracy_1, loss
 
@@ -618,7 +666,12 @@ if __name__ == "__main__":
     probe_dir = "trained_bib_probes"
     only_model_name = llm_model_name.split("/")[-1]
 
-    probe_output_filename = f"{probe_dir}/{only_model_name}/probes_ctx_len_{context_length}.pkl"
+    model_eval_config = utils.ModelEvalConfig.from_full_model_name(llm_model_name)
+    probe_layer = model_eval_config.probe_layer
+
+    probe_output_filename = (
+        f"{probe_dir}/{only_model_name}/probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+    )
 
     test_accuracies = train_probes(
         train_set_size=1000,
