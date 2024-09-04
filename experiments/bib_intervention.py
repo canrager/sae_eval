@@ -639,13 +639,13 @@ def run_interventions(
     p_config: PipelineConfig,
     sweep_name: str,
     selection_method: FeatureSelection,
-    T_effects: list[float],
-    T_max_sideeffect: float,
     random_seed: int,
     chosen_class_indices: list[int | str],
     device: str = "cuda",
     verbose: bool = False,
 ):
+    T_max_sideeffect = 0.000001  # Deprecated
+
     t.manual_seed(random_seed)
     random.seed(random_seed)
     np.random.seed(random_seed)
@@ -806,18 +806,18 @@ def run_interventions(
                 )
             )
             all_node_effects = [
-                (node_effects_auto_interp, "_auto_interp"),
-                (node_effects_bias_shift_dir1, "_bias_shift_dir1"),
-                (node_effects_bias_shift_dir2, "_bias_shift_dir2"),
-                (node_effects, "_attrib"),
+                (node_effects_auto_interp, "_auto_interp", p_config.autointerp_t_effects),
+                (node_effects_bias_shift_dir1, "_bias_shift_dir1", p_config.autointerp_t_effects),
+                (node_effects_bias_shift_dir2, "_bias_shift_dir2", p_config.autointerp_t_effects),
+                (node_effects, "_attrib", p_config.attrib_t_effects),
             ]
         else:
-            all_node_effects = [(node_effects, "_attrib")]
+            all_node_effects = [(node_effects, "_attrib", p_config.attrib_t_effects)]
 
         t.cuda.empty_cache()
         gc.collect()
 
-        for node_effects_group, effects_group_name in all_node_effects:
+        for node_effects_group, effects_group_name, T_effects in all_node_effects:
             selected_features = select_features(
                 selection_method,
                 node_effects_group,
@@ -917,24 +917,6 @@ if __name__ == "__main__":
         2,
         6,
     ]
-
-    top_n_features = [2, 5, 10, 20, 50, 100, 500, 2000]
-    # top_n_features = [5, 10, 20, 50, 500]
-    top_n_features = [2, 5, 10, 20]
-    T_effects_all_classes = [0.1, 0.05, 0.025, 0.01, 0.001]
-    T_effects_all_classes = [0.1, 0.01]
-    T_effects_unique_class = [1e-4, 1e-8]
-
-    if selection_method == FeatureSelection.top_n:
-        T_effects = top_n_features
-    elif selection_method == FeatureSelection.above_threshold:
-        T_effects = T_effects_all_classes
-    elif selection_method == FeatureSelection.unique:
-        T_effects = T_effects_unique_class
-    else:
-        raise ValueError("Invalid selection method")
-
-    T_max_sideeffect = 5e-3
 
     # Use for debugging / any time you need to run from root dir
     # dictionaries_path = "dictionary_learning/dictionaries"
@@ -1047,8 +1029,6 @@ if __name__ == "__main__":
             pipeline_config,
             sweep_name,
             selection_method,
-            T_effects,
-            T_max_sideeffect,
             random_seed,
             chosen_class_indices=chosen_class_indices,
             verbose=True,

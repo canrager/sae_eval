@@ -5,7 +5,7 @@ from typing import Optional
 
 @dataclass
 class PipelineConfig:
-    max_activations_collection_n_inputs: int = 5000
+    max_activations_collection_n_inputs: int = 10000
     top_k_inputs_act_collect: int = 5
 
     probe_train_set_size: int = 4000
@@ -38,6 +38,9 @@ class PipelineConfig:
 
     attribution_patching_method: str = "attrib"
     ig_steps: int = 10
+
+    attrib_t_effects = [2, 5, 10, 20, 50, 100, 500, 1000, 2000]
+    autointerp_t_effects = [2, 5, 10, 20]
 
     # Autointerp stuff
 
