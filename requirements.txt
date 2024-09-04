@@ -5,7 +5,7 @@ graphviz>=0.20.1 #0.20.3
 matplotlib>=3.8.3 #3.8.4
 # nnsight>=0.2.9 #0.2.19
 nnsight==0.2.21 # Breaking change in 0.3.0 with evaluate()
-numpy>=1.26.4 #1.26.4
+numpy>=1.26.4,<2.0.0 #1.26.4
 pandas>=2.2.1 #2.2.2
 plotly>=5.18.0 #5.22.0
 torch>=2.1.2 #2.3.0
