@@ -27,7 +27,9 @@ chosen_class_indices = [
 ]
 
 pipeline_config = PipelineConfig()
-pipeline_config.chosen_autointerp_class_names = [profession_int_to_str[i] for i in chosen_class_indices]
+pipeline_config.chosen_autointerp_class_names = [
+    profession_int_to_str[i] for i in chosen_class_indices
+]
 
 top_n_features = [100]
 T_effects_all_classes = [0.1, 0.01]
@@ -117,7 +119,7 @@ for sweep_name, submodule_trainers in ae_sweep_paths.items():
         pipeline_config,
         sweep_name,
         selection_method,
-        T_effects,
+        T_effects,  # NOTE: I moved this to p_config
         T_max_sideeffect,
         random_seed,
         chosen_class_indices=chosen_class_indices,
