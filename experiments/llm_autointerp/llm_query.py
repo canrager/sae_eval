@@ -254,7 +254,7 @@ def construct_llm_features_prompts(
     max_activations_FKL = max_activating_inputs["max_activations_FKL"]
     top_dla_token_idxs_FK = max_activating_inputs["dla_results_FK"]
 
-    with open(f"{ae_path}/node_effects.pkl", "rb") as f:
+    with open(f"{ae_path}/{p_config.node_effects_attrib_filename}", "rb") as f:
         node_effects_attrib_patching = pickle.load(f)
 
     unique_feature_indices = []
@@ -497,8 +497,8 @@ def perform_llm_autointerp(
 
     batches_prompt_indices = llm_utils.get_prompt_batch_indices(features_prompts, p_config)
 
-    results = {} 
-    
+    results = {}
+
     for b, batch_indices in enumerate(batches_prompt_indices):
         test_prompts = {idx: features_prompts[idx] for idx in batch_indices}
         results.update(
@@ -518,7 +518,9 @@ def perform_llm_autointerp(
         )
         num_batches_left = len(batches_prompt_indices) - b - 1
         if num_batches_left > 0:
-            print(f'Finished batch of {len(test_prompts)} prompts. Waiting for 60 seconds to obey API limits... There are {num_batches_left} batches left.')
+            print(
+                f"Finished batch of {len(test_prompts)} prompts. Waiting for 60 seconds to obey API limits... There are {num_batches_left} batches left."
+            )
             time.sleep(60)
 
     # 1 is the index of the extracted json from the llm's response
