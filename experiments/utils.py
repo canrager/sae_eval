@@ -331,6 +331,47 @@ def get_ctx_length(ae_paths: list[str]) -> int:
     return first_ctx_len
 
 
+def get_sae_layer(ae_paths: list[str]) -> int:
+    """This function is used if you want to evaluate the probe on the same layer as the saes.
+    This means that if calling this function you will have to specify every layer in `ae_sweep_paths`.
+    That is, this:
+    ae_sweep_paths = {
+        "pythia70m_sweep_standard_ctx128_0712": {
+            "resid_post_layer_3": {"trainer_ids": [6]},
+            "resid_post_layer_4": {"trainer_ids": None},
+        }
+    }
+
+    not this:
+    ae_sweep_paths = {
+        "pythia70m_sweep_standard_ctx128_0712": None
+    }
+    """
+    first_sae_layer = None
+
+    for path in ae_paths:
+        config_path = os.path.join(path, "config.json")
+
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
+        sae_layer = config["trainer"]["layer"]
+
+        if first_sae_layer is None:
+            first_sae_layer = sae_layer
+            print(f"Context length of the first path: {first_sae_layer}")
+        else:
+            assert (
+                sae_layer == first_sae_layer
+            ), f"Mismatch in ctx_len at {path}. Expected {first_sae_layer}, got {sae_layer}"
+
+    if first_sae_layer is None:
+        raise ValueError("No paths found.")
+    else:
+        print("All context lengths are the same.")
+    return first_sae_layer
+
+
 def list_decode(x, tokenizer):
     if len(x.shape) == 0:
         return tokenizer.decode(x, skip_special_tokens=True)

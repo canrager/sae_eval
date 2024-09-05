@@ -665,9 +665,6 @@ def run_interventions(
         torch_dtype=p_config.model_dtype,
     )
 
-    probe_layer = model_eval_config.probe_layer
-    probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
-
     ae_group_paths = utils.get_ae_group_paths(
         p_config.dictionaries_path, sweep_name, submodule_trainers
     )
@@ -675,6 +672,18 @@ def run_interventions(
 
     # TODO: experiment with different context lengths
     context_length = utils.get_ctx_length(ae_paths)
+
+    probe_layer = model_eval_config.probe_layer
+
+    if model_name == "google/gemma-2-2b":
+        if isinstance(p_config.gemma_probe_layer, int):
+            probe_layer = p_config.gemma_probe_layer
+        elif p_config.gemma_probe_layer == "sae_layer":
+            probe_layer = utils.get_sae_layer(ae_paths)
+        else:
+            raise ValueError("Invalid probe layer")
+
+    probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
     # This will only run eval_saes on autoencoders that don't yet have a eval_results.json file
     eval_saes.eval_saes(

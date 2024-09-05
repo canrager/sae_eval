@@ -1,5 +1,13 @@
 from dataclasses import dataclass, asdict
 from typing import Optional
+from enum import Enum
+import torch
+
+
+class FeatureSelection(Enum):
+    unique = 1
+    above_threshold = 2
+    top_n = 3
 
 
 @dataclass
@@ -34,6 +42,11 @@ class PipelineConfig:
 
     dictionaries_path: str = "../dictionary_learning/dictionaries"
     probes_dir: str = "trained_bib_probes"
+
+    # If == "sae_layer", then the probe layer is the same as the SAE layer
+    # else it should be an int, representing the layer number
+    # This only applies to Gemma-2-2b
+    gemma_probe_layer: str | int = "sae_layer"
 
     attribution_patching_method: str = "attrib"
     ig_steps: int = 10
