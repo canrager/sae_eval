@@ -624,11 +624,6 @@ def train_probes(
 
         test_acts, test_labels = prepare_probe_data(all_test_acts, profession, probe_batch_size)
 
-        if profession == "biased_male / biased_female" or profession == "male / female":
-            probe_epochs = 1
-        else:
-            probe_epochs = epochs
-
         probe, test_accuracy = train_probe(
             train_acts,
             train_labels,
@@ -636,7 +631,7 @@ def train_probes(
             test_labels,
             get_acts,
             precomputed_acts=True,
-            epochs=probe_epochs,
+            epochs=epochs,
             dim=d_model,
             device=device,
             model_dtype=model_dtype,
