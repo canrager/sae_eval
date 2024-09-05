@@ -902,6 +902,17 @@ def run_interventions(
                 ae_path, class_accuracies, f"class_accuracies{effects_group_name}", ".pkl"
             )
 
+    # Extract results to a separate folder
+    src_folder = os.path.join(p_config.dictionaries_path, sweep_name)
+
+    if spurious_correlation_removal:
+        output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_spurious_removal"
+    else:
+        output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_tpp"
+    results_folder = os.path.join(src_folder, output_folder_name)
+
+    utils.extract_results(src_folder, results_folder, p_config.saving_exclude_files, ae_paths)
+
 
 # %%
 

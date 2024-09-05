@@ -90,6 +90,8 @@ class PipelineConfig:
     bias_shift_dir1_filename: str = "node_effects_bias_shift_dir1.pkl"
     bias_shift_dir2_filename: str = "node_effects_bias_shift_dir2.pkl"
 
+    saving_exclude_files = ["max_activating_inputs.pkl", "ae.pt"]
+
     # This will be shared if you have multiple configs open, so don't do that. Don't modify it while running either.
     node_effect_filenames = [
         node_effects_attrib_filename,

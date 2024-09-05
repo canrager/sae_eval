@@ -1,6 +1,7 @@
 import torch
 import json
 import os
+import shutil
 from typing import List, TypeAlias, Any, Optional
 from tqdm import tqdm, trange
 from transformers import AutoTokenizer
@@ -118,6 +119,39 @@ def get_ae_paths(ae_group_paths: list[str]) -> list[str]:
     for ae_group_path in ae_group_paths:
         ae_paths.extend(get_nested_folders(ae_group_path))
     return ae_paths
+
+
+def extract_results(
+    src_folder: str, dst_folder: str, exclude_files: list[str], ae_paths: Optional[list[str]] = None
+):
+    """If ae_paths is not None, only copy folders that are in ae_paths."""
+    for root, dirs, files in os.walk(src_folder):
+        # Create corresponding directory in destination
+        rel_path = os.path.relpath(root, src_folder)
+        dst_dir = os.path.join(dst_folder, rel_path)
+        os.makedirs(dst_dir, exist_ok=True)
+
+        if ae_paths is not None:
+            if root not in ae_paths:
+                continue
+
+        # Copy files, excluding those in exclude_files
+        for file in files:
+            if file not in exclude_files:
+                src_file = os.path.join(root, file)
+                dst_file = os.path.join(dst_dir, file)
+                shutil.copy2(src_file, dst_file)
+
+
+def check_if_spurious_correlation_removal(chosen_class_indices: list[str | int]) -> bool:
+    in_paired_keys = [index in PAIRED_CLASS_KEYS.keys() for index in chosen_class_indices]
+    all_in = all(in_paired_keys)
+    none_in = not any(in_paired_keys)
+
+    assert all_in or none_in, "All or none of the chosen class indices must be in PAIRED_CLASS_KEYS"
+
+    spurious_correlation_removal = all_in
+    return spurious_correlation_removal
 
 
 def get_batch_sizes(
