@@ -533,6 +533,9 @@ def perform_llm_autointerp(
         with open(os.path.join(ae_path, "extracted_json_llm_outputs.json"), "w") as f:
             json.dump(json_results, f)
 
+        with open(os.path.join(ae_path, "input_prompts.json"), "w") as f:
+            json.dump(features_prompts, f)
+
     return llm_json_response_to_node_effects(json_results, ae_path, p_config)
 
 
