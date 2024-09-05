@@ -1,5 +1,4 @@
 from dataclasses import dataclass, asdict
-import torch
 from typing import Optional
 
 
@@ -39,8 +38,27 @@ class PipelineConfig:
     attribution_patching_method: str = "attrib"
     ig_steps: int = 10
 
+    # selection_method = FeatureSelection.above_threshold
+    selection_method = FeatureSelection.top_n
+
     attrib_t_effects = [2, 5, 10, 20, 50, 100, 500, 1000, 2000]
     autointerp_t_effects = [2, 5, 10, 20]
+
+    # This is for spurrious correlation removal
+    chosen_class_indices = [
+        "male / female",
+        "professor / nurse",
+        "male_professor / female_nurse",
+        "biased_male / biased_female",
+    ]
+
+    # This is for targeted probe perturbation
+    # chosen_class_indices = [
+    #     0,
+    #     1,
+    #     2,
+    #     6,
+    # ]
 
     # Autointerp stuff
 

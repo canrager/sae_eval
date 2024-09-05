@@ -14,7 +14,6 @@ from nnsight import LanguageModel
 import torch as t
 from torch import nn
 from collections import defaultdict
-from enum import Enum
 import time
 
 parent_dir = os.path.abspath("..")
@@ -31,7 +30,7 @@ import experiments.eval_saes as eval_saes
 import experiments.autointerp as autointerp
 import experiments.llm_autointerp.llm_query as llm_query
 
-from experiments.pipeline_config import PipelineConfig
+from experiments.pipeline_config import PipelineConfig, FeatureSelection
 from experiments.probe_training import (
     load_and_prepare_dataset,
     get_train_test_data,
@@ -47,12 +46,6 @@ if DEBUGGING:
     tracer_kwargs = dict(scan=True, validate=True)
 else:
     tracer_kwargs = dict(scan=False, validate=False)
-
-
-class FeatureSelection(Enum):
-    unique = 1
-    above_threshold = 2
-    top_n = 3
 
 
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
@@ -638,13 +631,15 @@ def run_interventions(
     submodule_trainers: dict,
     p_config: PipelineConfig,
     sweep_name: str,
-    selection_method: FeatureSelection,
     random_seed: int,
-    chosen_class_indices: list[int | str],
     device: str = "cuda",
     verbose: bool = False,
 ):
     T_max_sideeffect = 0.000001  # Deprecated
+
+    spurious_correlation_removal = utils.check_if_spurious_correlation_removal(
+        p_config.chosen_class_indices
+    )
 
     t.manual_seed(random_seed)
     random.seed(random_seed)
@@ -745,7 +740,9 @@ def run_interventions(
     ### Get activations for original model, all classes
     print("Getting activations for original model")
     test_acts = {}
-    for class_idx in tqdm(chosen_class_indices, desc="Getting activations per evaluated class"):
+    for class_idx in tqdm(
+        p_config.chosen_class_indices, desc="Getting activations per evaluated class"
+    ):
         test_acts[class_idx] = get_all_activations(
             test_bios[class_idx], model, llm_batch_size, probe_act_submodule
         )
@@ -757,7 +754,7 @@ def run_interventions(
             )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
-        probes, chosen_class_indices, test_acts, p_config.probe_batch_size
+        probes, p_config.chosen_class_indices, test_acts, p_config.probe_batch_size
     )
     del test_acts
 
@@ -787,7 +784,7 @@ def run_interventions(
             force_recompute=p_config.force_node_effects_recompute,
             probes=probes,
             probe_act_submodule=probe_act_submodule,
-            chosen_class_indices=chosen_class_indices,
+            chosen_class_indices=p_config.chosen_class_indices,
             train_bios=train_bios,
             seed=random_seed,
             batch_size=patching_batch_size,
@@ -819,7 +816,7 @@ def run_interventions(
 
         for node_effects_group, effects_group_name, T_effects in all_node_effects:
             selected_features = select_features(
-                selection_method,
+                p_config.selection_method,
                 node_effects_group,
                 dict_size,
                 T_effects,
@@ -902,21 +899,7 @@ def run_interventions(
 if __name__ == "__main__":
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-    selection_method = FeatureSelection.above_threshold
-    selection_method = FeatureSelection.top_n
-
     random_seed = 42
-
-    chosen_class_indices = [
-        "male / female",
-        "professor / nurse",
-        "male_professor / female_nurse",
-        "biased_male / biased_female",
-        0,
-        1,
-        2,
-        6,
-    ]
 
     # Use for debugging / any time you need to run from root dir
     # dictionaries_path = "dictionary_learning/dictionaries"
@@ -1028,9 +1011,7 @@ if __name__ == "__main__":
             submodule_trainers,
             pipeline_config,
             sweep_name,
-            selection_method,
             random_seed,
-            chosen_class_indices=chosen_class_indices,
             verbose=True,
         )
 
