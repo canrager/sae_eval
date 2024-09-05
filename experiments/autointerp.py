@@ -85,6 +85,7 @@ def get_max_activating_prompts(
                 activations_BLD = activations_BLD[0].save()
 
         activations_BLF = dictionary.encode(activations_BLD.value)
+        activations_BLF[:, 0, :] = 0.0  # Zero out the BOS token
         activations_BLF = activations_BLF[:, :, dim_indices]
 
         activations_FBL = einops.rearrange(activations_BLF, "B L F -> F B L")
@@ -309,7 +310,7 @@ def format_examples(
             if not tokens:
                 raise ValueError("Empty sequence found")
 
-        formatted_sequences = ["".join(tokens) for tokens in formatted_sequences_K] 
+        formatted_sequences = ["".join(tokens) for tokens in formatted_sequences_K]
 
         example_prompt = ""
         for i, seq in enumerate(formatted_sequences):
