@@ -605,26 +605,29 @@ def select_features(
     return selected_features
 
 
-def save_log_files(ae_path: str, data: dict, base_filename: str, extension: str):
+def save_log_files(
+    ae_path: str, data: dict, base_filename: str, extension: str, save_backup: bool = False
+):
     # Always save/overwrite the main file
     main_file = os.path.join(ae_path, f"{base_filename}{extension}")
     with open(main_file, "wb") as f:
         pickle.dump(data, f)
     print(f"Saved main file: {base_filename}{extension}")
 
-    # Find the next available number for the backup file
-    counter = 1
-    while True:
-        backup_filename = f"{base_filename}{counter}{extension}"
-        full_path = os.path.join(ae_path, backup_filename)
+    if save_backup:
+        # Find the next available number for the backup file
+        counter = 1
+        while True:
+            backup_filename = f"{base_filename}{counter}{extension}"
+            full_path = os.path.join(ae_path, backup_filename)
 
-        if not os.path.exists(full_path):
-            with open(full_path, "wb") as f:
-                pickle.dump(data, f)
-            print(f"Saved backup as: {backup_filename}")
-            break
+            if not os.path.exists(full_path):
+                with open(full_path, "wb") as f:
+                    pickle.dump(data, f)
+                print(f"Saved backup as: {backup_filename}")
+                break
 
-        counter += 1
+            counter += 1
 
 
 def run_interventions(
@@ -899,7 +902,11 @@ def run_interventions(
             class_accuracies = utils.to_device(class_accuracies, "cpu")
 
             save_log_files(
-                ae_path, class_accuracies, f"class_accuracies{effects_group_name}", ".pkl"
+                ae_path,
+                class_accuracies,
+                f"class_accuracies{effects_group_name}",
+                ".pkl",
+                save_backup=False,
             )
 
     # Extract results to a separate folder
