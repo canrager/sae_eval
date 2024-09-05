@@ -135,19 +135,19 @@ def add_gender_classes(
     male_professor = male_professor[: min_count * 2]
     female_nurse = female_nurse[: min_count * 2]
 
-    mixed_classes = male_combined + female_combined + professors_combined + nurses_combined
+    mixed_classes = male_combined + female_combined
     rng.shuffle(mixed_classes)
 
-    pos_ratio = 1.8
-    neg_ratio = 2.0 - pos_ratio
+    pos_ratio = 1.95
+    noise_ratio = 2.0 - pos_ratio
 
     biased_males_combined = (
         male_professor[: math.ceil(min_count * pos_ratio)]
-        + mixed_classes[: math.ceil(min_count * neg_ratio)]
+        + mixed_classes[: math.ceil(min_count * noise_ratio)]
     )
     biased_females_combined = (
-        female_professor[: math.ceil(min_count * neg_ratio)]
-        + mixed_classes[: math.ceil(min_count * pos_ratio)]
+        female_nurse[: math.ceil(min_count * pos_ratio)]
+        + mixed_classes[: math.ceil(min_count * noise_ratio)]
     )
 
     # Shuffle each combination
