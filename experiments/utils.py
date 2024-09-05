@@ -371,14 +371,21 @@ def get_sae_layer(ae_paths: list[str]) -> int:
     That is, this:
     ae_sweep_paths = {
         "pythia70m_sweep_standard_ctx128_0712": {
-            "resid_post_layer_3": {"trainer_ids": [6]},
+            "resid_post_layer_3": {"trainer_ids": None},
+        }
+    }
+
+    ae_sweep_paths = {
+        "pythia70m_sweep_standard_ctx128_0712": {
             "resid_post_layer_4": {"trainer_ids": None},
         }
     }
 
-    not this:
     ae_sweep_paths = {
-        "pythia70m_sweep_standard_ctx128_0712": None
+        "pythia70m_sweep_standard_ctx128_0712": {
+            "resid_post_layer_3": {"trainer_ids": None},
+            "resid_post_layer_4": {"trainer_ids": None},
+        }
     }
     """
     first_sae_layer = None
