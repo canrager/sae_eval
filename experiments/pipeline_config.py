@@ -29,6 +29,7 @@ class PipelineConfig:
 
     model_dtype: torch.dtype = torch.bfloat16
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     reduced_GPU_memory: bool = False
     include_gender: bool = True
 
@@ -100,6 +101,7 @@ class PipelineConfig:
         bias_shift_dir2_filename,
     ]
 
+    autointerp_context_length: int = 128
     num_top_emphasized_tokens: int = 5
     num_top_inputs_autointerp: int = top_k_inputs_act_collect
     num_top_features_per_class: int = 20
