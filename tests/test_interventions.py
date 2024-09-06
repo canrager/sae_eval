@@ -2,6 +2,7 @@ import pickle
 
 import experiments.bib_intervention as bib_intervention
 import experiments.utils as utils
+from experiments.pipeline_config import PipelineConfig
 
 
 def compare_dicts_within_tolerance(actual, expected, tolerance, path=""):
@@ -34,91 +35,52 @@ def compare_dicts_within_tolerance(actual, expected, tolerance, path=""):
 
 
 def test_run_interventions():
+    test_config = PipelineConfig()
 
-    selection_method = bib_intervention.FeatureSelection.above_threshold
-    selection_method = bib_intervention.FeatureSelection.top_n
-
-    probe_train_set_size = 5000
-    probe_test_set_size = 1000
+    test_config.probe_train_set_size = 4000
+    test_config.probe_test_set_size = 1000
 
     # Load datset and probes
-    train_set_size = 1000
-    test_set_size = 1000
-    probe_batch_size = 50
-    # llm_batch_size = 250
-    llm_batch_size = 10
-
-    # Attribution patching variables
-    n_eval_batches = 4
-    patching_batch_size = 5
-
-    num_classes = 3
+    test_config.train_set_size = 500
+    test_config.test_set_size = 500
 
     seed = 42
 
-    top_n_features = [5, 500]
+    test_config.chosen_class_indices = [
+        "male / female",
+        "professor / nurse",
+        "male_professor / female_nurse",
+        "biased_male / biased_female",
+    ]
 
-    if selection_method == bib_intervention.FeatureSelection.top_n:
-        T_effects = top_n_features
-    else:
-        raise ValueError("Invalid selection method")
+    test_config.attrib_t_effects = [20]
 
-    T_max_sideeffect = 5e-3
-
-    dictionaries_path = "dictionary_learning/dictionaries"
-    probes_dir = "experiments/trained_bib_probes"
+    test_config.dictionaries_path = "dictionary_learning/dictionaries"
+    test_config.probes_dir = "experiments/trained_bib_probes"
 
     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
-
         bib_intervention.run_interventions(
             submodule_trainers,
+            test_config,
             sweep_name,
-            dictionaries_path,
-            probes_dir,
-            selection_method,
-            probe_train_set_size,
-            probe_test_set_size,
-            train_set_size,
-            test_set_size,
-            probe_batch_size,
-            llm_batch_size,
-            n_eval_batches,
-            patching_batch_size,
-            T_effects,
-            T_max_sideeffect,
-            num_classes,
             seed,
-            include_gender=True,
-            chosen_class_indices=[0, 1, 2], # omit -1, this is automatically added
+            verbose=True,
         )
 
-        ae_group_paths = utils.get_ae_group_paths(dictionaries_path, sweep_name, submodule_trainers)
+        ae_group_paths = utils.get_ae_group_paths(
+            test_config.dictionaries_path, sweep_name, submodule_trainers
+        )
         ae_paths = utils.get_ae_paths(ae_group_paths)
 
-        output_filename = f"{ae_paths[0]}/class_accuracies.pkl"
+        output_filename = f"{ae_paths[0]}/class_accuracies_attrib.pkl"
 
         with open(output_filename, "rb") as f:
             class_accuracies = pickle.load(f)
         tolerance = 0.03
 
-        print(class_accuracies)
-
-        expected_results = {
-            -1: {0: 0.7860000133514404, 1: 0.8670000433921814, 2: 0.843000054359436},
-            0: {
-                5: {0: 0.7510000467300415, 1: 0.862000048160553, 2: 0.8300000429153442},
-                500: {0: 0.5040000081062317, 1: 0.8170000314712524, 2: 0.8040000200271606},
-            },
-            1: {
-                5: {0: 0.7780000567436218, 1: 0.8650000691413879, 2: 0.8340000510215759},
-                500: {0: 0.7330000400543213, 1: 0.5920000076293945, 2: 0.8170000314712524},
-            },
-            2: {
-                5: {0: 0.7740000486373901, 1: 0.8610000610351562, 2: 0.8190000653266907},
-                500: {0: 0.734000027179718, 1: 0.8070000410079956, 2: 0.581000030040741},
-            },
-        }
+        with open("tests/test_data/class_accuracies_attrib.pkl", "rb") as f:
+            expected_results = pickle.load(f)
 
         compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
