@@ -744,6 +744,7 @@ def run_interventions(
             epochs=p_config.probe_epochs,
             model_dtype=p_config.model_dtype,
             include_gender=p_config.include_gender,
+            spurious_correlation_removal=spurious_correlation_removal,
         )
 
     with open(probe_path, "rb") as f:

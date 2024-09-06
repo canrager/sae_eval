@@ -565,6 +565,7 @@ def train_probes(
     llm_batch_size: int,
     device: str,
     probe_output_filename: str,
+    spurious_correlation_removal: bool,
     probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
     epochs: int = 10,
@@ -591,6 +592,25 @@ def train_probes(
         test_set_size,
         include_gender,
     )
+
+    new_train_bios = {}
+    new_test_bios = {}
+
+    if spurious_correlation_removal:
+        for key in train_bios.keys():
+            if isinstance(key, int):
+                continue
+            new_train_bios[key] = train_bios[key]
+            new_test_bios[key] = test_bios[key]
+    else:
+        for key in train_bios.keys():
+            if isinstance(key, str):
+                continue
+            new_train_bios[key] = train_bios[key]
+            new_test_bios[key] = test_bios[key]
+
+    train_bios = new_train_bios
+    test_bios = new_test_bios
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)

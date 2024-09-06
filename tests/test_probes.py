@@ -4,7 +4,7 @@ from nnsight import LanguageModel
 import experiments.probe_training as probe_training
 
 
-def test_probing():
+def test_probing_tpp():
     # If encountering errors, increase tolerance
     tolerance = 0.01
     device = "cuda"
@@ -26,6 +26,7 @@ def test_probing():
         epochs=10,
         device=device,
         probe_output_filename=probe_output_filename,
+        spurious_correlation_removal=False,
         save_results=False,
         seed=42,
         include_gender=True,
@@ -47,6 +48,45 @@ def test_probing():
         22: (0.8560000658035278, 0.862000048160553, 0.8500000238418579, 0.380859375),
         25: (0.878000020980835, 0.89000004529953, 0.8660000562667847, 0.30078125),
         26: (0.8190000653266907, 0.784000039100647, 0.8540000319480896, 0.38671875),
+    }
+
+    print(test_accuracies)
+
+    for class_idx in expected_accuracies:
+        difference = abs(test_accuracies[class_idx][0] - expected_accuracies[class_idx][0])
+
+        assert difference < tolerance
+
+
+def test_probing_spurious_correlation():
+    # If encountering errors, increase tolerance
+    tolerance = 0.01
+    device = "cuda"
+    probe_output_filename = ""
+
+    llm_model_name = "EleutherAI/pythia-70m-deduped"
+    model = LanguageModel(
+        llm_model_name, device_map=device, dispatch=True, torch_dtype=torch.bfloat16
+    )
+
+    test_accuracies = probe_training.train_probes(
+        train_set_size=4000,
+        test_set_size=1000,
+        model=model,
+        context_length=128,
+        probe_batch_size=1000,
+        llm_batch_size=500,
+        llm_model_name=llm_model_name,
+        epochs=10,
+        device=device,
+        probe_output_filename=probe_output_filename,
+        spurious_correlation_removal=True,
+        save_results=False,
+        seed=42,
+        include_gender=True,
+    )
+
+    expected_accuracies = {
         "male / female": (0.9920000433921814, 1.0, 0.984000027179718, 0.07470703125),
         "professor / nurse": (
             0.9350000619888306,
