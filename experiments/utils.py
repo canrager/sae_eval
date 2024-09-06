@@ -129,11 +129,12 @@ def extract_results(
         # Create corresponding directory in destination
         rel_path = os.path.relpath(root, src_folder)
         dst_dir = os.path.join(dst_folder, rel_path)
-        os.makedirs(dst_dir, exist_ok=True)
 
         if ae_paths is not None:
             if root not in ae_paths:
                 continue
+
+        os.makedirs(dst_dir, exist_ok=True)
 
         # Copy files, excluding those in exclude_files
         for file in files:
