@@ -197,7 +197,7 @@ def test_llm_vs_manual_labels(
 ):
     client = anthropic.AsyncAnthropic()
 
-    with open(os.path.join(p_config, "manual_labels_can_final.json"), "r") as f:
+    with open(os.path.join(p_config.prompt_dir, "manual_labels_can_final.json"), "r") as f:
         manual_test_labels = json.load(f)
 
     few_shot_examples = prompts.create_few_shot_examples(prompt_dir=p_config.prompt_dir)
@@ -210,7 +210,7 @@ def test_llm_vs_manual_labels(
     print(f"Few shot example is using {llm_utils.count_tokens(few_shot_examples)} tokens")
     print(f"System prompt is using {llm_utils.count_tokens(system_prompt[0]['text'])} tokens")
 
-    test_prompts, test_prompt_metadata = prompts.create_test_prompts(manual_test_labels)
+    test_prompts = prompts.create_test_prompts(manual_test_labels)
 
     test_prompts_tokens = 0
 
@@ -570,12 +570,8 @@ if __name__ == "__main__":
 #         "dentist",
 #         "filmmaker",
 #     ]
-#     PROMPT_DIR = "llm_autointerp"
 
-#     min_scale = 0
-#     max_scale = 4
-#     api_llm = "claude-3-5-sonnet-20240620"
-#     api_llm = "claude-3-haiku-20240307"
+#     p_config = PipelineConfig()
 
 #     # IMPORTANT NOTE: We are using prompt caching. Before running on many prompts, run a single prompt
 #     # two times with number_of_test_examples = 1 and verify that
@@ -584,11 +580,8 @@ if __name__ == "__main__":
 #     number_of_test_examples = 1
 
 #     test_llm_vs_manual_labels(
-#         api_llm=api_llm,
+#         p_config=p_config,
 #         chosen_class_names=chosen_class_names,
-#         min_scale=min_scale,
-#         max_scale=max_scale,
 #         number_of_test_examples=number_of_test_examples,
-#         prompt_dir=PROMPT_DIR,
 #         output_filename="llm_results.pkl",
 #     )
