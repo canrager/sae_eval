@@ -321,7 +321,7 @@ def get_all_node_effects_for_one_sae(
             probe_act_submodule,
             ablated_class_idx,
             train_bios,
-            random_seed,
+            seed,
             batch_size=batch_size,
             patching_method=patching_method,
             steps=steps,
