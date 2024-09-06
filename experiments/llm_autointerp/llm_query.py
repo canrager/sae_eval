@@ -1,7 +1,7 @@
 import asyncio
 import time
 import anthropic
-from tenacity import retry, stop_after_attempt
+from tenacity import retry, stop_after_attempt, RetryCallState
 import json
 import pickle
 import os
@@ -18,7 +18,17 @@ import experiments.utils_bib_dataset as utils_bib_dataset
 from experiments.pipeline_config import PipelineConfig
 
 
-@retry(stop=stop_after_attempt(3))
+def variable_wait(retry_state: RetryCallState):
+    if retry_state.attempt_number == 1:
+        return 5  # Wait 5 seconds after the first attempt
+    else:
+        return 60  # Wait 60 seconds (1 minute) for subsequent attempts
+
+
+@retry(
+    stop=stop_after_attempt(4),
+    wait=variable_wait,
+)
 async def anthropic_request_prompt_caching(
     client: anthropic.Anthropic,
     system_prompt: str,
@@ -27,6 +37,7 @@ async def anthropic_request_prompt_caching(
     model: str,
     verbose: bool = False,
 ) -> str:
+    print("Attempting API call")
     message = await client.beta.prompt_caching.messages.create(
         model=model,
         max_tokens=500,
@@ -83,7 +94,10 @@ async def anthropic_request(
     return message.content[0].text
 
 
-@retry(stop=stop_after_attempt(3))
+@retry(
+    stop=stop_after_attempt(4),
+    wait=variable_wait,
+)
 async def fill_anthropic_prompt_cache(
     client: anthropic.Anthropic,
     system_prompt: str,
