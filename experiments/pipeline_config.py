@@ -33,8 +33,6 @@ class PipelineConfig:
     reduced_GPU_memory: bool = False
     include_gender: bool = True
 
-    use_autointerp: bool = True
-
     force_eval_results_recompute: bool = False
     force_max_activations_recompute: bool = False
     force_probe_recompute: bool = False
@@ -76,6 +74,8 @@ class PipelineConfig:
     # ]
 
     # Autointerp stuff
+
+    use_autointerp: bool = True
 
     api_llm: str = "claude-3-5-sonnet-20240620"
     # api_llm: str = "claude-3-haiku-20240307"
