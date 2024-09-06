@@ -40,6 +40,7 @@ class PipelineConfig:
     force_probe_recompute: bool = False
     force_node_effects_recompute: bool = False
     force_autointerp_recompute: bool = False
+    force_ablations_recompute: bool = False
 
     dictionaries_path: str = "../dictionary_learning/dictionaries"
     probes_dir: str = "trained_bib_probes"

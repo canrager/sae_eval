@@ -827,6 +827,19 @@ def run_interventions(
         gc.collect()
 
         for node_effects_group, effects_group_name, T_effects in all_node_effects:
+            output_base_filename = f"class_accuracies{effects_group_name}"
+
+            if (
+                os.path.exists(os.path.join(ae_path, f"{output_base_filename}.pkl"))
+                and not p_config.force_ablations_recompute
+            ):
+                print(f"Skipping ablations for {ae_path} {effects_group_name}")
+                continue
+            if not os.path.exists(os.path.join(ae_path, f"{output_base_filename}.pkl")):
+                print(f"Running ablations for {ae_path} {effects_group_name}")
+            elif p_config.force_ablations_recompute:
+                print(f"Recomputing ablations for {ae_path} {effects_group_name}")
+
             selected_features = select_features(
                 p_config.selection_method,
                 node_effects_group,
@@ -904,7 +917,7 @@ def run_interventions(
             save_log_files(
                 ae_path,
                 class_accuracies,
-                f"class_accuracies{effects_group_name}",
+                output_base_filename,
                 ".pkl",
                 save_backup=False,
             )
