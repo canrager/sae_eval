@@ -22,7 +22,7 @@ def test_probing():
         context_length=128,
         probe_batch_size=1000,
         llm_batch_size=500,
-        llm_model_name="EleutherAI/pythia-70m-deduped",
+        llm_model_name=llm_model_name,
         epochs=10,
         device=device,
         probe_output_filename=probe_output_filename,
