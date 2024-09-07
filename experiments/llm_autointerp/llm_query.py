@@ -148,6 +148,7 @@ async def process_prompt(
     good_json, verification_message = llm_utils.verify_json_response(
         json_response, min_scale, max_scale, chosen_class_names
     )
+    json_response = llm_utils.zero_out_non_max_values_in_json_response(json_response)
     return prompt_index, llm_response, json_response, good_json, verification_message, test_prompt
 
 
