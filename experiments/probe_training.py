@@ -23,6 +23,7 @@ import datasets
 from nnsight import LanguageModel
 
 import experiments.utils as utils
+import experiments.dataset_info as dataset_info
 
 # Configuration
 DEBUGGING = False
@@ -33,15 +34,6 @@ parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
 
 tracer_kwargs = dict(scan=DEBUGGING, validate=DEBUGGING)
-
-
-# Load and prepare dataset
-def load_and_prepare_dataset():
-    dataset = load_dataset("LabHC/bias_in_bios")
-    df = pd.DataFrame(dataset["train"])
-    df["combined_label"] = df["profession"].astype(str) + "_" + df["gender"].astype(str)
-    return dataset, df
-
 
 # Profession dictionary
 profession_dict = {
@@ -77,141 +69,6 @@ profession_dict = {
 profession_dict_rev = {v: k for k, v in profession_dict.items()}
 
 
-# Visualization
-def plot_label_distribution(df):
-    label_counts = df["combined_label"].value_counts().sort_index()
-    labels = [
-        f"{profession_dict_rev[int(label.split('_')[0])]} ({'Male' if label.split('_')[1] == '0' else 'Female'})"
-        for label in label_counts.index
-    ]
-
-    plt.figure(figsize=(12, 8))
-    plt.bar(labels, label_counts)
-    plt.xlabel("(Profession x Gender) Label")
-    plt.ylabel("Number of Samples")
-    plt.title("Number of Samples per (Profession x Gender) Label")
-    plt.xticks(rotation=90)
-    plt.tight_layout()
-    plt.show()
-
-
-def add_gender_classes(
-    balanced_data: dict, df: pd.DataFrame, cutoff: int, random_seed: int
-) -> dict:
-    # TODO: Experiment with more professions
-
-    MALE_IDX = 0
-    FEMALE_IDX = 1
-    professor_idx = profession_dict["professor"]
-    nurse_idx = profession_dict["nurse"]
-
-    male_nurse = df[(df["profession"] == nurse_idx) & (df["gender"] == MALE_IDX)][
-        "hard_text"
-    ].tolist()
-    female_nurse = df[(df["profession"] == nurse_idx) & (df["gender"] == FEMALE_IDX)][
-        "hard_text"
-    ].tolist()
-
-    male_professor = df[(df["profession"] == professor_idx) & (df["gender"] == MALE_IDX)][
-        "hard_text"
-    ].tolist()
-    female_professor = df[(df["profession"] == professor_idx) & (df["gender"] == FEMALE_IDX)][
-        "hard_text"
-    ].tolist()
-
-    min_count = min(
-        len(male_nurse), len(female_nurse), len(male_professor), len(female_professor), cutoff
-    )
-
-    assert min_count == cutoff
-
-    rng = np.random.default_rng(random_seed)
-
-    # Create and shuffle combinations
-    male_combined = male_professor[:min_count] + male_nurse[:min_count]
-    female_combined = female_professor[:min_count] + female_nurse[:min_count]
-    professors_combined = male_professor[:min_count] + female_professor[:min_count]
-    nurses_combined = male_nurse[:min_count] + female_nurse[:min_count]
-    male_professor = male_professor[: min_count * 2]
-    female_nurse = female_nurse[: min_count * 2]
-
-    mixed_classes = male_combined + female_combined
-    rng.shuffle(mixed_classes)
-
-    pos_ratio = 1.95
-    noise_ratio = 2.0 - pos_ratio
-
-    biased_males_combined = (
-        male_professor[: math.ceil(min_count * pos_ratio)]
-        + mixed_classes[: math.ceil(min_count * noise_ratio)]
-    )
-    biased_females_combined = (
-        female_nurse[: math.ceil(min_count * pos_ratio)]
-        + mixed_classes[: math.ceil(min_count * noise_ratio)]
-    )
-
-    # Shuffle each combination
-    rng.shuffle(male_combined)
-    rng.shuffle(female_combined)
-    rng.shuffle(professors_combined)
-    rng.shuffle(nurses_combined)
-    rng.shuffle(male_professor)
-    rng.shuffle(female_nurse)
-
-    # Assign to balanced_data
-    balanced_data["male / female"] = male_combined
-    balanced_data["female_data_only"] = female_combined
-    balanced_data["professor / nurse"] = professors_combined
-    balanced_data["nurse_data_only"] = nurses_combined
-    balanced_data["male_professor / female_nurse"] = male_professor
-    balanced_data["female_nurse_data_only"] = female_nurse
-    balanced_data["biased_male / biased_female"] = biased_males_combined
-    balanced_data["biased_female_data_only"] = biased_females_combined
-
-    return balanced_data
-
-
-# Dataset balancing and preparation
-def get_balanced_dataset(
-    dataset,
-    min_samples_per_group: int,
-    train: bool,
-    include_paired_classes: bool,
-    random_seed: int = SEED,
-):
-    df = pd.DataFrame(dataset["train" if train else "test"])
-    balanced_df_list = []
-
-    for profession in tqdm(df["profession"].unique()):
-        prof_df = df[df["profession"] == profession]
-        min_count = prof_df["gender"].value_counts().min()
-
-        if min_count < min_samples_per_group:
-            continue
-
-        balanced_prof_df = pd.concat(
-            [
-                group.sample(n=min_samples_per_group, random_state=random_seed)
-                for _, group in prof_df.groupby("gender")
-            ]
-        ).reset_index(drop=True)
-        balanced_df_list.append(balanced_prof_df)
-
-    balanced_df = pd.concat(balanced_df_list).reset_index(drop=True)
-    grouped = balanced_df.groupby("profession")["hard_text"].apply(list)
-
-    balanced_data = {label: texts for label, texts in grouped.items()}
-
-    if include_paired_classes:
-        balanced_data = add_gender_classes(balanced_data, df, min_samples_per_group, random_seed)
-
-    for key in balanced_data.keys():
-        balanced_data[key] = balanced_data[key][: min_samples_per_group * 2]
-        assert len(balanced_data[key]) == min_samples_per_group * 2
-
-    return balanced_data
-
-
 def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
     # Find keys that are in test but not in train
     test_only_keys = set(test_data.keys()) - set(train_data.keys())
@@ -232,28 +89,214 @@ def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
     return train_data, test_data
 
 
+# Load and prepare dataset
+def load_and_prepare_dataset(dataset_name: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if dataset_name == "bias_in_bios":
+        dataset = load_dataset("LabHC/bias_in_bios")
+        train_df = pd.DataFrame(dataset["train"])
+        test_df = pd.DataFrame(dataset["test"])
+    else:
+        raise ValueError(f"Unknown dataset name: {dataset_name}")
+    return train_df, test_df
+
+
+def get_spurious_corr_data(
+    df: pd.DataFrame,
+    column1_vals: tuple[str, str],
+    column2_vals: tuple[str, str],
+    dataset_name: str,
+    min_samples_per_quadrant: int,
+    random_seed: int,
+) -> dict[str, list[str]]:
+    """Returns a dataset of, in the case of bias_in_bios, a key that's something like `female_nurse_data_only`,
+    and a value that's a list of bios (strs) of len min_samples_per_quadrant * 2."""
+    balanced_data = {}
+
+    text_column_name = dataset_info.dataset_metadata[dataset_name]["text_column_name"]
+    column1_name = dataset_info.dataset_metadata[dataset_name]["column1_name"]
+    column2_name = dataset_info.dataset_metadata[dataset_name]["column2_name"]
+
+    column1_pos = column1_vals[0]
+    column1_neg = column1_vals[1]
+    column2_pos = column2_vals[0]
+    column2_neg = column2_vals[1]
+
+    column1_pos_idx = dataset_info.dataset_metadata[dataset_name]["column1_mapping"][column1_pos]
+    column1_neg_idx = dataset_info.dataset_metadata[dataset_name]["column1_mapping"][column1_neg]
+    column2_pos_idx = dataset_info.dataset_metadata[dataset_name]["column2_mapping"][column2_pos]
+    column2_neg_idx = dataset_info.dataset_metadata[dataset_name]["column2_mapping"][column2_neg]
+
+    pos_neg = df[(df[column1_name] == column1_neg_idx) & (df[column2_name] == column2_pos_idx)][
+        text_column_name
+    ].tolist()
+    neg_neg = df[(df[column1_name] == column1_neg_idx) & (df[column2_name] == column2_neg_idx)][
+        text_column_name
+    ].tolist()
+
+    pos_pos = df[(df[column1_name] == column1_pos_idx) & (df[column2_name] == column2_pos_idx)][
+        text_column_name
+    ].tolist()
+    neg_pos = df[(df[column1_name] == column1_pos_idx) & (df[column2_name] == column2_neg_idx)][
+        text_column_name
+    ].tolist()
+
+    min_count = min(
+        len(pos_neg), len(neg_neg), len(pos_pos), len(neg_pos), min_samples_per_quadrant
+    )
+
+    assert min_count == min_samples_per_quadrant
+
+    rng = np.random.default_rng(random_seed)
+
+    # Create and shuffle combinations
+    combined_pos = pos_pos[:min_count] + pos_neg[:min_count]
+    combined_neg = neg_pos[:min_count] + neg_neg[:min_count]
+    pos_combined = pos_pos[:min_count] + neg_pos[:min_count]
+    neg_combined = pos_neg[:min_count] + neg_neg[:min_count]
+    pos_pos = pos_pos[: min_count * 2]
+    neg_neg = neg_neg[: min_count * 2]
+
+    mixed_classes = combined_pos + combined_neg
+    rng.shuffle(mixed_classes)
+
+    pos_ratio = 1.95
+    noise_ratio = 2.0 - pos_ratio
+
+    noisy_combined_pos = (
+        pos_pos[: math.ceil(min_count * pos_ratio)]
+        + mixed_classes[: math.ceil(min_count * noise_ratio)]
+    )
+    noisy_combined_neg = (
+        neg_neg[: math.ceil(min_count * pos_ratio)]
+        + mixed_classes[: math.ceil(min_count * noise_ratio)]
+    )
+
+    # Shuffle each combination
+    rng.shuffle(combined_pos)
+    rng.shuffle(combined_neg)
+    rng.shuffle(pos_combined)
+    rng.shuffle(neg_combined)
+    rng.shuffle(pos_pos)
+    rng.shuffle(neg_neg)
+    rng.shuffle(noisy_combined_pos)
+    rng.shuffle(noisy_combined_neg)
+
+    # Assign to balanced_data
+    balanced_data[f"{column2_pos} / {column2_neg}"] = (
+        combined_pos  # male data only, to be combined with female data
+    )
+    balanced_data[f"{column2_neg}_data_only"] = combined_neg  # female data only
+    balanced_data[f"{column1_pos} / {column1_neg}"] = (
+        pos_combined  # professor data only, to be combined with nurse data
+    )
+    balanced_data[f"{column1_neg}_data_only"] = neg_combined  # nurse data only
+    balanced_data[f"{column2_pos}_{column1_pos} / {column2_neg}_{column1_neg}"] = (
+        pos_pos  # male_professor data only, to be combined with female_nurse data
+    )
+    balanced_data[f"{column2_neg}_{column1_neg}_data_only"] = neg_neg  # female_nurse data only
+    balanced_data[f"noisy_{column2_pos}_{column1_pos} / noisy_{column2_neg}_{column1_neg}"] = (
+        noisy_combined_pos  # noisy_male_professor data only, to be combined with noisy_female_nurse
+    )
+    balanced_data[f"noisy_{column2_neg}_{column1_neg}_data_only"] = (
+        noisy_combined_neg  # noisy_female_nurse data only
+    )
+
+    for key in balanced_data.keys():
+        balanced_data[key] = balanced_data[key][: min_samples_per_quadrant * 2]
+        assert len(balanced_data[key]) == min_samples_per_quadrant * 2
+
+    return balanced_data
+
+
+# Dataset balancing and preparation
+def get_balanced_dataset_tpp(
+    df: pd.DataFrame,
+    dataset_name: str,
+    min_samples_per_quadrant: int,
+    random_seed: int = SEED,
+):
+    """Returns a dataset of, in the case of bias_in_bios, a key of profession idx,
+    and a value of a list of bios (strs) of len min_samples_per_quadrant * 2."""
+
+    text_column_name = dataset_info.dataset_metadata[dataset_name]["text_column_name"]
+    column1_name = dataset_info.dataset_metadata[dataset_name]["column1_name"]
+    column2_name = dataset_info.dataset_metadata[dataset_name]["column2_name"]
+
+    balanced_df_list = []
+
+    for profession in tqdm(df[column1_name].unique()):
+        prof_df = df[df[column1_name] == profession]
+        min_count = prof_df[column2_name].value_counts().min()
+
+        if min_count < min_samples_per_quadrant:
+            continue
+
+        balanced_prof_df = pd.concat(
+            [
+                group.sample(n=min_samples_per_quadrant, random_state=random_seed)
+                for _, group in prof_df.groupby(column2_name)
+            ]
+        ).reset_index(drop=True)
+        balanced_df_list.append(balanced_prof_df)
+
+    balanced_df = pd.concat(balanced_df_list).reset_index(drop=True)
+    grouped = balanced_df.groupby(column1_name)[text_column_name].apply(list)
+
+    balanced_data = {label: texts for label, texts in grouped.items()}
+
+    for key in balanced_data.keys():
+        balanced_data[key] = balanced_data[key][: min_samples_per_quadrant * 2]
+        assert len(balanced_data[key]) == min_samples_per_quadrant * 2
+
+    return balanced_data
+
+
 def get_train_test_data(
-    dataset,
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    dataset_name: str,
+    spurious_corr: bool,
     train_set_size: int,
     test_set_size: int,
-    include_paired_classes: bool,
+    random_seed: int,
+    column1_vals: Optional[tuple[str, str]] = None,
+    column2_vals: Optional[tuple[str, str]] = None,
 ) -> tuple[dict, dict]:
     # 4 is because male / gender for each profession
-    minimum_train_samples = train_set_size // 4
-    minimum_test_samples = test_set_size // 4
+    minimum_train_samples_per_quadrant = train_set_size // 4
+    minimum_test_samples_per_quadrant = test_set_size // 4
 
-    train_bios = get_balanced_dataset(
-        dataset,
-        minimum_train_samples,
-        train=True,
-        include_paired_classes=include_paired_classes,
-    )
-    test_bios = get_balanced_dataset(
-        dataset,
-        minimum_test_samples,
-        train=False,
-        include_paired_classes=include_paired_classes,
-    )
+    if not spurious_corr:
+        train_bios = get_balanced_dataset_tpp(
+            train_df,
+            dataset_name,
+            minimum_train_samples_per_quadrant,
+            random_seed=random_seed,
+        )
+        test_bios = get_balanced_dataset_tpp(
+            test_df,
+            dataset_name,
+            minimum_test_samples_per_quadrant,
+            random_seed=random_seed,
+        )
+    else:
+        train_bios = get_spurious_corr_data(
+            train_df,
+            column1_vals,
+            column2_vals,
+            dataset_name,
+            minimum_train_samples_per_quadrant,
+            random_seed,
+        )
+
+        test_bios = get_spurious_corr_data(
+            test_df,
+            column1_vals,
+            column2_vals,
+            dataset_name,
+            minimum_test_samples_per_quadrant,
+            random_seed,
+        )
 
     train_bios, test_bios = ensure_shared_keys(train_bios, test_bios)
 
@@ -270,6 +313,7 @@ class Probe(nn.Module):
         return self.net(x).squeeze(-1)
 
 
+# Deprecated
 def get_acts(text):
     with t.no_grad():
         with model.trace(text, **tracer_kwargs):
@@ -584,33 +628,28 @@ def train_probes(
     probe_layer = model_eval_config.probe_layer
     probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
-    dataset, df = load_and_prepare_dataset()
+    dataset_name = "bias_in_bios"
 
-    train_bios, test_bios = get_train_test_data(
-        dataset,
-        train_set_size,
-        test_set_size,
-        include_gender,
-    )
-
-    new_train_bios = {}
-    new_test_bios = {}
+    train_df, test_df = load_and_prepare_dataset(dataset_name)
 
     if spurious_correlation_removal:
-        for key in train_bios.keys():
-            if isinstance(key, int):
-                continue
-            new_train_bios[key] = train_bios[key]
-            new_test_bios[key] = test_bios[key]
+        column1_vals = ("professor", "nurse")
+        column2_vals = ("male", "female")
     else:
-        for key in train_bios.keys():
-            if isinstance(key, str):
-                continue
-            new_train_bios[key] = train_bios[key]
-            new_test_bios[key] = test_bios[key]
+        column1_vals = None
+        column2_vals = None
 
-    train_bios = new_train_bios
-    test_bios = new_test_bios
+    train_bios, test_bios = get_train_test_data(
+        train_df=train_df,
+        test_df=test_df,
+        dataset_name=dataset_name,
+        spurious_corr=spurious_correlation_removal,
+        train_set_size=train_set_size,
+        test_set_size=test_set_size,
+        random_seed=seed,
+        column1_vals=column1_vals,
+        column2_vals=column2_vals,
+    )
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
