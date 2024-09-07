@@ -145,8 +145,11 @@ def get_class_samples(data: dict, class_idx: int, device: str) -> tuple[list, t.
 
 
 # TODO: Think about removing support for list of string inputs
-def get_paired_class_samples(data: dict, class_idx, device: str) -> tuple[list, t.Tensor]:
-    """This is for getting equal number of text samples from the chosen class and all other classes.
+def get_paired_class_samples(
+    data: dict[str, list[str] | dict[str, t.Tensor]], class_idx: str, device: str
+) -> tuple[list, t.Tensor]:
+    """This is for getting equal number of text samples from the chosen class and a paired class.
+    There's some extra logic because currently we support both string and tensor inputs.
     We use this for attribution patching."""
 
     # TODO: Clean this up
@@ -214,6 +217,7 @@ def get_effects_per_class(
     probe_act_submodule: utils.submodule_alias,
     class_idx: int | str,
     train_bios: dict,
+    spurious_corr: bool,
     seed: int,
     batch_size: int = 10,
     patching_method: str = "attrib",
@@ -227,11 +231,13 @@ def get_effects_per_class(
     device = model.device
     probe = probes[class_idx]
 
-    if isinstance(class_idx, int):
+    if spurious_corr:
+        assert isinstance(class_idx, str)
+        inputs_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
+    else:
+        assert isinstance(class_idx, int)
         inputs_train, labels_train = get_class_samples(train_bios, class_idx, device)
         # texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
-    else:
-        inputs_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
 
     inputs_train = utils.batch_inputs(inputs_train, batch_size)
     labels_train = utils.batch_inputs(labels_train, batch_size)
@@ -288,6 +294,7 @@ def get_all_node_effects_for_one_sae(
     probe_act_submodule: utils.submodule_alias,
     chosen_class_indices: list[int | str],
     train_bios: dict,
+    spurious_corr: bool,
     seed: int,
     batch_size: int = 10,
     patching_method: str = "attrib",
@@ -317,6 +324,7 @@ def get_all_node_effects_for_one_sae(
             probe_act_submodule,
             ablated_class_idx,
             train_bios,
+            spurious_corr,
             seed,
             batch_size=batch_size,
             patching_method=patching_method,
@@ -810,6 +818,7 @@ def run_interventions(
             probe_act_submodule=probe_act_submodule,
             chosen_class_indices=p_config.chosen_class_indices,
             train_bios=train_bios,
+            spurious_corr=spurious_correlation_removal,
             seed=random_seed,
             batch_size=patching_batch_size,
             patching_method=p_config.attribution_patching_method,
