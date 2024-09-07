@@ -16,6 +16,8 @@ class PipelineConfig:
     column1_vals = ("professor", "nurse")
     column2_vals = ("male", "female")
 
+    spurious_corr: bool = True
+
     max_activations_collection_n_inputs: int = 10000
     top_k_inputs_act_collect: int = 5
 

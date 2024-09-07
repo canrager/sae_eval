@@ -309,22 +309,18 @@ def construct_llm_features_prompts(
 
 
 def filter_node_effects_with_autointerp(
-    node_effects_autointerp: dict[int, torch.Tensor],
-    node_effects: dict[int, torch.Tensor],
+    node_effects_autointerp: torch.Tensor,
+    node_effects: torch.Tensor,
+    top_k_features: int,
     llm_score_threshold: float,
-) -> dict[int, torch.Tensor]:
-    for class_name, tensor in node_effects_autointerp.items():
-        node_effects_autointerp[class_name] = (tensor > llm_score_threshold).float()
+) -> torch.Tensor:
+    node_effects_autointerp = (node_effects_autointerp > llm_score_threshold).float()
 
-    # Now perform element-wise multiplication
-    filtered_node_effects = {}
-    for class_name in node_effects_autointerp.keys():
-        if class_name in node_effects:
-            filtered_node_effects[class_name] = (
-                node_effects_autointerp[class_name] * node_effects[class_name]
-            )
-        else:
-            raise ValueError(f"Class name {class_name} not found in node_effects")
+    top_k_values, top_k_indices = torch.topk(node_effects, top_k_features)
+    masked_node_effects = torch.zeros_like(node_effects)
+    masked_node_effects[top_k_indices] = top_k_values
+
+    filtered_node_effects = node_effects_autointerp * masked_node_effects
 
     return filtered_node_effects
 
@@ -475,24 +471,12 @@ def llm_json_response_to_node_effects(
     first_node_effect = next(iter(node_effects_attrib_patching.values()))
     dict_size = first_node_effect.size(0)
 
-    if p_config.spurrious_correlation_removal:
+    if p_config.spurious_corr:
         node_effects_auto_interp = get_node_effects_auto_interp_spurious(
             node_effects_attrib_patching, dict_size, llm_json_response
         )
         node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = get_node_effects_bias_shift(
             node_effects_attrib_patching, dict_size, llm_json_response
-        )
-
-        node_effects_bias_shift_dir1 = filter_node_effects_with_autointerp(
-            node_effects_bias_shift_dir1,
-            node_effects_attrib_patching,
-            p_config.llm_judge_binary_threshold,
-        )
-
-        node_effects_bias_shift_dir2 = filter_node_effects_with_autointerp(
-            node_effects_bias_shift_dir2,
-            node_effects_attrib_patching,
-            p_config.llm_judge_binary_threshold,
         )
 
         with open(f"{ae_path}/{p_config.bias_shift_dir1_filename}", "wb") as f:
@@ -504,10 +488,6 @@ def llm_json_response_to_node_effects(
         node_effects_auto_interp = get_node_effects_auto_interp_tpp(
             node_effects_attrib_patching, dict_size, llm_json_response
         )
-
-    node_effects_auto_interp = filter_node_effects_with_autointerp(
-        node_effects_auto_interp, node_effects_attrib_patching, p_config.llm_judge_binary_threshold
-    )
 
     with open(f"{ae_path}/{p_config.autointerp_filename}", "wb") as f:
         pickle.dump(node_effects_auto_interp, f)
