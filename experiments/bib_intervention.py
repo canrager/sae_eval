@@ -825,6 +825,8 @@ def run_interventions(
             steps=p_config.ig_steps,
         )
 
+        all_node_effects = [(node_effects, "_attrib", p_config.attrib_t_effects)]
+
         if p_config.use_autointerp:
             # This will save node_effects_auto_interp.pkl, node_effects_bias_shift_dir1.pkl, and node_effects_bias_shift_dir2.pkl alongside each SAE
             node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = (
@@ -835,14 +837,25 @@ def run_interventions(
                     debug_mode=True,
                 )
             )
-            all_node_effects = [
-                (node_effects_auto_interp, "_auto_interp", p_config.autointerp_t_effects),
-                (node_effects_bias_shift_dir1, "_bias_shift_dir1", p_config.autointerp_t_effects),
-                (node_effects_bias_shift_dir2, "_bias_shift_dir2", p_config.autointerp_t_effects),
-                (node_effects, "_attrib", p_config.attrib_t_effects),
-            ]
-        else:
-            all_node_effects = [(node_effects, "_attrib", p_config.attrib_t_effects)]
+            all_node_effects.append(
+                (node_effects_auto_interp, "_auto_interp", p_config.autointerp_t_effects)
+            )
+
+            if spurious_correlation_removal:
+                all_node_effects.append(
+                    (
+                        node_effects_bias_shift_dir1,
+                        "_bias_shift_dir1",
+                        p_config.autointerp_t_effects,
+                    )
+                )
+                all_node_effects.append(
+                    (
+                        node_effects_bias_shift_dir2,
+                        "_bias_shift_dir2",
+                        p_config.autointerp_t_effects,
+                    )
+                )
 
         t.cuda.empty_cache()
         gc.collect()
@@ -870,11 +883,9 @@ def run_interventions(
                 verbose=verbose,
             )
 
-            node_effects_group_classes = list(node_effects_group.keys())
-
             with t.inference_mode():
                 # Now that we have collected node effects and selected features, we ablate the selected features and measure the change in probe accuracy
-                for ablated_class_idx in node_effects_group_classes:
+                for ablated_class_idx in node_effects_group.keys():
                     class_accuracies[ablated_class_idx] = {}
                     print(f"evaluating class {ablated_class_idx}")
 
@@ -894,7 +905,7 @@ def run_interventions(
                             print(f"Ablating {selected_features_mask.sum()} features")
                         test_acts_ablated = {}
                         for evaluated_class_idx in tqdm(
-                            node_effects_group_classes, desc="Getting activations"
+                            node_effects_group.keys(), desc="Getting activations"
                         ):
                             test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
                                 test_bios[evaluated_class_idx],
@@ -920,7 +931,7 @@ def run_interventions(
 
                         ablated_class_accuracies = probe_training.get_probe_test_accuracy(
                             probes,
-                            node_effects_group_classes,
+                            list(node_effects_group.keys()),
                             test_acts_ablated,
                             p_config.probe_batch_size,
                             spurious_correlation_removal,
