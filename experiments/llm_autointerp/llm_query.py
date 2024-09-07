@@ -104,6 +104,7 @@ async def fill_anthropic_prompt_cache(
     few_shot_examples: str,
     model: str,
 ) -> str:
+    print("Attempting prompt fill API call")
     message = await client.beta.prompt_caching.messages.create(
         model=model,
         max_tokens=5,
@@ -148,7 +149,8 @@ async def process_prompt(
     good_json, verification_message = llm_utils.verify_json_response(
         json_response, min_scale, max_scale, chosen_class_names
     )
-    json_response = llm_utils.zero_out_non_max_values_in_json_response(json_response)
+    if good_json:
+        json_response = llm_utils.zero_out_non_max_values_in_json_response(json_response)
     return prompt_index, llm_response, json_response, good_json, verification_message, test_prompt
 
 
@@ -208,14 +210,16 @@ def test_llm_vs_manual_labels(
     p_config: PipelineConfig,
     chosen_class_names: list[str],
     number_of_test_examples: int,
-    output_filename: str = "llm_results.pkl",
-):
+    output_filename: str = "llm_results.json",
+) -> dict[int, tuple[str, dict, bool, str]]:
     client = anthropic.AsyncAnthropic()
 
     with open(os.path.join(p_config.prompt_dir, "manual_labels_can_final.json"), "r") as f:
         manual_test_labels = json.load(f)
 
-    few_shot_examples = prompts.create_few_shot_examples(prompt_dir=p_config.prompt_dir)
+    few_shot_examples = prompts.load_few_shot_examples(
+        prompt_dir=p_config.prompt_dir, spurious_corr=p_config.spurious_corr
+    )
     system_prompt = prompts.build_system_prompt(
         concepts=chosen_class_names,
         min_scale=p_config.llm_judge_min_scale,
@@ -251,8 +255,10 @@ def test_llm_vs_manual_labels(
         )
     )
 
-    with open(output_filename, "wb") as f:
-        pickle.dump(results, f)
+    with open(output_filename, "w") as f:
+        json.dump(results, f, indent=4)
+
+    return results
 
 
 def construct_llm_features_prompts(
@@ -527,7 +533,9 @@ def perform_llm_autointerp(
 
     client = anthropic.AsyncAnthropic()
 
-    few_shot_examples = prompts.create_few_shot_examples(prompt_dir=p_config.prompt_dir)
+    few_shot_examples = prompts.load_few_shot_examples(
+        prompt_dir=p_config.prompt_dir, spurious_corr=p_config.spurious_corr
+    )
     system_prompt = prompts.build_system_prompt(
         concepts=p_config.chosen_autointerp_class_names,
         min_scale=p_config.llm_judge_min_scale,
@@ -602,6 +610,9 @@ if __name__ == "__main__":
 
     p_config = PipelineConfig()
 
+    p_config.chosen_autointerp_class_names = ["gender", "professor", "nurse"]
+    p_config.spurious_corr = True
+
     perform_llm_autointerp(pythia_tokenizer, p_config, ae_path, debug_mode=debug_mode)
 
 # if __name__ == "__main__":
@@ -622,6 +633,7 @@ if __name__ == "__main__":
 #     ]
 
 #     p_config = PipelineConfig()
+#     p_config.spurious_corr = False
 
 #     # IMPORTANT NOTE: We are using prompt caching. Before running on many prompts, run a single prompt
 #     # two times with number_of_test_examples = 1 and verify that
@@ -633,5 +645,5 @@ if __name__ == "__main__":
 #         p_config=p_config,
 #         chosen_class_names=chosen_class_names,
 #         number_of_test_examples=number_of_test_examples,
-#         output_filename="llm_results.pkl",
+#         output_filename="llm_results.json",
 #     )

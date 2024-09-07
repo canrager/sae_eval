@@ -1,0 +1,211 @@
+
+
+<<BEGIN EXAMPLE FEATURE 0>>
+Promoted tokens:  speaks,  geek,  Writer, writer,  writes
+Example prompts: 
+
+
+Example 1: of the Holy Spirit. The Law brings death, but the Holy Spirit gives life. (NLV)
+
+Leave a Reply.
+
+Author
+
+Melinda << started>>(34) her fifth year << of>>(29) her devotions reading Oswald Chamber'sMy Utmost for His Highest. << In>>(40) 2015 << she>>(52) has made the commitment to share what this year's journey. Taking a detour, << she>>(35) began living Every Day With JesusNow she's listening to JesusCalling​ Second only to her Bible, these devotionals are treasured resources for her walk of faith.The university will also award an Honorary Degree to Gordon Brown on Wednesday, April 29
+
+
+
+
+Example 2: Midlands. As a child, she read everything she could get her hands on, which included the works of many of the great names of Science Fiction. She read Maths at Oxford, and went on to suffer years of writing unbearably complicated technical documents. When the company she worked for entered the stormy waters of take over land, << she>>(40) decided it was time to jump ship and try writing something that was fun for a change <<.>>(46) << She>>(50) << has>>(31) a husband, a son, a lot of books, and an aversion to housework <<.>>(38)Image caption The survey found some ice creams marketed as local were actually well-known brands
+
+Almost a fifth of foods
+
+
+
+
+Example 3: to two rambunctious little boys, an expectant mother to baby number three, and has been a classical educator for five years <<.>>(42) << She>>(42) always knew from a young age that she wanted to write stories that would inspire people. << Her>>(43) favorite genre to read and write is Young Adult Fantasy and Science Fiction, so that is where her journey began <<.>>(33) K. B. Hoyle began writing her first fantasy novel at the age of eleven, which proved to be valuable experience and practice for the novels she would publish as an adult.
+
+K. B. Hoy <<le>>(33) is currently writing the Young Adult Fantasy series The Gateway Chronicles, but she never stops
+
+
+
+Chain of thought:
+json_response: {'professor': 2, 'nurse': 0, 'gender': 1}
+raw_response: Step 1: The text examples primarily focus on authors and writers, describing their backgrounds, writing processes, and personal details.
+
+Step 2: The promoted tokens are strongly related to writing and speaking, with words like "speaks," "writer," and "writes" being prominent.
+
+Step 3: The neuron's behavior is clearly related to the concept of writers or authors. While this doesn't directly correspond to the given concepts of professor, nurse, or gender, there is a potential connection to professors, as they often engage in writing and publishing. Additionally, there's a slight gender element as some examples use female pronouns. However, the primary focus is on the act of writing rather than gender or academic roles.
+
+```json
+{
+  "professor": 2,
+  "nurse": 0,
+  "gender": 1
+}
+```
+
+<<END EXAMPLE FEATURE 0>>
+
+
+
+<<BEGIN EXAMPLE FEATURE 1>>
+Promoted tokens: 她, She,  HER,  herself, ла
+Example prompts: 
+
+
+Example 1: to dismantle the Sacred Chapel, destroy the universal flame of the Church, reject << Her>>(24) ornaments and make << Her>>(18) feel remorse for << Her>>(17) historical past."A day will come when the civilized world will deny its God, when the Church will doubt as Peter doubted. << She>>(17) will be tempted to believe that man has become God. In our churches, Christians will search in vain for the red lamp where God awaits them. Like Mary Magdalene, weeping before the empty tomb, they will ask, 'Where have they taken Him?'"
+
+ALEXA RANK
+
+Find The Rank Of Any Website
+
+Current Crusaders Online Worldwide (RealTime)
+
+St. Bernard:
+
+
+
+
+
+
+Example 2: the defendant introduced << her>>(23) to a woman occupant and asked if a girl was needed. The woman occupant replied that there would be an opening in about one week. About September 1, 1960, victim A began work, as a prostitute, at this house. Either the defendant or Sarras would drive victim A to this house three mornings a week and would pick << her>>(15) up in the evenings. While at this house of prostitution victim A engaged in about 35 acts of sexual intercourse a day with different men for money. When either the defendant or Sarras arrived to pick << her>>(17) up in the evening << she>>(14) would give << her>>(15) total
+
+
+
+
+Example 3: from Ordinary Virgin to Creepy Stalker Virgin, an event marked by the gentle blow of cool breeze against the subject’s face, in an otherwise barren and hot as fuck chennai weather. Sources say that virginity and sight adichifying (ogling creepily at women) are among the major causes of climate change, putting an end to Bernie Sanders’ campaign against the fossil fuel industry. Anyway, so creepy SK goes around doing creepy stuff like spying << her>>(23) whereabouts, following her in malls, whistling at << her>>(12) in buses (without << her>>(15) noticing of course), and even enquiring about << her>>(12) marital status from << her>>(12) house watchman.
+
+THE UPMA
+
+
+Chain of thought:
+json_response: {'gender': 4, 'professor': 0, 'nurse': 0}
+raw_response: Step 1: The text examples consistently show activations on feminine pronouns like "her" and "she", often in contexts describing women or female characters.
+
+Step 2: The promoted tokens are primarily feminine pronouns in different languages, including "她" (Chinese), "She", "HER", "herself", and "ла" (Russian).
+
+Step 3: The neuron's behavior is strongly and consistently related to the concept of gender, specifically feminine gender. Both the text examples and promoted tokens overwhelmingly point to a focus on feminine pronouns and references. This clear and consistent pattern across languages suggests a strong association with the concept of gender, particularly the female gender. The neuron appears to be highly sensitive to feminine references in text.
+
+```json
+{"gender": 4, "professor": 0, "nurse": 0}
+```
+
+<<END EXAMPLE FEATURE 1>>
+
+
+
+<<BEGIN EXAMPLE FEATURE 2>>
+Promoted tokens:  years,  impact,  impacts,  Prior,  design
+Example prompts: 
+
+
+Example 1: estate career, Scott Pahlow has reached the top of his industry.
+
+Pahlow, an executive vice president with Newmark Grubb Memphis, was named Commercial Broker of the Year Thursday night at the Memphis Area Association of Realtors Commercial Council’s 13th annual Pinnacle Awards gala.
+
+Jonathan Bell has joined First State Bank as vice president/commercial loan officer. Bell, who has more than 13 << years>>(31) << of>>(34) experience << in>>(35) the << banking>>(32) << industry>>(38), will provide banking services for businesses in Collierville and the surrounding area.
+
+After months of planning, Wright Medical Group Inc. has signed the lease for its new headquarters and is in
+
+
+
+
+Example 2: Janell Gibson
+
+Janell Gibson, vice provost of academic and student affairs, joined Columbia Southern University in 2018.
+Gibson came to CSU with 18 years << of>>(37) higher << education>>(36) << experience>>(34) << with>>(32) an emphasis in online education. She has extensive experience teaching behavioral science and has held various leadership << positions>>(31) at Keiser University in Fort Lauderdale, Florida, and Parker University in Dallas, Texas.
+Gibson holds a bachelor’s degree in journalism from the University of Georgia and a master’s degree in counseling psychology from Nova Southeastern University. She is currently pursuing a Ph.D. in conflict analysis and resolution from Nova Southeastern University
+
+
+
+
+Example 3: OpenStack team for around 5 years. Igor has diplomas as a Master of Science (Mathematics and Computer Science, Academy of Federal Security Service), IT manager (Academy of National Economy under the Government of the Russian Federation) and Master of Laws (Russian Academy of Justice).
+
+Vladimir Udalov joined Insolar as Marketing & Sales Operations Director
+
+Vladimir is a senior B2B marketing executive with 12 << years>>(30) experience << in>>(37) the high tech << industry>>(30). He has a vast experience driving transformation for large corporations and high-tech startups, in addition to recruiting and leading world-class teams. Vladimir << previously>>(30) << worked>>(36) with Kaspersky, Veeam and HP
+
+
+
+Chain of thought:
+json_response: {'professor': 3, 'nurse': 0, 'gender': 0}
+raw_response: Step 1: The text examples primarily describe professional experiences and career backgrounds of individuals in various industries, often mentioning their years of experience and leadership positions.
+
+Step 2: The promoted tokens emphasize "years," "impact," and "experience," which are commonly used when describing professional backgrounds and achievements.
+
+Step 3: The examples and promoted tokens are strongly related to professional experience and career progression. While this isn't exclusively tied to professors, it is more closely aligned with professional roles that require extensive education and experience, such as professors. The emphasis on years of experience, leadership positions, and industry expertise suggests a connection to senior professional roles, which could include professors in academic settings.
+
+```json
+{
+  "professor": 3,
+  "nurse": 0,
+  "gender": 0
+}
+```
+<<END EXAMPLE FEATURE 2>>
+
+
+
+<<BEGIN EXAMPLE FEATURE 3>>
+Promoted tokens: 鬣, 的, ouds,  的, FragmentManager
+Example prompts: 
+
+
+Example 1: Page:In the Roar of the Sea <<.>>(15) <<dj>>(23)vu/168 <<
+
+>>(12)sat two men, one long and narrow-faced, the other tall, but stout and round-faced He recognized the former at once as Mr. Scantlebray, the appraiser. Mr. Scantlebray, who was driving, nudged his companion, and with the butt-end of the whip pointed to the boy.
+
+"Heigh! hi-up! Gaffer!" called Mr. Scantlebray, flapping his arms against his sides, much as does a cock with his wings. "Come along; I have
+
+
+
+
+Example 2: Chance the Rapper << Net>>(5) Worth $9 million
+
+Chance the Rapper salary $33,000,000
+
+Chance the << Rapper>>(7) Net Worth: How rich is Chance the Rapper? & How much money is Chance the << Rapper>>(20) << worth>>(7)? Time to find out!
+Chance the Rapper is an American recording artist, record producer, and philanthropist and his current net worth is $9 million.
+
+Born as Chancellor Johnathan Bennett, he grew up in West Chatham, a middle-class neighborhood on Chicago’s South Side. His father, Ken Williams-Bennett, a former aide to the Chicago mayor, worked for then-Senator Barack
+
+
+
+
+Example 3: with gusto, exclaiming that his job is important.
+
+References
+ Friedwald, Will and Jerry Beck. The Warner Brothers Cartoons. Scarecrow Press Inc., Metuchen, N.J., 1981. .
+
+External links
+ 
+ 
+ Watch Three Brothers << on>>(18) YouTube
+
+Category:1944 films
+Category:1944 animated films
+Category:Short films directed by Friz Freleng
+Category:Articles containing video clips
+Category:Private Snafu
+Category:Warner Bros. Cartoons animated short films
+Category:American animated short films
+Category:Films scored by Carl St
+
+
+Chain of thought:
+json_response: {'professor': 0, 'nurse': 0, 'gender': 0}
+raw_response: Step 1: The text examples cover a variety of topics, including literature excerpts, net worth information, and animated films.
+
+Step 2: The promoted tokens appear to be a mix of Chinese characters, programming-related terms, and miscellaneous words, with no clear thematic connection.
+
+Step 3: There is no consistent pattern or theme in the text examples or promoted tokens that relates to professors, nurses, or gender. The activations seem random and unrelated to any specific concept. The promoted tokens also don't show any clear relationship to the given concepts.
+
+```json
+{
+  "professor": 0,
+  "nurse": 0,
+  "gender": 0
+}
+```
+<<END EXAMPLE FEATURE 3>>

@@ -27,7 +27,7 @@ After finishing all steps above, provide a single json block at the end of your 
 """
 
 # Snippets from few shot examples:
-'''
+"""
 "32": {
   "sae": "../dictionary_learning/dictionaries/autointerp_test_data/pythia70m_sweep_topk_ctx128_0730/resid_post_layer_3/trainer_18",
   "class_index": "attorney",
@@ -71,7 +71,7 @@ After finishing all steps above, provide a single json block at the end of your 
     },
     "chain_of_thought": "The top promoted logits are related to the word AND.\nAll activations are on the word AND.\nI don't see an obvious pattern.\nI will rate all classes as 0."
   },
-'''
+"""
 
 
 # SYSTEM = """You are a meticulous AI researcher conducting an important investigation into a certain neuron in a language model. Your task is to analyze the neuron and decide whether its behavior is related to a concept in {concepts}.
@@ -411,7 +411,7 @@ def build_system_prompt(
 
 
 def create_few_shot_examples(prompt_dir: str, verbose: bool = False) -> str:
-    with open(os.path.join(prompt_dir, 'manual_labels_few_shot.json'), "r") as f:
+    with open(os.path.join(prompt_dir, "manual_labels_few_shot.json"), "r") as f:
         few_shot_manual_labels = json.load(f)
 
     if verbose:
@@ -436,6 +436,18 @@ def create_few_shot_examples(prompt_dir: str, verbose: bool = False) -> str:
         few_shot_examples += f"{per_class_scores}\n"
         few_shot_examples += "```"
         few_shot_examples += f"\n<<END EXAMPLE FEATURE {i}>>\n\n"
+
+    return few_shot_examples
+
+
+def load_few_shot_examples(prompt_dir: str, spurious_corr: bool) -> str:
+    if spurious_corr:
+        filename = "spurious_few_shot.txt"
+    else:
+        filename = "tpp_few_shot.txt"
+
+    with open(os.path.join(prompt_dir, "prompts", filename), "r") as f:
+        few_shot_examples = f.read()
 
     return few_shot_examples
 
