@@ -414,6 +414,8 @@ def prepare_probe_data(
 
     assert selected_negative_acts_BD.shape == positive_acts_BD.shape
 
+    # Experimental feature: find the top k features that differ the most between in distribution and out of distribution
+    # zero out the rest. Useful for k-sparse probing experiments.
     if select_top_k is not None:
         positive_distribution_D = positive_acts_BD.mean(dim=(0))
         negative_distribution_D = negative_acts.mean(dim=(0))
