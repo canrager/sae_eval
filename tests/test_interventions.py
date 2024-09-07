@@ -1,4 +1,5 @@
 import pickle
+import os
 
 import experiments.bib_intervention as bib_intervention
 import experiments.utils as utils
@@ -168,3 +169,82 @@ def test_run_interventions_tpp():
             expected_results = pickle.load(f)
 
         compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
+
+
+# NOTE: This will use ~5k API tokens.
+def test_run_interventions_spurious_correlation_autointerp():
+    test_config = PipelineConfig()
+
+    with open("anthropic_api_key.txt", "r") as f:
+        api_key = f.read().strip()
+
+    os.environ["ANTHROPIC_API_KEY"] = api_key
+
+    test_config.use_autointerp = True
+    test_config.force_node_effects_recompute = True
+    test_config.force_ablations_recompute = True
+
+    test_config.prompt_dir = "experiments/llm_autointerp/"
+    test_config.force_autointerp_recompute = True
+
+    test_config.num_top_features_per_class = 5
+
+    test_config.spurious_corr = True
+
+    test_config.probe_train_set_size = 4000
+    test_config.probe_test_set_size = 1000
+
+    # Load datset and probes
+    test_config.train_set_size = 500
+    test_config.test_set_size = 500
+
+    seed = 42
+
+    test_config.chosen_class_indices = [
+        "male / female",
+        "professor / nurse",
+        "male_professor / female_nurse",
+        "biased_male / biased_female",
+    ]
+
+    test_config.autointerp_t_effects = [5]
+
+    test_config.attrib_t_effects = []
+
+    test_config.dictionaries_path = "dictionary_learning/dictionaries"
+    test_config.probes_dir = "experiments/test_trained_bib_probes"
+
+    ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
+
+    for sweep_name, submodule_trainers in ae_sweep_paths.items():
+        bib_intervention.run_interventions(
+            submodule_trainers,
+            test_config,
+            sweep_name,
+            seed,
+            verbose=True,
+        )
+
+        ae_group_paths = utils.get_ae_group_paths(
+            test_config.dictionaries_path, sweep_name, submodule_trainers
+        )
+        ae_paths = utils.get_ae_paths(ae_group_paths)
+        tolerance = 0.03
+
+        filenames = [
+            "class_accuracies_auto_interp_spurious.pkl",
+            "class_accuracies_bias_shift_dir1_spurious.pkl",
+            "class_accuracies_bias_shift_dir2_spurious.pkl",
+        ]
+
+        for filename in filenames:
+            output_filename = filename.replace("_spurious", "")
+            output_filename = f"{ae_paths[0]}/{output_filename}"
+
+            with open(output_filename, "rb") as f:
+                class_accuracies = pickle.load(f)
+
+            with open(f"tests/test_data/{filename}", "rb") as f:
+                expected_results = pickle.load(f)
+
+            compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
