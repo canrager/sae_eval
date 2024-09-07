@@ -118,16 +118,7 @@ class PipelineConfig:
 
     include_activation_values_in_prompt: bool = True
 
-    chosen_autointerp_class_names = [
-        "gender",
-        "professor",
-        "nurse",
-        "accountant",
-        "architect",
-        "attorney",
-        "dentist",
-        "filmmaker",
-    ]
+    chosen_autointerp_class_names = None
 
     def to_dict(self):
         return {k: str(v) if isinstance(v, torch.dtype) else v for k, v in asdict(self).items()}

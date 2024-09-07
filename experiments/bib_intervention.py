@@ -27,6 +27,7 @@ import experiments.utils as utils
 import experiments.eval_saes as eval_saes
 import experiments.autointerp as autointerp
 import experiments.llm_autointerp.llm_query as llm_query
+import experiments.dataset_info as dataset_info
 
 from experiments.pipeline_config import PipelineConfig, FeatureSelection
 from experiments.probe_training import (
@@ -828,6 +829,20 @@ def run_interventions(
         all_node_effects = [(node_effects, "_attrib", p_config.attrib_t_effects)]
 
         if p_config.use_autointerp:
+            # Select the classes given to the LLM for autointerp
+            if p_config.spurious_corr:
+                column2_name = dataset_info.dataset_metadata[p_config.dataset_name]["column2_name"]
+                p_config.chosen_autointerp_class_names = [
+                    p_config.column1_vals[0],
+                    p_config.column1_vals[1],
+                    column2_name,
+                ]
+            else:
+                for class_idx in p_config.chosen_class_indices:
+                    p_config.chosen_autointerp_class_names.append(
+                        dataset_info.profession_int_to_str[class_idx]
+                    )
+
             # This will save node_effects_auto_interp.pkl, node_effects_bias_shift_dir1.pkl, and node_effects_bias_shift_dir2.pkl alongside each SAE
             node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = (
                 llm_query.perform_llm_autointerp(
