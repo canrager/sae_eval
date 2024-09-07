@@ -39,9 +39,6 @@ def compare_dicts_within_tolerance(actual, expected, tolerance, path="", all_dif
     elif isinstance(actual, (int, float)):
         diff = abs(actual - expected)
         all_diffs.append(diff)
-        assert (
-            diff <= tolerance
-        ), f"Value mismatch at {path}: {actual} not within {tolerance} of {expected}"
     else:
         assert actual == expected, f"Value mismatch at {path}: {actual} != {expected}"
 
@@ -50,8 +47,14 @@ def compare_dicts_within_tolerance(actual, expected, tolerance, path="", all_dif
         if all_diffs:
             mean_diff = sum(all_diffs) / len(all_diffs)
             max_diff = max(all_diffs)
+
             print(f"Global mean difference: {mean_diff}")
             print(f"Global max difference: {max_diff}")
+
+            assert (
+                max_diff <= tolerance
+            ), f"Value mismatch at {path}: {actual} not within {tolerance} of {expected}"
+
         else:
             print("No numeric differences found.")
 
@@ -60,6 +63,10 @@ def test_run_interventions_spurious_correlation():
     test_config = PipelineConfig()
 
     test_config.use_autointerp = False
+    test_config.force_node_effects_recompute = True
+    test_config.force_ablations_recompute = True
+
+    test_config.spurious_corr = True
 
     test_config.probe_train_set_size = 4000
     test_config.probe_test_set_size = 1000
@@ -114,6 +121,10 @@ def test_run_interventions_tpp():
     test_config = PipelineConfig()
 
     test_config.use_autointerp = False
+    test_config.force_node_effects_recompute = True
+    test_config.force_ablations_recompute = True
+
+    test_config.spurious_corr = False
 
     test_config.probe_train_set_size = 4000
     test_config.probe_test_set_size = 1000
