@@ -381,8 +381,9 @@ def get_activation_distribution_diff(
 def prepare_probe_data(
     all_activations: dict[int | str, t.Tensor],
     class_idx: int | str,
+    spurious_corr: bool,
     batch_size: int,
-    select_top_k: Optional[int] = None,
+    select_top_k: Optional[int] = None,  # experimental feature
 ) -> tuple[list[t.Tensor], list[t.Tensor]]:
     """If class_idx is a string, there is a paired class idx in utils.py."""
     positive_acts_BD = all_activations[class_idx]
@@ -390,19 +391,22 @@ def prepare_probe_data(
 
     num_positive = len(positive_acts_BD)
 
-    if isinstance(class_idx, int):
-        # Collect all negative class activations and labels
-        negative_acts = []
-        for idx, acts in all_activations.items():
-            if idx != class_idx and isinstance(idx, int):
-                negative_acts.append(acts)
-
-        negative_acts = t.cat(negative_acts)
-    else:
+    if spurious_corr:
+        assert isinstance(class_idx, str)
         if class_idx not in utils.PAIRED_CLASS_KEYS:
             raise ValueError(f"Class index {class_idx} is not a valid class index.")
 
         negative_acts = all_activations[utils.PAIRED_CLASS_KEYS[class_idx]]
+    else:
+        assert isinstance(class_idx, int)
+        # Collect all negative class activations and labels
+        negative_acts = []
+        for idx, acts in all_activations.items():
+            assert isinstance(idx, int)
+            if idx != class_idx:
+                negative_acts.append(acts)
+
+        negative_acts = t.cat(negative_acts)
 
     # Randomly select num_positive samples from negative class
     indices = t.randperm(len(negative_acts))[:num_positive]
@@ -552,15 +556,16 @@ def test_probe(
 
 
 def get_probe_test_accuracy(
-    probes,
-    all_class_list: list[str],
-    all_activations: dict[str, t.Tensor],
+    probes: dict[str | int, Probe],
+    all_class_list: list[str | int],
+    all_activations: dict[str | int, t.Tensor],
     probe_batch_size: int,
-):
+    spurious_corr: bool,
+) -> dict[str, dict[str, float]]:
     test_accuracies = {}
     for class_name in all_class_list:
         batch_test_acts, batch_test_labels = prepare_probe_data(
-            all_activations, class_name, probe_batch_size
+            all_activations, class_name, spurious_corr, probe_batch_size
         )
         test_acc_probe, acc_0, acc_1, loss = test_probe(
             batch_test_acts, batch_test_labels, probes[class_name], precomputed_acts=True
@@ -572,29 +577,31 @@ def get_probe_test_accuracy(
             "loss": loss,
         }
 
-    for class_name in all_class_list:
-        if class_name not in utils.PAIRED_CLASS_KEYS:
-            continue
-        spurious_class_names = [key for key in utils.PAIRED_CLASS_KEYS if key != class_name]
-        batch_test_acts, batch_test_labels = prepare_probe_data(
-            all_activations, class_name, probe_batch_size
-        )
-
-        for spurious_class_name in spurious_class_names:
-            test_acc_probe, acc_0, acc_1, loss = test_probe(
-                batch_test_acts,
-                batch_test_labels,
-                probes[spurious_class_name],
-                precomputed_acts=True,
+    # Tests e.g. male_professor / female_nurse probe on professor / nurse labels
+    if spurious_corr:
+        for class_name in all_class_list:
+            if class_name not in utils.PAIRED_CLASS_KEYS:
+                continue
+            spurious_class_names = [key for key in utils.PAIRED_CLASS_KEYS if key != class_name]
+            batch_test_acts, batch_test_labels = prepare_probe_data(
+                all_activations, class_name, spurious_corr, probe_batch_size
             )
-            combined_class_name = f"{spurious_class_name} probe on {class_name} data"
-            print(f"Test accuracy for {combined_class_name}: {test_acc_probe}")
-            test_accuracies[combined_class_name] = {
-                "acc": test_acc_probe,
-                "acc_0": acc_0,
-                "acc_1": acc_1,
-                "loss": loss,
-            }
+
+            for spurious_class_name in spurious_class_names:
+                test_acc_probe, acc_0, acc_1, loss = test_probe(
+                    batch_test_acts,
+                    batch_test_labels,
+                    probes[spurious_class_name],
+                    precomputed_acts=True,
+                )
+                combined_class_name = f"{spurious_class_name} probe on {class_name} data"
+                print(f"Test accuracy for {combined_class_name}: {test_acc_probe}")
+                test_accuracies[combined_class_name] = {
+                    "acc": test_acc_probe,
+                    "acc_0": acc_0,
+                    "acc_1": acc_1,
+                    "loss": loss,
+                }
 
     return test_accuracies
 
@@ -653,29 +660,32 @@ def train_probes(
     all_train_acts = {}
     all_test_acts = {}
 
+    t.set_grad_enabled(False)
+
     with t.no_grad():
-        for i, profession in enumerate(train_bios.keys()):
-            # if isinstance(profession, int):
-            #     continue
+        for i, class_name in enumerate(train_bios.keys()):
+            print(f"Collecting activations for profession: {class_name}")
 
-            print(f"Collecting activations for profession: {profession}")
-
-            all_train_acts[profession] = get_all_activations(
-                train_bios[profession], model, llm_batch_size, probe_act_submodule
+            all_train_acts[class_name] = get_all_activations(
+                train_bios[class_name], model, llm_batch_size, probe_act_submodule
             )
-            all_test_acts[profession] = get_all_activations(
-                test_bios[profession], model, llm_batch_size, probe_act_submodule
+            all_test_acts[class_name] = get_all_activations(
+                test_bios[class_name], model, llm_batch_size, probe_act_submodule
             )
 
     t.set_grad_enabled(True)
 
-    for profession in all_train_acts.keys():
-        if profession in utils.PAIRED_CLASS_KEYS.values():
+    for class_name in all_train_acts.keys():
+        if class_name in utils.PAIRED_CLASS_KEYS.values():
             continue
 
-        train_acts, train_labels = prepare_probe_data(all_train_acts, profession, probe_batch_size)
+        train_acts, train_labels = prepare_probe_data(
+            all_train_acts, class_name, spurious_correlation_removal, probe_batch_size
+        )
 
-        test_acts, test_labels = prepare_probe_data(all_test_acts, profession, probe_batch_size)
+        test_acts, test_labels = prepare_probe_data(
+            all_test_acts, class_name, spurious_correlation_removal, probe_batch_size
+        )
 
         probe, test_accuracy = train_probe(
             train_acts,
@@ -690,8 +700,8 @@ def train_probes(
             model_dtype=model_dtype,
         )
 
-        probes[profession] = probe
-        test_accuracies[profession] = test_accuracy
+        probes[class_name] = probe
+        test_accuracies[class_name] = test_accuracy
 
     if save_results:
         only_model_name = llm_model_name.split("/")[-1]

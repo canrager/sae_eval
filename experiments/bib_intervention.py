@@ -34,8 +34,6 @@ from experiments.pipeline_config import PipelineConfig, FeatureSelection
 from experiments.probe_training import (
     load_and_prepare_dataset,
     get_train_test_data,
-    test_probe,
-    prepare_probe_data,
     get_all_activations,
     Probe,
 )
@@ -767,7 +765,11 @@ def run_interventions(
             )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
-        probes, p_config.chosen_class_indices, test_acts, p_config.probe_batch_size
+        probes,
+        p_config.chosen_class_indices,
+        test_acts,
+        p_config.probe_batch_size,
+        spurious_correlation_removal,
     )
     del test_acts
 
@@ -903,6 +905,7 @@ def run_interventions(
                             node_effects_group_classes,
                             test_acts_ablated,
                             p_config.probe_batch_size,
+                            spurious_correlation_removal,
                         )
 
                         class_accuracies[ablated_class_idx][T_effect] = ablated_class_accuracies
