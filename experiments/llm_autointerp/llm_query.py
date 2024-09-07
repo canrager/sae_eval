@@ -329,27 +329,78 @@ def filter_node_effects_with_autointerp(
     return filtered_node_effects
 
 
-def llm_json_response_to_node_effects(
-    llm_json_response: dict[int, dict[int | str, int]],
-    ae_path: str,
-    p_config: PipelineConfig,
-) -> tuple[dict[int, torch.Tensor], dict[int, torch.Tensor], dict[int, torch.Tensor]]:
-    """Challenges with this function that should be addressed:
-    node_effects.pkl has keys of ints 0-27 + utils.PAIRED_CLASS_KEYS
-    llm_json_response has keys of 'doctor', 'accountant', etc. + professor, nurse, and gender.
-    Now we have to stitch these together."""
-
-    with open(f"{ae_path}/node_effects.pkl", "rb") as f:
-        node_effects_attrib_patching = pickle.load(f)
-
+def get_node_effects_auto_interp_tpp(
+    node_effects_attrib_patching: dict[int, torch.Tensor],
+    dict_size: int,
+    llm_json_response: dict[int, dict[int, int]],
+) -> dict[int, torch.Tensor]:
     node_effects_auto_interp = {}
-
-    first_node_effect = next(iter(node_effects_attrib_patching.values()))
-    dict_size = first_node_effect.size(0)
 
     for class_name in node_effects_attrib_patching.keys():
         node_effects_auto_interp[class_name] = torch.zeros(dict_size, device="cpu")
 
+    for sae_feature_idx in llm_json_response:
+        # This will happen if the LLM returns bad json for this feature idx
+        if llm_json_response[sae_feature_idx] is None:
+            continue
+
+        for class_idx in node_effects_attrib_patching.keys():
+            assert isinstance(class_idx, int)
+            class_name = dataset_info.profession_int_to_str[class_idx]
+            node_effects_auto_interp[class_idx][sae_feature_idx] = llm_json_response[
+                sae_feature_idx
+            ][class_name]
+
+    return node_effects_auto_interp
+
+
+def get_node_effects_auto_interp_spurious(
+    node_effects_attrib_patching: dict[str, torch.Tensor],
+    dict_size: int,
+    llm_json_response: dict[int, dict[str, int]],
+) -> dict[str, torch.Tensor]:
+    node_effects_auto_interp = {}
+
+    for class_name in node_effects_attrib_patching.keys():
+        node_effects_auto_interp[class_name] = torch.zeros(dict_size, device="cpu")
+
+    for sae_feature_idx in llm_json_response:
+        # This will happen if the LLM returns bad json for this feature idx
+        if llm_json_response[sae_feature_idx] is None:
+            continue
+
+        for class_name in node_effects_attrib_patching.keys():
+            # assert isinstance(class_name, str)
+            if isinstance(class_name, int):
+                continue
+
+            professor_value = llm_json_response[sae_feature_idx]["professor"]
+            nurse_value = llm_json_response[sae_feature_idx]["nurse"]
+            gender_value = llm_json_response[sae_feature_idx]["gender"]
+
+            professor_nurse_value = max(professor_value, nurse_value)
+            professor_nurse_gender_value = max(professor_nurse_value, gender_value)
+
+            if class_name == "male / female":
+                node_effects_auto_interp[class_name][sae_feature_idx] = gender_value
+            elif class_name == "professor / nurse":
+                node_effects_auto_interp[class_name][sae_feature_idx] = professor_nurse_value
+            elif (
+                class_name == "male_professor / female_nurse"
+                or class_name == "biased_male / biased_female"
+            ):
+                node_effects_auto_interp[class_name][sae_feature_idx] = professor_nurse_gender_value
+            else:
+                raise ValueError(f"Unknown class name: {class_name}")
+
+    return node_effects_auto_interp
+
+
+def get_node_effects_bias_shift(
+    node_effects_attrib_patching: dict[str, torch.Tensor],
+    dict_size: int,
+    llm_json_response: dict[int, dict[str, int]],
+) -> dict[str, torch.Tensor]:
     node_effects_bias_shift_dir1 = {
         "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
         "biased_male / biased_female": torch.zeros(dict_size, device="cpu"),
@@ -364,53 +415,26 @@ def llm_json_response_to_node_effects(
         "professor / nurse": torch.zeros(dict_size, device="cpu"),
     }
 
-    # Step 1: Regular class names, no bias shift
-    for sae_feature_idx in llm_json_response:
-        # This will happen if the LLM returns bad json for this feature idx
-        if llm_json_response[sae_feature_idx] is None:
-            continue
-
-        for class_idx in node_effects_attrib_patching.keys():
-            if class_idx in utils.PAIRED_CLASS_KEYS:
-                continue
-            class_name = dataset_info.profession_int_to_str[class_idx]
-            node_effects_auto_interp[class_idx][sae_feature_idx] = llm_json_response[
-                sae_feature_idx
-            ][class_name]
-
-    # Step 2: Paired class names, no bias shift
-
     for sae_feature_idx in llm_json_response:
         # This will happen if the LLM returns bad json for this feature idx
         if llm_json_response[sae_feature_idx] is None:
             continue
 
         for class_name in node_effects_attrib_patching.keys():
-            if class_name not in utils.PAIRED_CLASS_KEYS:
-                continue
+            assert isinstance(class_name, str)
 
             professor_value = llm_json_response[sae_feature_idx]["professor"]
             nurse_value = llm_json_response[sae_feature_idx]["nurse"]
             gender_value = llm_json_response[sae_feature_idx]["gender"]
 
             professor_nurse_value = max(professor_value, nurse_value)
-            professor_nurse_gender_value = max(professor_nurse_value, gender_value)
 
             if class_name == "male / female":
-                node_effects_auto_interp[class_name][sae_feature_idx] = gender_value
                 node_effects_bias_shift_dir1[class_name][sae_feature_idx] = gender_value
                 node_effects_bias_shift_dir2[class_name][sae_feature_idx] = gender_value
             elif class_name == "professor / nurse":
-                node_effects_auto_interp[class_name][sae_feature_idx] = professor_nurse_value
                 node_effects_bias_shift_dir1[class_name][sae_feature_idx] = professor_nurse_value
                 node_effects_bias_shift_dir2[class_name][sae_feature_idx] = professor_nurse_value
-            elif (
-                class_name == "male_professor / female_nurse"
-                or class_name == "biased_male / biased_female"
-            ):
-                node_effects_auto_interp[class_name][sae_feature_idx] = professor_nurse_gender_value
-            else:
-                raise ValueError(f"Unknown class name: {class_name}")
 
     # Step 3: bias shift
     for sae_feature_idx in llm_json_response:
@@ -432,30 +456,61 @@ def llm_json_response_to_node_effects(
                 node_effects_bias_shift_dir1[class_name][sae_feature_idx] = gender_value
                 node_effects_bias_shift_dir2[class_name][sae_feature_idx] = professor_nurse_value
 
+    return node_effects_bias_shift_dir1, node_effects_bias_shift_dir2
+
+
+def llm_json_response_to_node_effects(
+    llm_json_response: dict[int, dict[int | str, int]],
+    ae_path: str,
+    p_config: PipelineConfig,
+) -> tuple[dict[int, torch.Tensor], dict[int, torch.Tensor], dict[int, torch.Tensor]]:
+    """Challenges with this function that should be addressed:
+    node_effects.pkl has keys of ints 0-27 + utils.PAIRED_CLASS_KEYS
+    llm_json_response has keys of 'doctor', 'accountant', etc. + professor, nurse, and gender.
+    Now we have to stitch these together."""
+
+    with open(f"{ae_path}/node_effects.pkl", "rb") as f:
+        node_effects_attrib_patching = pickle.load(f)
+
+    first_node_effect = next(iter(node_effects_attrib_patching.values()))
+    dict_size = first_node_effect.size(0)
+
+    if p_config.spurrious_correlation_removal:
+        node_effects_auto_interp = get_node_effects_auto_interp_spurious(
+            node_effects_attrib_patching, dict_size, llm_json_response
+        )
+        node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = get_node_effects_bias_shift(
+            node_effects_attrib_patching, dict_size, llm_json_response
+        )
+
+        node_effects_bias_shift_dir1 = filter_node_effects_with_autointerp(
+            node_effects_bias_shift_dir1,
+            node_effects_attrib_patching,
+            p_config.llm_judge_binary_threshold,
+        )
+
+        node_effects_bias_shift_dir2 = filter_node_effects_with_autointerp(
+            node_effects_bias_shift_dir2,
+            node_effects_attrib_patching,
+            p_config.llm_judge_binary_threshold,
+        )
+
+        with open(f"{ae_path}/{p_config.bias_shift_dir1_filename}", "wb") as f:
+            pickle.dump(node_effects_bias_shift_dir1, f)
+
+        with open(f"{ae_path}/{p_config.bias_shift_dir2_filename}", "wb") as f:
+            pickle.dump(node_effects_bias_shift_dir2, f)
+    else:
+        node_effects_auto_interp = get_node_effects_auto_interp_tpp(
+            node_effects_attrib_patching, dict_size, llm_json_response
+        )
+
     node_effects_auto_interp = filter_node_effects_with_autointerp(
         node_effects_auto_interp, node_effects_attrib_patching, p_config.llm_judge_binary_threshold
     )
 
-    node_effects_bias_shift_dir1 = filter_node_effects_with_autointerp(
-        node_effects_bias_shift_dir1,
-        node_effects_attrib_patching,
-        p_config.llm_judge_binary_threshold,
-    )
-
-    node_effects_bias_shift_dir2 = filter_node_effects_with_autointerp(
-        node_effects_bias_shift_dir2,
-        node_effects_attrib_patching,
-        p_config.llm_judge_binary_threshold,
-    )
-
     with open(f"{ae_path}/{p_config.autointerp_filename}", "wb") as f:
         pickle.dump(node_effects_auto_interp, f)
-
-    with open(f"{ae_path}/{p_config.bias_shift_dir1_filename}", "wb") as f:
-        pickle.dump(node_effects_bias_shift_dir1, f)
-
-    with open(f"{ae_path}/{p_config.bias_shift_dir2_filename}", "wb") as f:
-        pickle.dump(node_effects_bias_shift_dir2, f)
 
     with open(os.path.join(ae_path, "autointerp_pipeline_config.pkl"), "wb") as f:
         pickle.dump(p_config, f)
