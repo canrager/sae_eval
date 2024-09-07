@@ -610,15 +610,18 @@ def train_probes(
     device: str,
     probe_output_filename: str,
     spurious_correlation_removal: bool,
+    dataset_name: str = "bias_in_bios",
     probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
     epochs: int = 10,
     model_dtype: t.dtype = t.bfloat16,
     save_results: bool = True,
     seed: int = SEED,
-    include_gender: bool = False,
+    column1_vals: Optional[tuple[str, str]] = None,
+    column2_vals: Optional[tuple[str, str]] = None,
 ) -> dict[int, float]:
-    """Because we save the probes, we always train them on all classes to avoid potential issues with missing classes. It's only a one-time cost."""
+    """Because we save the probes, we always train them on all classes to avoid potential issues with missing classes. It's only a one-time cost.
+    Example of column1_vals and column2_vals: ('professor', 'nurse'), ('male', 'female')"""
     t.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -628,16 +631,7 @@ def train_probes(
     probe_layer = model_eval_config.probe_layer
     probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
-    dataset_name = "bias_in_bios"
-
     train_df, test_df = load_and_prepare_dataset(dataset_name)
-
-    if spurious_correlation_removal:
-        column1_vals = ("professor", "nurse")
-        column2_vals = ("male", "female")
-    else:
-        column1_vals = None
-        column2_vals = None
 
     train_bios, test_bios = get_train_test_data(
         train_df=train_df,
@@ -737,13 +731,14 @@ if __name__ == "__main__":
         context_length=128,
         probe_batch_size=50,
         llm_batch_size=20,
-        llm_model_name=llm_model_name,
-        epochs=10,
         device=device,
         probe_output_filename=probe_output_filename,
+        spurious_correlation_removal=False,
+        dataset_name="bias_in_bios",
         probe_dir=probe_dir,
+        llm_model_name=llm_model_name,
+        epochs=10,
         seed=SEED,
-        include_gender=include_gender,
     )
     print(test_accuracies)
 # %%

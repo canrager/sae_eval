@@ -739,11 +739,11 @@ def run_interventions(
             llm_batch_size=llm_batch_size,
             device=device,
             probe_output_filename=probe_path,
+            dataset_name="bias_in_bios",
             probe_dir=p_config.probes_dir,
             llm_model_name=model_name,
             epochs=p_config.probe_epochs,
             model_dtype=p_config.model_dtype,
-            include_gender=p_config.include_gender,
             spurious_correlation_removal=spurious_correlation_removal,
         )
 

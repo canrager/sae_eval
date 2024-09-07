@@ -27,9 +27,9 @@ def test_probing_tpp():
         device=device,
         probe_output_filename=probe_output_filename,
         spurious_correlation_removal=False,
+        dataset_name="bias_in_bios",
         save_results=False,
         seed=42,
-        include_gender=True,
     )
 
     expected_accuracies = {
@@ -81,9 +81,11 @@ def test_probing_spurious_correlation():
         device=device,
         probe_output_filename=probe_output_filename,
         spurious_correlation_removal=True,
+        dataset_name="bias_in_bios",
         save_results=False,
         seed=42,
-        include_gender=True,
+        column1_vals=("professor", "nurse"),
+        column2_vals=("male", "female"),
     )
 
     expected_accuracies = {
