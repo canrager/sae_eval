@@ -102,7 +102,7 @@ def test_probing_spurious_correlation():
             0.9880000352859497,
             0.037353515625,
         ),
-        "noisy_male_professor / noisy_female_nurse": (
+        "biased_male / biased_female": (
             0.9780000448226929,
             0.9760000705718994,
             0.9800000190734863,

@@ -13,7 +13,7 @@ import experiments.llm_autointerp.llm_utils as llm_utils
 import experiments.llm_autointerp.prompts as prompts
 import experiments.autointerp as autointerp
 import experiments.utils as utils
-import experiments.utils_bib_dataset as utils_bib_dataset
+import experiments.dataset_info as dataset_info
 
 from experiments.pipeline_config import PipelineConfig
 
@@ -373,7 +373,7 @@ def llm_json_response_to_node_effects(
         for class_idx in node_effects_attrib_patching.keys():
             if class_idx in utils.PAIRED_CLASS_KEYS:
                 continue
-            class_name = utils_bib_dataset.profession_int_to_str[class_idx]
+            class_name = dataset_info.profession_int_to_str[class_idx]
             node_effects_auto_interp[class_idx][sae_feature_idx] = llm_json_response[
                 sae_feature_idx
             ][class_name]

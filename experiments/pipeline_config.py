@@ -12,6 +12,10 @@ class FeatureSelection(Enum):
 
 @dataclass
 class PipelineConfig:
+    dataset_name: str = "bias_in_bios"
+    column1_vals = ("professor", "nurse")
+    column2_vals = ("male", "female")
+
     max_activations_collection_n_inputs: int = 10000
     top_k_inputs_act_collect: int = 5
 

@@ -31,6 +31,7 @@ profession_dict = {
     "teacher": 26,
     "yoga_teacher": 27,
 }
+profession_int_to_str = {v: k for k, v in profession_dict.items()}
 
 gender_dict = {
     "male": 0,
@@ -50,5 +51,3 @@ dataset_metadata = {
         "column2_neg": "female",
     }
 }
-
-profession_int_to_str = {v: k for k, v in profession_dict.items()}

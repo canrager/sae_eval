@@ -20,8 +20,6 @@ parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
 
 from attribution import patching_effect
-from dictionary_learning.interp import examine_dimension
-from dictionary_learning.utils import hf_dataset_to_generator
 from dictionary_learning.dictionary import AutoEncoder
 
 import experiments.probe_training as probe_training
@@ -662,7 +660,7 @@ def run_interventions(
         model_name,
         device_map=device,
         dispatch=True,
-        attn_implementation="eager",
+        attn_implementation="eager",  # required for gemma-2-2b or we get a bunch of NaNs
         torch_dtype=p_config.model_dtype,
     )
 
@@ -707,19 +705,28 @@ def run_interventions(
             force_rerun=p_config.force_max_activations_recompute,
         )
 
-    dataset, _ = load_and_prepare_dataset()
+    train_df, test_df = load_and_prepare_dataset(p_config.dataset_name)
+
     train_bios, test_bios = get_train_test_data(
-        dataset,
-        p_config.train_set_size,
-        p_config.test_set_size,
-        p_config.include_gender,
+        train_df=train_df,
+        test_df=test_df,
+        dataset_name=p_config.dataset_name,
+        spurious_corr=spurious_correlation_removal,
+        train_set_size=p_config.train_set_size,
+        test_set_size=p_config.test_set_size,
+        random_seed=random_seed,
+        column1_vals=p_config.column1_vals,
+        column2_vals=p_config.column2_vals,
     )
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
     only_model_name = model_name.split("/")[-1]
-    probe_path = f"{p_config.probes_dir}/{only_model_name}/probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+    if spurious_correlation_removal:
+        probe_path = f"{p_config.probes_dir}/{only_model_name}/spurious_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+    else:
+        probe_path = f"{p_config.probes_dir}/{only_model_name}/tpp_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
@@ -737,12 +744,14 @@ def run_interventions(
             llm_batch_size=llm_batch_size,
             device=device,
             probe_output_filename=probe_path,
-            dataset_name="bias_in_bios",
+            dataset_name=p_config.dataset_name,
             probe_dir=p_config.probes_dir,
             llm_model_name=model_name,
             epochs=p_config.probe_epochs,
             model_dtype=p_config.model_dtype,
             spurious_correlation_removal=spurious_correlation_removal,
+            column1_vals=p_config.column1_vals,
+            column2_vals=p_config.column2_vals,
         )
 
     with open(probe_path, "rb") as f:

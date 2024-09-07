@@ -194,10 +194,12 @@ def get_spurious_corr_data(
         pos_pos  # male_professor data only, to be combined with female_nurse data
     )
     balanced_data[f"{column2_neg}_{column1_neg}_data_only"] = neg_neg  # female_nurse data only
-    balanced_data[f"noisy_{column2_pos}_{column1_pos} / noisy_{column2_neg}_{column1_neg}"] = (
+
+    # TODO: Rename biased_male to noisy_male_professor for clarity.
+    balanced_data[f"biased_{column2_pos} / biased_{column2_neg}"] = (
         noisy_combined_pos  # noisy_male_professor data only, to be combined with noisy_female_nurse
     )
-    balanced_data[f"noisy_{column2_neg}_{column1_neg}_data_only"] = (
+    balanced_data[f"biased_{column2_neg}_data_only"] = (
         noisy_combined_neg  # noisy_female_nurse data only
     )
 
