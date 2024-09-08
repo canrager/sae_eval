@@ -20,8 +20,6 @@ parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
 
 from attribution import patching_effect
-from dictionary_learning.interp import examine_dimension
-from dictionary_learning.utils import hf_dataset_to_generator
 from dictionary_learning.dictionary import AutoEncoder
 
 import experiments.probe_training as probe_training
@@ -29,13 +27,12 @@ import experiments.utils as utils
 import experiments.eval_saes as eval_saes
 import experiments.autointerp as autointerp
 import experiments.llm_autointerp.llm_query as llm_query
+import experiments.dataset_info as dataset_info
 
 from experiments.pipeline_config import PipelineConfig, FeatureSelection
 from experiments.probe_training import (
     load_and_prepare_dataset,
     get_train_test_data,
-    test_probe,
-    prepare_probe_data,
     get_all_activations,
     Probe,
 )
@@ -149,8 +146,11 @@ def get_class_samples(data: dict, class_idx: int, device: str) -> tuple[list, t.
 
 
 # TODO: Think about removing support for list of string inputs
-def get_paired_class_samples(data: dict, class_idx, device: str) -> tuple[list, t.Tensor]:
-    """This is for getting equal number of text samples from the chosen class and all other classes.
+def get_paired_class_samples(
+    data: dict[str, list[str] | dict[str, t.Tensor]], class_idx: str, device: str
+) -> tuple[list, t.Tensor]:
+    """This is for getting equal number of text samples from the chosen class and a paired class.
+    There's some extra logic because currently we support both string and tensor inputs.
     We use this for attribution patching."""
 
     # TODO: Clean this up
@@ -218,6 +218,7 @@ def get_effects_per_class(
     probe_act_submodule: utils.submodule_alias,
     class_idx: int | str,
     train_bios: dict,
+    spurious_corr: bool,
     seed: int,
     batch_size: int = 10,
     patching_method: str = "attrib",
@@ -231,11 +232,13 @@ def get_effects_per_class(
     device = model.device
     probe = probes[class_idx]
 
-    if isinstance(class_idx, int):
+    if spurious_corr:
+        assert isinstance(class_idx, str)
+        inputs_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
+    else:
+        assert isinstance(class_idx, int)
         inputs_train, labels_train = get_class_samples(train_bios, class_idx, device)
         # texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
-    else:
-        inputs_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
 
     inputs_train = utils.batch_inputs(inputs_train, batch_size)
     labels_train = utils.batch_inputs(labels_train, batch_size)
@@ -292,6 +295,7 @@ def get_all_node_effects_for_one_sae(
     probe_act_submodule: utils.submodule_alias,
     chosen_class_indices: list[int | str],
     train_bios: dict,
+    spurious_corr: bool,
     seed: int,
     batch_size: int = 10,
     patching_method: str = "attrib",
@@ -321,7 +325,8 @@ def get_all_node_effects_for_one_sae(
             probe_act_submodule,
             ablated_class_idx,
             train_bios,
-            random_seed,
+            spurious_corr,
+            seed,
             batch_size=batch_size,
             patching_method=patching_method,
             steps=steps,
@@ -477,46 +482,50 @@ def select_significant_features2(
     return feats_above_T
 
 
-def select_top_n_features(
+def select_top_n_features(effects: t.Tensor, n: int, abl_class_idx: int) -> t.Tensor:
+    assert (
+        n <= effects.numel()
+    ), f"n ({n}) must not be larger than the number of features ({effects.numel()}) for ablation class {abl_class_idx}"
+
+    # Find non-zero effects
+    non_zero_mask = effects != 0
+    non_zero_effects = effects[non_zero_mask]
+    num_non_zero = non_zero_effects.numel()
+
+    if num_non_zero < n:
+        print(
+            f"WARNING: only {num_non_zero} non-zero effects found for ablation class {abl_class_idx}, which is less than the requested {n}."
+        )
+
+    # Select top n or all non-zero effects, whichever is smaller
+    k = min(n, num_non_zero)
+
+    if k == 0:
+        print(
+            f"WARNING: No non-zero effects found for ablation class {abl_class_idx}. Returning an empty mask."
+        )
+        top_n_features = t.zeros_like(effects, dtype=t.bool)
+    else:
+        # Get the indices of the top N effects
+        _, top_indices = t.topk(effects, k)
+
+        # Create a boolean mask tensor
+        mask = t.zeros_like(effects, dtype=t.bool)
+        mask[top_indices] = True
+
+        top_n_features = mask
+
+    return top_n_features
+
+
+def select_top_n_features_all_classes(
     node_effects: dict[int | str, t.Tensor],
     n: int,
 ) -> dict[int | str, t.Tensor]:
     top_n_features = {}
 
     for abl_class_idx, effects in node_effects.items():
-        top_n_features[abl_class_idx] = {}
-
-        assert (
-            n <= effects.numel()
-        ), f"n ({n}) must not be larger than the number of features ({effects.numel()}) for ablation class {abl_class_idx}"
-
-        # Find non-zero effects
-        non_zero_mask = effects != 0
-        non_zero_effects = effects[non_zero_mask]
-        num_non_zero = non_zero_effects.numel()
-
-        if num_non_zero < n:
-            print(
-                f"WARNING: only {num_non_zero} non-zero effects found for ablation class {abl_class_idx}, which is less than the requested {n}."
-            )
-
-        # Select top n or all non-zero effects, whichever is smaller
-        k = min(n, num_non_zero)
-
-        if k == 0:
-            print(
-                f"WARNING: No non-zero effects found for ablation class {abl_class_idx}. Returning an empty mask."
-            )
-            top_n_features[abl_class_idx] = t.zeros_like(effects, dtype=t.bool)
-        else:
-            # Get the indices of the top N effects
-            _, top_indices = t.topk(effects, k)
-
-            # Create a boolean mask tensor
-            mask = t.zeros_like(effects, dtype=t.bool)
-            mask[top_indices] = True
-
-            top_n_features[abl_class_idx] = mask
+        top_n_features[abl_class_idx] = select_top_n_features(effects, n, abl_class_idx)
 
     return top_n_features
 
@@ -592,7 +601,7 @@ def select_features(
             )
     elif selection_method == FeatureSelection.top_n:
         for n in T_effects:
-            selected_features[n] = select_top_n_features(node_effects, n)
+            selected_features[n] = select_top_n_features_all_classes(node_effects, n)
     else:
         raise ValueError("Invalid selection method")
 
@@ -640,9 +649,7 @@ def run_interventions(
 ):
     T_max_sideeffect = 0.000001  # Deprecated
 
-    spurious_correlation_removal = utils.check_if_spurious_correlation_removal(
-        p_config.chosen_class_indices
-    )
+    assert p_config.selection_method == FeatureSelection.top_n, "Only top_n is supported right now"
 
     t.manual_seed(random_seed)
     random.seed(random_seed)
@@ -664,7 +671,7 @@ def run_interventions(
         model_name,
         device_map=device,
         dispatch=True,
-        attn_implementation="eager",
+        attn_implementation="eager",  # required for gemma-2-2b or we get a bunch of NaNs
         torch_dtype=p_config.model_dtype,
     )
 
@@ -709,19 +716,28 @@ def run_interventions(
             force_rerun=p_config.force_max_activations_recompute,
         )
 
-    dataset, _ = load_and_prepare_dataset()
+    train_df, test_df = load_and_prepare_dataset(p_config.dataset_name)
+
     train_bios, test_bios = get_train_test_data(
-        dataset,
-        p_config.train_set_size,
-        p_config.test_set_size,
-        p_config.include_gender,
+        train_df=train_df,
+        test_df=test_df,
+        dataset_name=p_config.dataset_name,
+        spurious_corr=p_config.spurious_corr,
+        train_set_size=p_config.train_set_size,
+        test_set_size=p_config.test_set_size,
+        random_seed=random_seed,
+        column1_vals=p_config.column1_vals,
+        column2_vals=p_config.column2_vals,
     )
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
     only_model_name = model_name.split("/")[-1]
-    probe_path = f"{p_config.probes_dir}/{only_model_name}/probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+    if p_config.spurious_corr:
+        probe_path = f"{p_config.probes_dir}/{only_model_name}/spurious_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+    else:
+        probe_path = f"{p_config.probes_dir}/{only_model_name}/tpp_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
@@ -739,11 +755,14 @@ def run_interventions(
             llm_batch_size=llm_batch_size,
             device=device,
             probe_output_filename=probe_path,
+            dataset_name=p_config.dataset_name,
             probe_dir=p_config.probes_dir,
             llm_model_name=model_name,
             epochs=p_config.probe_epochs,
             model_dtype=p_config.model_dtype,
-            include_gender=p_config.include_gender,
+            spurious_correlation_removal=p_config.spurious_corr,
+            column1_vals=p_config.column1_vals,
+            column2_vals=p_config.column2_vals,
         )
 
     with open(probe_path, "rb") as f:
@@ -766,7 +785,11 @@ def run_interventions(
             )
 
     test_accuracies = probe_training.get_probe_test_accuracy(
-        probes, p_config.chosen_class_indices, test_acts, p_config.probe_batch_size
+        probes,
+        p_config.chosen_class_indices,
+        test_acts,
+        p_config.probe_batch_size,
+        p_config.spurious_corr,
     )
     del test_acts
 
@@ -788,7 +811,7 @@ def run_interventions(
         class_accuracies = {"clean_acc": test_accuracies}
 
         # For every class, we get the indirect effects of every SAE feature wrt. the class probe
-        node_effects = get_all_node_effects_for_one_sae(
+        node_effects_attrib = get_all_node_effects_for_one_sae(
             model=model,
             submodules=submodules,
             dictionaries=dictionaries,
@@ -798,13 +821,30 @@ def run_interventions(
             probe_act_submodule=probe_act_submodule,
             chosen_class_indices=p_config.chosen_class_indices,
             train_bios=train_bios,
+            spurious_corr=p_config.spurious_corr,
             seed=random_seed,
             batch_size=patching_batch_size,
             patching_method=p_config.attribution_patching_method,
             steps=p_config.ig_steps,
         )
 
+        all_node_effects = [(node_effects_attrib, "_attrib", p_config.attrib_t_effects)]
+
         if p_config.use_autointerp:
+            # Select the classes given to the LLM for autointerp
+            if p_config.spurious_corr:
+                column2_name = dataset_info.dataset_metadata[p_config.dataset_name]["column2_name"]
+                p_config.chosen_autointerp_class_names = [
+                    p_config.column1_vals[0],
+                    p_config.column1_vals[1],
+                    column2_name,
+                ]
+            else:
+                for class_idx in p_config.chosen_class_indices:
+                    p_config.chosen_autointerp_class_names.append(
+                        dataset_info.profession_int_to_str[class_idx]
+                    )
+
             # This will save node_effects_auto_interp.pkl, node_effects_bias_shift_dir1.pkl, and node_effects_bias_shift_dir2.pkl alongside each SAE
             node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = (
                 llm_query.perform_llm_autointerp(
@@ -814,39 +854,65 @@ def run_interventions(
                     debug_mode=True,
                 )
             )
-            all_node_effects = [
-                (node_effects_auto_interp, "_auto_interp", p_config.autointerp_t_effects),
-                (node_effects_bias_shift_dir1, "_bias_shift_dir1", p_config.autointerp_t_effects),
-                (node_effects_bias_shift_dir2, "_bias_shift_dir2", p_config.autointerp_t_effects),
-                (node_effects, "_attrib", p_config.attrib_t_effects),
-            ]
-        else:
-            all_node_effects = [(node_effects, "_attrib", p_config.attrib_t_effects)]
+            all_node_effects.append(
+                (node_effects_auto_interp, "_auto_interp", p_config.autointerp_t_effects)
+            )
+
+            if p_config.spurious_corr:
+                all_node_effects.append(
+                    (
+                        node_effects_bias_shift_dir1,
+                        "_bias_shift_dir1",
+                        p_config.autointerp_t_effects,
+                    )
+                )
+                all_node_effects.append(
+                    (
+                        node_effects_bias_shift_dir2,
+                        "_bias_shift_dir2",
+                        p_config.autointerp_t_effects,
+                    )
+                )
 
         t.cuda.empty_cache()
         gc.collect()
 
         for node_effects_group, effects_group_name, T_effects in all_node_effects:
-            selected_features = select_features(
-                p_config.selection_method,
-                node_effects_group,
-                dict_size,
-                T_effects,
-                T_max_sideeffect,
-                verbose=verbose,
-            )
+            output_base_filename = f"class_accuracies{effects_group_name}"
 
-            node_effects_group_classes = list(node_effects_group.keys())
+            if (
+                os.path.exists(os.path.join(ae_path, f"{output_base_filename}.pkl"))
+                and not p_config.force_ablations_recompute
+            ):
+                print(f"Skipping ablations for {ae_path} {effects_group_name}")
+                continue
+            if not os.path.exists(os.path.join(ae_path, f"{output_base_filename}.pkl")):
+                print(f"Running ablations for {ae_path} {effects_group_name}")
+            elif p_config.force_ablations_recompute:
+                print(f"Recomputing ablations for {ae_path} {effects_group_name}")
 
             with t.inference_mode():
                 # Now that we have collected node effects and selected features, we ablate the selected features and measure the change in probe accuracy
-                for ablated_class_idx in node_effects_group_classes:
+                for ablated_class_idx in node_effects_group.keys():
                     class_accuracies[ablated_class_idx] = {}
                     print(f"evaluating class {ablated_class_idx}")
 
                     for T_effect in T_effects:
                         class_accuracies[ablated_class_idx][T_effect] = {}
-                        selected_features_mask = selected_features[T_effect][ablated_class_idx]
+
+                        if effects_group_name == "_attrib":
+                            effects = node_effects_group[ablated_class_idx]
+                        else:
+                            effects = llm_query.filter_node_effects_with_autointerp(
+                                node_effects_group[ablated_class_idx],
+                                node_effects_attrib[ablated_class_idx],
+                                T_effect,
+                                p_config.llm_judge_binary_threshold,
+                            )
+
+                        selected_features_mask = select_top_n_features(
+                            effects, T_effect, ablated_class_idx
+                        )
 
                         if t.all(selected_features_mask == 0):
                             print(f"No features selected for T_effect = {T_effect}")
@@ -860,7 +926,7 @@ def run_interventions(
                             print(f"Ablating {selected_features_mask.sum()} features")
                         test_acts_ablated = {}
                         for evaluated_class_idx in tqdm(
-                            node_effects_group_classes, desc="Getting activations"
+                            node_effects_group.keys(), desc="Getting activations"
                         ):
                             test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
                                 test_bios[evaluated_class_idx],
@@ -886,9 +952,10 @@ def run_interventions(
 
                         ablated_class_accuracies = probe_training.get_probe_test_accuracy(
                             probes,
-                            node_effects_group_classes,
+                            list(node_effects_group.keys()),
                             test_acts_ablated,
                             p_config.probe_batch_size,
+                            p_config.spurious_corr,
                         )
 
                         class_accuracies[ablated_class_idx][T_effect] = ablated_class_accuracies
@@ -904,7 +971,7 @@ def run_interventions(
             save_log_files(
                 ae_path,
                 class_accuracies,
-                f"class_accuracies{effects_group_name}",
+                output_base_filename,
                 ".pkl",
                 save_backup=False,
             )
@@ -912,7 +979,7 @@ def run_interventions(
     # Extract results to a separate folder
     src_folder = os.path.join(p_config.dictionaries_path, sweep_name)
 
-    if spurious_correlation_removal:
+    if p_config.spurious_corr:
         output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_spurious_removal"
     else:
         output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_tpp"

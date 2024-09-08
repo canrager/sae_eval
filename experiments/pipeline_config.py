@@ -12,6 +12,12 @@ class FeatureSelection(Enum):
 
 @dataclass
 class PipelineConfig:
+    dataset_name: str = "bias_in_bios"
+    column1_vals = ("professor", "nurse")
+    column2_vals = ("male", "female")
+
+    spurious_corr: bool = True
+
     max_activations_collection_n_inputs: int = 10000
     top_k_inputs_act_collect: int = 5
 
@@ -33,13 +39,12 @@ class PipelineConfig:
     reduced_GPU_memory: bool = False
     include_gender: bool = True
 
-    use_autointerp: bool = True
-
     force_eval_results_recompute: bool = False
     force_max_activations_recompute: bool = False
     force_probe_recompute: bool = False
     force_node_effects_recompute: bool = False
     force_autointerp_recompute: bool = False
+    force_ablations_recompute: bool = False
 
     dictionaries_path: str = "../dictionary_learning/dictionaries"
     probes_dir: str = "trained_bib_probes"
@@ -75,6 +80,8 @@ class PipelineConfig:
     # ]
 
     # Autointerp stuff
+
+    use_autointerp: bool = True
 
     api_llm: str = "claude-3-5-sonnet-20240620"
     # api_llm: str = "claude-3-haiku-20240307"
@@ -113,16 +120,7 @@ class PipelineConfig:
 
     include_activation_values_in_prompt: bool = True
 
-    chosen_autointerp_class_names = [
-        "gender",
-        "professor",
-        "nurse",
-        "accountant",
-        "architect",
-        "attorney",
-        "dentist",
-        "filmmaker",
-    ]
+    chosen_autointerp_class_names = None
 
     def to_dict(self):
         return {k: str(v) if isinstance(v, torch.dtype) else v for k, v in asdict(self).items()}

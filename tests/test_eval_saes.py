@@ -6,14 +6,13 @@ import experiments.utils as utils
 
 
 def test_eval_saes():
-    # TODO: Add batching so we don't need a horribly high tolerance
-    l0_tolerance = 10
-    tolerance = 1.0
+    l0_tolerance = 1
+    tolerance = 0.01
 
     DEVICE = "cuda"
 
-    llm_batch_size = 20  # Approx 16GB VRAM on pythia70m with 128 context length
-    n_inputs = 10000
+    llm_batch_size = 100
+    n_inputs = 1000
 
     seed = 42
     torch.manual_seed(seed)
@@ -40,8 +39,8 @@ def test_eval_saes():
             overwrite_prev_results=True,
         )
 
-        expected_l0 = 77.5
-        expected_frac_recovered = 0.9420551061630249
+        expected_l0 = 83.9
+        expected_frac_recovered = 0.9415946900844574
 
         print(eval_results["l0"])
         print(eval_results["frac_recovered"])

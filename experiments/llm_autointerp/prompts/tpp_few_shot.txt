@@ -1,0 +1,204 @@
+
+<<BEGIN EXAMPLE FEATURE 0>>
+Promoted tokens:  broadcasts, broadcasting, Broadcasting, television, broadcast, Television, announ,Television,TV, TV
+Example prompts: 
+
+
+Example 1: Radio Nova (Ireland)
+
+Radio Nova was a pirate radio station << broadcasting>>(2) from Dublin, Ireland. Owned and operated by the UK pirate radio veteran Chris Cary, the station's first broadcasts were during the summer of 1981 on 88.5 MHz FM and 819 kHz AM.
+
+Early history
+Prior to Nova's arrival, Irish radio consisted of the government broad <<caster>>(2) << RT>>(2)É and a number of local AM pirate << stations>>(3). Radio Nova was the first << station>>(2) in Ireland to use a high powered signal on FM. By 1982 Radio Nova was pulling in over 40% of the available audience around Dublin. In September 1982 Radio
+
+
+
+
+Example 2: the network, and was the interim president of The Weather Channel for four months in 2013.
+
+Scott is a 25-year veteran of NBC News. Before founding Peacock, she was executive producer and general manager of << NBC>>(2) News Productions and NBC Media Productions. She was a member of the executive team for “Dateline" and "Now, with Tom Brokaw and Katie Couric."
+
+Scott joined << NBC>>(3) News in 1990 as news director for WTVJ- <<TV>>(2), << NBC>>(3)’ <<s>>(3) Owned and Operated station in Miami. Her honors include a number of national news Emmy awards in addition to a George Foster Pe
+
+
+
+
+Example 3: Iran airs images allegedly extracted from U.S. drone
+
+AP
+
+Show Caption Hide Caption Raw: Iran claims images taken from drone Iran state TV << broadcast>>(2) pictures allegedly taken from the CIA spy drone captured in 2011. Iran's claims cannot be independently confirmed. (Feb. 7)
+
+CIA spy drone was captured in 2011
+
+Video aired late Wednesday << on>>(2) Iranian << TV>>(3)
+
+Iran has accused the U.S. of stepping up espionage activities
+
+TEHRAN, Iran (AP) — Iran's state << TV>>(2) has << broadcast>>(2) footage allegedly extracted from the advanced CIA spy drone captured in 2011, the latest in a fl
+
+
+
+
+
+Chain of thought: Step 1: All activations are on words related to television and broadcasting.
+Step 2: The top promoted logits are related to television and broadcasting.
+Step 3: These themes are clearly related to filmakers. I will rate filmmakers as a 4, and all other classes as 0.
+
+```json
+{'gender': 0, 'professor': 0, 'nurse': 0, 'accountant': 0, 'architect': 0, 'attorney': 0, 'dentist': 0, 'filmmaker': 4}
+```
+<<END EXAMPLE FEATURE 0>>
+
+
+
+<<BEGIN EXAMPLE FEATURE 1>>
+Promoted tokens:  understand, understands, Understand,Understand,understand, understanding, understood, understandings, Understanding,Understanding
+Example prompts: 
+
+
+Example 1: League
+
+>
+
+#  About the Author
+
+Dr Sai Bhaskar Reddy Nakka is a multifaceted person with varied interests. Traveled extensively in parts of India and other countries. He has written this particular book on << integrity>>(4) based on his experiences and << understanding>>(53) << of>>(17) << the>>(5) world. He has contributed in the areas of climate change, disasters, environment, energy, agriculture and water. Has conceived the concepts of Geo Spirit, Earth Centers and Earth Leadership. Has more than 100 innovations and designs to his credit, declared them as open knowledge. Has written more than 18 books on various aspects.
+
+####  You can connect with
+
+
+
+
+Example 2: existing and future green areas. Its implementation resulted in more than 500 hectares of new green space that is now used for recreation and is accessible via 13 km of cycle paths. However, since 2005 there has been no urban green vision at city scale since the focus shifted to the city center's restoration and improvement.
+
+The Gemeente Rotterdam ([@CR13]) contains the spatial development strategy until 2030 and is the point of departure for quality improvement on multiple domains such as public space, sustainability, housing, and accessibility. The spatial development strategy builds on the << understanding>>(50) << that>>(8)
+
+
+
+
+Example 3: Despite the large numbers of young children whose home language is not English, there is limited systematic research on the course of their English language learning. Poverty only increases the challenges of dual language development in this growing segment of the U.S child population. Lack of information about the normative course of dual language learning raises challenges for early assessment and intervention and has important implications for the health and well-being of these children. Given that Latino children make-up the largest group of English language learners (ELL) in the United States and lag behind both African- Americans and Whites in their educational attainment, << understanding>>(50) << their>>(9) learning of English and Spanish during the preschool
+
+
+
+
+
+Chain of thought: Step 1: All activations are on the word understanding or near understanding. 
+Step 2: The top promoted logits are related to the word understanding.
+Step 3: Understanding is partially related the learning and teaching, which is related to professors.
+However, this may also be a surface level pattern. I will rate professors as a 2, and all other classes as 0.
+
+```json
+{'gender': 0, 'professor': 2, 'nurse': 0, 'accountant': 0, 'architect': 0, 'attorney': 0, 'dentist': 0, 'filmmaker': 0}
+```
+<<END EXAMPLE FEATURE 1>>
+
+
+
+<<BEGIN EXAMPLE FEATURE 2>>
+Promoted tokens:  rent,  delinqu,  estate,  residential,  mortgage,  rental,  Estate,  park,  foreclosure,  rights
+Example prompts: 
+
+
+Example 1: respect << and>>(38) admiration of General Irwene (“the prisonor should be a war hero”). However one quickly realizes that the prison manager is a shallow individual who can not handle the truth << and>>(42) is easily slighted by a small comment. His lack of leadership, from this point on, is continuously reinforced by his actions. He know how to manipulate them, but uses this tool for the wrong reason (starts a fight by allowing only one basketball), and never leads – he tries to instill fear instead << and>>(41) thus never gains respect. He views his actions as a game << and>>(47) though he understands leadership, chooses not to follow it << and>>(40) rationalizes his actions
+
+
+
+
+Example 2: is most influential lobbying group that Advocates for pro-Israel policies to the Congress, White House, political parties << and>>(34) has influence on American foreign policy, Israel/Zionist Establishment is not only up to such extent AIPAC its also has influence in other American Lobbies. But it does not mean that Israeli runs all American affairs. American Capitalist lobby << and>>(40) American Establishment have marvelous influence over the American Policies.
+
+That all Lobbies control the outcome" of many decisions from the White House, the Senate, << and>>(36) the media.Now let look into the role of Media << and>>(46) how those lobbies control media for their own outcome. Media is a most
+
+
+
+
+Example 3: external world << and>>(46) contemporary events. What has threatened her
+perception of identity can be traced, at least for its proximate cause, to the grotesque
+pictorial representations of man, woman, << and>>(36) child. What so disturbs "Elizabeth"
+that she loses the sense of self one takes for granted in order to live in the world? Lee
+Edelman addresses this issue:
+
+Though only in the course of reading the magazine does "Elizabeth" perceive
+the inadequacy of her positioning as a reader, Bishop's text implies from the outset the
+insufficiency of any mode of interpretation that claims to release the meaning it locates
+
+
+
+
+
+
+Chain of thought: Step 1: The examples are strongly related to real estate and property management.
+Step 2: The promoted tokens are related to property rights and finances.
+Step 3: While this doesn't directly correspond to any of the given concepts, it has some distant relation to accountants (who might deal with property finances) and architects (who design buildings). Although the concept of attorney is generally absent from the examples, the single promoted token 'rights' is moderately related to attorneys. Therefore, I've given a score of 1 to accountants and architects and attorneys, indicating a distant relationship.
+
+```json
+{'gender': 1, 'professor': 0, 'nurse': 0, 'accountant': 1, 'architect': 1, 'attorney': 1, 'dentist': 0, 'filmmaker': 0}
+```
+<<END EXAMPLE FEATURE 2>>
+
+
+
+<<BEGIN EXAMPLE FEATURE 3>>
+Promoted tokens: ו, Reagan,  Washington,  valve,  smooth,  ו,  Congressman,  Obama,  happiness,  future
+Example prompts: 
+
+
+Example 1: v Washington Capitals - Game One
+
+in Game One of the Eastern Conference Quarterfinals during the 2011 NHL Stanley Cup Playoffs at Verizon Center on April 13, 2011 in Washington, DC.
+
+New York Rangers v Washington Capitals - Game One
+
+(credit: Getty Images)
+
+in Game One of the Eastern Conference Quarterfinals << during>>(1) the 2011 NHL Stanley Cup Playoffs << at>>(2) Verizon Center on April 13, 2011 << in>>(1) Washington, DC.
+
+New York Rangers v Washington Capitals - Game One
+
+in Game One of the Eastern Conference Quarterfinals << during>>(1) the 2011 NHL Stanley Cup Playoffs << at>>(2) Verizon Center on April 13
+
+
+
+
+Example 2: v Washington Capitals - Game One
+
+in Game One of the Eastern Conference Quarterfinals during the 2011 NHL Stanley Cup Playoffs at Verizon Center on April 13, 2011 in Washington, DC.
+
+New York Rangers v Washington Capitals - Game One
+
+in Game One of the Eastern Conference Quarterfinals during the 2011 NHL Stanley Cup Playoffs << at>>(2) Verizon Center on April 13, 2011 << in>>(1) Washington, DC.
+
+New York Rangers v Washington Capitals - Game One
+
+in Game One of the Eastern Conference Quarterfinals << during>>(1) << the>>(1) 2011 NHL Stanley Cup Playoffs << at>>(2) Verizon Center on April 13, 2011 in Washington, DC.
+
+
+
+
+
+Example 3: v Washington Capitals - Game One
+
+in Game One of the Eastern Conference Quarterfinals during the 2011 NHL Stanley Cup Playoffs at Verizon Center on April 13, 2011 in Washington, DC.
+
+New York Rangers v Washington Capitals - Game One
+
+in Game One of the Eastern Conference Quarterfinals during the 2011 NHL Stanley Cup Playoffs << at>>(2) Verizon Center on April 13, 2011 << in>>(1) Washington, DC.
+
+New York Rangers v Washington Capitals - Game One
+
+in Game One of the Eastern Conference Quarterfinals << during>>(1) << the>>(1) 2011 NHL Stanley Cup Playoffs << at>>(2) Verizon Center on April 13, 2011 in Washington, DC.
+
+
+
+
+
+
+Chain of thought: Step 1: All activations are in the context of sports in Washington.
+Step 2: Some promoted tokens are related to politics and distantly related to lawmaking
+Step 3: Lawmaking falls in the domain of attorneys. Some promoted tokens are names of male politicains, so there's a possible gender connection. I will rate attorney as 1, gender as a 1, and all other classes as 0.
+
+```json
+{'gender': 1, 'professor': 0, 'nurse': 0, 'accountant': 0, 'architect': 0, 'attorney': 3, 'dentist': 0, 'filmmaker': 0}
+```
+<<END EXAMPLE FEATURE 3>>
+

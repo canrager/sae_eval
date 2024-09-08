@@ -1,7 +1,7 @@
 # TODO: Consolidate all bias in bios utility stuff
 # TODO: Only use strings for keys, only use ints when initializing the dictionary datasets
+
 profession_dict = {
-    "gender": -2,
     "accountant": 0,
     "architect": 1,
     "attorney": 2,
@@ -32,3 +32,22 @@ profession_dict = {
     "yoga_teacher": 27,
 }
 profession_int_to_str = {v: k for k, v in profession_dict.items()}
+
+gender_dict = {
+    "male": 0,
+    "female": 1,
+}
+
+dataset_metadata = {
+    "bias_in_bios": {
+        "text_column_name": "hard_text",
+        "column1_name": "profession",
+        "column2_name": "gender",
+        "column1_mapping": profession_dict,
+        "column2_mapping": gender_dict,
+        "column1_pos": "professor",
+        "column1_neg": "nurse",
+        "column2_pos": "male",
+        "column2_neg": "female",
+    }
+}

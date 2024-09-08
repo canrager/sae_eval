@@ -24,6 +24,7 @@ PAIRED_CLASS_KEYS = {
     "male_professor / female_nurse": "female_nurse_data_only",
     "biased_male / biased_female": "biased_female_data_only",
 }
+
 POSITIVE_CLASS_LABEL = 0
 NEGATIVE_CLASS_LABEL = 1
 
@@ -129,11 +130,12 @@ def extract_results(
         # Create corresponding directory in destination
         rel_path = os.path.relpath(root, src_folder)
         dst_dir = os.path.join(dst_folder, rel_path)
-        os.makedirs(dst_dir, exist_ok=True)
 
         if ae_paths is not None:
             if root not in ae_paths:
                 continue
+
+        os.makedirs(dst_dir, exist_ok=True)
 
         # Copy files, excluding those in exclude_files
         for file in files:
