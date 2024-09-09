@@ -735,7 +735,10 @@ def run_interventions(
 
     only_model_name = model_name.split("/")[-1]
     if p_config.spurious_corr:
-        probe_path = f"{p_config.probes_dir}/{only_model_name}/spurious_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+        spurious_probe_data_name = (
+            f"{p_config.dataset_name}_{p_config.column1_vals[0]}_{p_config.column1_vals[1]}"
+        )
+        probe_path = f"{p_config.probes_dir}/{only_model_name}/spurious_probes_{spurious_probe_data_name}_ctx_len_{context_length}_layer_{probe_layer}.pkl"
     else:
         probe_path = f"{p_config.probes_dir}/{only_model_name}/tpp_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
 
@@ -980,7 +983,12 @@ def run_interventions(
     src_folder = os.path.join(p_config.dictionaries_path, sweep_name)
 
     if p_config.spurious_corr:
-        output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_spurious_removal"
+        spurious_probe_data_name = (
+            f"{p_config.dataset_name}_{p_config.column1_vals[0]}_{p_config.column1_vals[1]}"
+        )
+        output_folder_name = (
+            f"{sweep_name}_probe_layer_{probe_layer}_spurious_{spurious_probe_data_name}"
+        )
     else:
         output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_tpp"
     results_folder = os.path.join(src_folder, output_folder_name)

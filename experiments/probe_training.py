@@ -121,6 +121,8 @@ def get_spurious_corr_data(
     column2_pos = column2_vals[0]
     column2_neg = column2_vals[1]
 
+    # NOTE: This is a bit confusing. We select rows from the dataset based on column1_vals and column2_vals,
+    # but below, we hardcode the keys as male / female, professor / nurse, etc
     column1_pos_idx = dataset_info.dataset_metadata[dataset_name]["column1_mapping"][column1_pos]
     column1_neg_idx = dataset_info.dataset_metadata[dataset_name]["column1_mapping"][column1_neg]
     column2_pos_idx = dataset_info.dataset_metadata[dataset_name]["column2_mapping"][column2_pos]
@@ -182,26 +184,22 @@ def get_spurious_corr_data(
     rng.shuffle(noisy_combined_neg)
 
     # Assign to balanced_data
-    balanced_data[f"{column2_pos} / {column2_neg}"] = (
-        combined_pos  # male data only, to be combined with female data
-    )
-    balanced_data[f"{column2_neg}_data_only"] = combined_neg  # female data only
-    balanced_data[f"{column1_pos} / {column1_neg}"] = (
+    balanced_data["male / female"] = combined_pos  # male data only, to be combined with female data
+    balanced_data["female_data_only"] = combined_neg  # female data only
+    balanced_data["professor / nurse"] = (
         pos_combined  # professor data only, to be combined with nurse data
     )
-    balanced_data[f"{column1_neg}_data_only"] = neg_combined  # nurse data only
-    balanced_data[f"{column2_pos}_{column1_pos} / {column2_neg}_{column1_neg}"] = (
+    balanced_data["nurse_data_only"] = neg_combined  # nurse data only
+    balanced_data["male_professor / female_nurse"] = (
         pos_pos  # male_professor data only, to be combined with female_nurse data
     )
-    balanced_data[f"{column2_neg}_{column1_neg}_data_only"] = neg_neg  # female_nurse data only
+    balanced_data["female_nurse_data_only"] = neg_neg  # female_nurse data only
 
     # TODO: Rename biased_male to noisy_male_professor for clarity.
-    balanced_data[f"biased_{column2_pos} / biased_{column2_neg}"] = (
+    balanced_data["biased_male / biased_female"] = (
         noisy_combined_pos  # noisy_male_professor data only, to be combined with noisy_female_nurse
     )
-    balanced_data[f"biased_{column2_neg}_data_only"] = (
-        noisy_combined_neg  # noisy_female_nurse data only
-    )
+    balanced_data["biased_female_data_only"] = noisy_combined_neg  # noisy_female_nurse data only
 
     for key in balanced_data.keys():
         balanced_data[key] = balanced_data[key][: min_samples_per_quadrant * 2]
