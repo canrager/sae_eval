@@ -2,6 +2,7 @@ import asyncio
 import time
 import anthropic
 from tenacity import retry, stop_after_attempt, RetryCallState
+import random
 import json
 import pickle
 import os
@@ -18,16 +19,23 @@ import experiments.dataset_info as dataset_info
 from experiments.pipeline_config import PipelineConfig
 
 
-def variable_wait(retry_state: RetryCallState):
-    if retry_state.attempt_number == 1:
-        return 5  # Wait 5 seconds after the first attempt
-    else:
-        return 60  # Wait 60 seconds (1 minute) for subsequent attempts
+def exponential_backoff(retry_state: RetryCallState):
+    # Base wait time (in seconds)
+    base_wait = 5
+    # Maximum wait time (in seconds)
+    max_wait = 1000
+    # Exponential factor
+    factor = 2
+
+    wait = min(base_wait * (factor ** (retry_state.attempt_number - 1)), max_wait)
+    # Add jitter to avoid thundering herd problem
+    jitter = random.uniform(0, 0.1 * wait)
+    return wait + jitter
 
 
 @retry(
-    stop=stop_after_attempt(4),
-    wait=variable_wait,
+    stop=stop_after_attempt(9),
+    wait=exponential_backoff,
 )
 async def anthropic_request_prompt_caching(
     client: anthropic.Anthropic,
@@ -95,8 +103,8 @@ async def anthropic_request(
 
 
 @retry(
-    stop=stop_after_attempt(4),
-    wait=variable_wait,
+    stop=stop_after_attempt(9),
+    wait=exponential_backoff,
 )
 async def fill_anthropic_prompt_cache(
     client: anthropic.Anthropic,
@@ -576,10 +584,11 @@ def perform_llm_autointerp(
         )
         num_batches_left = len(batches_prompt_indices) - b - 1
         if num_batches_left > 0:
+            seconds_delay = 65
             print(
-                f"Finished batch of {len(test_prompts)} prompts. Waiting for 60 seconds to obey API limits... There are {num_batches_left} batches left."
+                f"Finished batch of {len(test_prompts)} prompts. Waiting for {seconds_delay} seconds to obey API limits... There are {num_batches_left} batches left."
             )
-            time.sleep(60)
+            time.sleep(seconds_delay)
 
     # 1 is the index of the extracted json from the llm's response
     json_results = {idx: result[1] for idx, result in results.items()}
