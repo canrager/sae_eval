@@ -206,7 +206,7 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
     column1_vals_list = [("professor", "nurse"), ("filmmaker", "dentist")]
     column2_vals = ("male", "female")
 
-    for column1_vals in column1_vals_list:
+    for i, column1_vals in enumerate(column1_vals_list):
         print(f"Running with column1_vals: {column1_vals}")
 
         test_config.column1_vals = column1_vals
@@ -239,6 +239,33 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
                 expected_results = pickle.load(f)
 
             compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
+
+            other_professions = column1_vals_list[1 - i]
+
+            with open(
+                f"tests/test_data/class_accuracies_attrib_spurious_{other_professions[0]}_{other_professions[1]}.pkl",
+                "rb",
+            ) as f:
+                other_profession_expected_results = pickle.load(f)
+
+            print(
+                f"\nComparing results for {column1_vals} with expected results for {other_professions}:"
+            )
+
+            try:
+                compare_dicts_within_tolerance(
+                    class_accuracies, other_profession_expected_results, tolerance
+                )
+                print(
+                    f"Test failed: Results for {column1_vals} are unexpectedly similar to expected results for {other_professions}."
+                )
+                raise AssertionError(
+                    f"Results for {column1_vals} are unexpectedly similar to expected results for {other_professions}."
+                )
+            except AssertionError:
+                print(
+                    f"Test passed: Results for {column1_vals} are different from expected results for {other_professions}, as expected."
+                )
 
 
 # # NOTE: This will use ~5k API tokens.
