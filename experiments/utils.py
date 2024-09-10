@@ -301,6 +301,15 @@ def get_submodule(model, submodule_str: str, layer: int):
     return submodule
 
 
+def get_decoder_weight(autoencoder):
+    if hasattr(autoencoder, "decoder"):
+        return autoencoder.decoder.weight
+    elif hasattr(autoencoder, "W_dec"):
+        return autoencoder.W_dec.T
+    else:
+        raise ValueError("No decoder found")
+
+
 def batch_inputs(inputs, batch_size: int):
     if isinstance(inputs, list) and isinstance(inputs[0], str):
         return [inputs[i : i + batch_size] for i in range(0, len(inputs), batch_size)]
