@@ -212,6 +212,64 @@ def get_paired_class_samples(
     return combined_samples, combined_labels
 
 
+def get_effects_per_class_precomputed_acts(
+    dictionaries: dict[utils.submodule_alias, AutoEncoder],
+    probe: Probe,
+    class_idx: int | str,
+    precomputed_acts: dict[int | str, t.Tensor],
+    spurious_corr: bool,
+    device: str,
+    sae_batch_size: int = 10,
+) -> t.Tensor:
+    assert len(dictionaries) == 1
+    dictionary = next(iter(dictionaries.values()))
+
+    inputs_train_BLD, labels_train_B = probe_training.prepare_probe_data(
+        precomputed_acts, class_idx, spurious_corr, sae_batch_size
+    )
+
+    all_acts_list_F = []
+
+    for activation_batch_BLD, labels_train_B in zip(inputs_train_BLD, labels_train_B):
+        dtype = activation_batch_BLD.dtype
+
+        activations_BL = einops.reduce(activation_batch_BLD, "B L D -> B L", "sum")
+        nonzero_acts_BL = (activations_BL != 0.0).to(dtype=dtype)
+        nonzero_acts_B = einops.reduce(nonzero_acts_BL, "B L -> B", "sum")
+
+        f_BLF = dictionary.encode(activation_batch_BLD)
+        f_BLF = f_BLF * nonzero_acts_BL[:, :, None]  # zero out masked tokens
+
+        # Get the average activation per input. We divide by the number of nonzero activations for the attention mask
+        average_sae_acts_BF = einops.reduce(f_BLF, "B L F -> B F", "sum") / nonzero_acts_B[:, None]
+
+        pos_sae_acts_BF = average_sae_acts_BF[labels_train_B == utils.POSITIVE_CLASS_LABEL]
+        neg_sae_acts_BF = average_sae_acts_BF[labels_train_B == utils.NEGATIVE_CLASS_LABEL]
+
+        average_pos_sae_acts_F = einops.reduce(pos_sae_acts_BF, "B F -> F", "mean")
+        average_neg_sae_acts_F = einops.reduce(neg_sae_acts_BF, "B F -> F", "mean")
+
+        sae_acts_diff_F = average_pos_sae_acts_F - average_neg_sae_acts_F
+
+        all_acts_list_F.append(sae_acts_diff_F)
+
+    all_acts_BF = t.stack(all_acts_list_F, dim=0)
+    average_acts_F = einops.reduce(all_acts_BF, "B F -> F", "mean").to(dtype=t.float32)
+
+    probe_weight_D = probe.net.weight.to(dtype=t.float32, device=device)
+
+    decoder_weight_DF = utils.get_decoder_weight(dictionary).to(dtype=t.float32, device=device)
+
+    dot_prod_F = (probe_weight_D @ decoder_weight_DF).squeeze()
+
+    effects_F = average_acts_F * dot_prod_F
+
+    if spurious_corr:
+        effects_F = effects_F.abs()
+
+    return effects_F
+
+
 def get_effects_per_class(
     model: LanguageModel,
     submodules: list[utils.submodule_alias],
@@ -302,6 +360,7 @@ def get_all_node_effects_for_one_sae(
     batch_size: int = 10,
     patching_method: str = "attrib",
     steps: int = 10,  # only used for ig
+    indirect_effect_acts: Optional[dict[int | str, t.Tensor]] = None,
 ) -> t.Tensor:
     node_effects_path = os.path.join(ae_path, "node_effects.pkl")
 
@@ -318,21 +377,34 @@ def get_all_node_effects_for_one_sae(
 
     node_effects = {}
 
-    for ablated_class_idx in tqdm(chosen_class_indices, "Getting node effects"):
-        node_effects[ablated_class_idx] = get_effects_per_class(
-            model,
-            submodules,
-            dictionaries,
-            probes,
-            probe_act_submodule,
-            ablated_class_idx,
-            train_bios,
-            spurious_corr,
-            seed,
-            batch_size=batch_size,
-            patching_method=patching_method,
-            steps=steps,
-        )
+    if indirect_effect_acts is None:
+        for ablated_class_idx in tqdm(chosen_class_indices, "Getting node effects"):
+            node_effects[ablated_class_idx] = get_effects_per_class(
+                model,
+                submodules,
+                dictionaries,
+                probes,
+                probe_act_submodule,
+                ablated_class_idx,
+                train_bios,
+                spurious_corr,
+                seed,
+                batch_size=batch_size,
+                patching_method=patching_method,
+                steps=steps,
+            )
+    else:
+        for ablated_class_idx in chosen_class_indices:
+            node_effects[ablated_class_idx] = get_effects_per_class_precomputed_acts(
+                dictionaries,
+                probes[ablated_class_idx],
+                ablated_class_idx,
+                indirect_effect_acts,
+                spurious_corr,
+                model.device,
+                batch_size,
+            )
+
     node_effects = utils.to_device(node_effects, "cpu")
 
     save_log_files(ae_path, node_effects, "node_effects", ".pkl")
@@ -855,18 +927,27 @@ def run_interventions(
 
     # TODO: This can be combined with getting test_acts
     if p_config.probe_layer == "sae_layer":
+        indirect_effect_acts = {}
         for class_idx in tqdm(
             p_config.chosen_class_indices, desc="Getting ablation activations per evaluated class"
         ):
+            indirect_effect_acts[class_idx] = probe_training.get_all_activations(
+                train_bios[class_idx], model, llm_batch_size, probe_act_submodule
+            )
             ablation_acts[class_idx] = probe_training.get_all_activations(
                 test_bios[class_idx], model, llm_batch_size, probe_act_submodule
             )
 
             if class_idx in utils.PAIRED_CLASS_KEYS:
                 paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
+                indirect_effect_acts[paired_class_idx] = probe_training.get_all_activations(
+                    train_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
+                )
                 ablation_acts[paired_class_idx] = probe_training.get_all_activations(
                     test_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
                 )
+    else:
+        indirect_effect_acts = None
 
     t.manual_seed(random_seed)
     random.seed(random_seed)
@@ -904,6 +985,7 @@ def run_interventions(
             batch_size=patching_batch_size,
             patching_method=p_config.attribution_patching_method,
             steps=p_config.ig_steps,
+            indirect_effect_acts=indirect_effect_acts,
         )
 
         all_node_effects = [(node_effects_attrib, "_attrib", p_config.attrib_t_effects)]
