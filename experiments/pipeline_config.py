@@ -12,7 +12,7 @@ class FeatureSelection(Enum):
 
 @dataclass
 class PipelineConfig:
-    random_seed: int = 0
+    random_seed: int = 42
 
     dataset_name: str = "bias_in_bios"
     column1_vals = ("professor", "nurse")
