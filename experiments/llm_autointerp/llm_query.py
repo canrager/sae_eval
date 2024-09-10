@@ -278,7 +278,7 @@ def test_llm_vs_manual_labels(
     print(f"Few shot example is using {llm_utils.count_tokens(few_shot_examples)} tokens")
     print(f"System prompt is using {llm_utils.count_tokens(system_prompt[0]['text'])} tokens")
 
-    test_prompts = prompts.create_test_prompts(manual_test_labels)
+    test_prompts = prompts.create_test_prompts(manual_test_labels, chosen_class_names)
 
     test_prompts_tokens = 0
 
@@ -314,6 +314,7 @@ def construct_llm_features_prompts(
     ae_path: str,
     tokenizer: AutoTokenizer,
     p_config: PipelineConfig,
+    desired_prompt_classes: list[str],
 ) -> dict[int, str]:
     with open(f"{ae_path}/max_activating_inputs.pkl", "rb") as f:
         max_activating_inputs = pickle.load(f)
@@ -358,7 +359,7 @@ def construct_llm_features_prompts(
         tokens_string = ", ".join(tokens_list)
 
         feature_prompts[feature_idx.item()] = prompts.create_feature_prompt(
-            example_prompt, tokens_string
+            example_prompt, tokens_string, desired_prompt_classes
         )
 
     return feature_prompts
@@ -410,6 +411,7 @@ def get_node_effects_auto_interp_spurious(
     node_effects_attrib_patching: dict[str, torch.Tensor],
     dict_size: int,
     llm_json_response: dict[int, dict[str, int]],
+    column1_vals: tuple[str, str],
 ) -> dict[str, torch.Tensor]:
     node_effects_auto_interp = {}
 
@@ -426,8 +428,9 @@ def get_node_effects_auto_interp_spurious(
             if isinstance(class_name, int):
                 continue
 
-            professor_value = llm_json_response[sae_feature_idx]["professor"]
-            nurse_value = llm_json_response[sae_feature_idx]["nurse"]
+            # Note that getting professor / nurse indexing right doesn't really matter, as we take the max
+            professor_value = llm_json_response[sae_feature_idx][column1_vals[0]]
+            nurse_value = llm_json_response[sae_feature_idx][column1_vals[1]]
             gender_value = llm_json_response[sae_feature_idx]["gender"]
 
             professor_nurse_value = max(professor_value, nurse_value)
@@ -452,6 +455,7 @@ def get_node_effects_bias_shift(
     node_effects_attrib_patching: dict[str, torch.Tensor],
     dict_size: int,
     llm_json_response: dict[int, dict[str, int]],
+    column1_vals: tuple[str, str],
 ) -> dict[str, torch.Tensor]:
     node_effects_bias_shift_dir1 = {
         "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
@@ -467,6 +471,9 @@ def get_node_effects_bias_shift(
         "professor / nurse": torch.zeros(dict_size, device="cpu"),
     }
 
+    class1_key = column1_vals[0]
+    class2_key = column1_vals[1]
+
     for sae_feature_idx in llm_json_response:
         # This will happen if the LLM returns bad json for this feature idx
         if llm_json_response[sae_feature_idx] is None:
@@ -475,8 +482,8 @@ def get_node_effects_bias_shift(
         for class_name in node_effects_attrib_patching.keys():
             assert isinstance(class_name, str)
 
-            professor_value = llm_json_response[sae_feature_idx]["professor"]
-            nurse_value = llm_json_response[sae_feature_idx]["nurse"]
+            professor_value = llm_json_response[sae_feature_idx][class1_key]
+            nurse_value = llm_json_response[sae_feature_idx][class2_key]
             gender_value = llm_json_response[sae_feature_idx]["gender"]
 
             professor_nurse_value = max(professor_value, nurse_value)
@@ -494,8 +501,8 @@ def get_node_effects_bias_shift(
         if llm_json_response[sae_feature_idx] is None:
             continue
 
-        professor_value = llm_json_response[sae_feature_idx]["professor"]
-        nurse_value = llm_json_response[sae_feature_idx]["nurse"]
+        professor_value = llm_json_response[sae_feature_idx][class1_key]
+        nurse_value = llm_json_response[sae_feature_idx][class2_key]
         gender_value = llm_json_response[sae_feature_idx]["gender"]
 
         professor_nurse_value = max(professor_value, nurse_value)
@@ -529,10 +536,10 @@ def llm_json_response_to_node_effects(
 
     if p_config.spurious_corr:
         node_effects_auto_interp = get_node_effects_auto_interp_spurious(
-            node_effects_attrib_patching, dict_size, llm_json_response
+            node_effects_attrib_patching, dict_size, llm_json_response, p_config.column1_vals
         )
         node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = get_node_effects_bias_shift(
-            node_effects_attrib_patching, dict_size, llm_json_response
+            node_effects_attrib_patching, dict_size, llm_json_response, p_config.column1_vals
         )
 
         with open(f"{ae_path}/{p_config.bias_shift_dir1_filename}", "wb") as f:
@@ -544,6 +551,8 @@ def llm_json_response_to_node_effects(
         node_effects_auto_interp = get_node_effects_auto_interp_tpp(
             node_effects_attrib_patching, dict_size, llm_json_response
         )
+        node_effects_bias_shift_dir1 = {}
+        node_effects_bias_shift_dir2 = {}
 
     with open(f"{ae_path}/{p_config.autointerp_filename}", "wb") as f:
         pickle.dump(node_effects_auto_interp, f)
@@ -601,7 +610,15 @@ def perform_llm_autointerp(
             )
         )
 
-    features_prompts = construct_llm_features_prompts(ae_path, tokenizer, p_config)
+    desired_prompt_classes = [
+        p_config.column1_vals[0],
+        p_config.column1_vals[1],
+        p_config.column2_name,
+    ]
+
+    features_prompts = construct_llm_features_prompts(
+        ae_path, tokenizer, p_config, desired_prompt_classes
+    )
 
     batches_prompt_indices = llm_utils.get_prompt_batch_indices(features_prompts, p_config)
 
