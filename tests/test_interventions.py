@@ -272,10 +272,7 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
 # def test_run_interventions_spurious_correlation_autointerp():
 #     test_config = PipelineConfig()
 
-#     with open("anthropic_api_key.txt", "r") as f:
-#         api_key = f.read().strip()
-
-#     os.environ["ANTHROPIC_API_KEY"] = api_key
+#     llm_utils.set_api_key(test_config.api_llm, "")
 
 #     test_config.use_autointerp = True
 #     test_config.force_node_effects_recompute = True

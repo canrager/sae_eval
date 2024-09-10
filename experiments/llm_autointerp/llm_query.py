@@ -647,17 +647,14 @@ def perform_llm_autointerp(
 
 
 if __name__ == "__main__":
-    with open("../anthropic_api_key.txt", "r") as f:
-        api_key = f.read().strip()
-
-    os.environ["ANTHROPIC_API_KEY"] = api_key
-
     debug_mode = True
 
     ae_path = "../dictionary_learning/dictionaries/autointerp_test_data/pythia70m_sweep_topk_ctx128_0730/resid_post_layer_3/trainer_2"
     pythia_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m-deduped")
 
     p_config = PipelineConfig()
+
+    llm_utils.set_api_key(p_config.api_llm, "../")
 
     p_config.chosen_autointerp_class_names = ["gender", "professor", "nurse"]
     p_config.spurious_corr = True

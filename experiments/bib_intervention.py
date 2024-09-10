@@ -27,6 +27,7 @@ import experiments.utils as utils
 import experiments.eval_saes as eval_saes
 import experiments.autointerp as autointerp
 import experiments.llm_autointerp.llm_query as llm_query
+import experiments.llm_autointerp.llm_utils as llm_utils
 import experiments.dataset_info as dataset_info
 
 from experiments.pipeline_config import PipelineConfig, FeatureSelection
@@ -1095,10 +1096,7 @@ if __name__ == "__main__":
     pipeline_config = PipelineConfig()
 
     if pipeline_config.use_autointerp:
-        with open("../anthropic_api_key.txt", "r") as f:
-            api_key = f.read().strip()
-
-        os.environ["ANTHROPIC_API_KEY"] = api_key
+        llm_utils.set_api_key(pipeline_config.api_llm, "../")
 
     # This will look for any empty folders in any ae_path and raise an error if it finds any
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
