@@ -15,6 +15,7 @@ import torch as t
 from torch import nn
 from collections import defaultdict
 import time
+import einops
 
 parent_dir = os.path.abspath("..")
 sys.path.append(parent_dir)
@@ -34,7 +35,7 @@ from experiments.pipeline_config import PipelineConfig, FeatureSelection
 from experiments.probe_training import (
     load_and_prepare_dataset,
     get_train_test_data,
-    get_all_activations,
+    get_all_meaned_activations,
     Probe,
 )
 
@@ -373,6 +374,46 @@ def get_acts_ablated(text, model, submodules, dictionaries, to_ablate):
     return act.value
 
 
+@t.no_grad()
+def ablated_precomputed_activations(
+    ablation_acts_BLD: t.Tensor,
+    dictionaries: dict[utils.submodule_alias, AutoEncoder],
+    to_ablate: t.Tensor,
+    sae_batch_size: int,
+):
+    """NOTE: We don't pass in the attention mask. Thus, we must have already zeroed out all masked tokens in ablation_acts_BLD."""
+    assert len(dictionaries) == 1
+    dictionary = next(iter(dictionaries.values()))
+
+    batched_acts = utils.batch_inputs(ablation_acts_BLD, sae_batch_size)
+
+    all_acts_list_BD = []
+
+    for activation_batch_BLD in batched_acts:
+        dtype = activation_batch_BLD.dtype
+
+        activations_BL = einops.reduce(activation_batch_BLD, "B L D -> B L", "sum")
+        nonzero_acts_BL = (activations_BL != 0.0).to(dtype=dtype)
+        nonzero_acts_B = einops.reduce(nonzero_acts_BL, "B L -> B", "sum")
+
+        x_hat_BLD, f_BLF = dictionary(activation_batch_BLD, output_features=True)
+        error_BLD = activation_batch_BLD - x_hat_BLD
+
+        f_BLF[..., to_ablate] = 0.0  # zero ablation
+
+        modified_acts_BLD = dictionary.decode(f_BLF) + error_BLD
+
+        # Get the average activation per input. We divide by the number of nonzero activations for the attention mask
+        probe_acts_BD = (
+            einops.reduce(modified_acts_BLD, "B L D -> B D", "sum") / nonzero_acts_B[:, None]
+        )
+        all_acts_list_BD.append(probe_acts_BD)
+
+    all_acts_BD = t.cat(all_acts_list_BD, dim=0)
+
+    return all_acts_BD
+
+
 # Get the output activations for the submodule where some saes are ablated
 @t.no_grad()
 def get_all_acts_ablated(
@@ -383,7 +424,11 @@ def get_all_acts_ablated(
     to_ablate: t.Tensor,
     batch_size: int,
     probe_submodule: utils.submodule_alias,
+    ablation_acts: Optional[t.Tensor] = None,
 ):
+    if ablation_acts is not None:
+        return ablated_precomputed_activations(ablation_acts, dictionaries, to_ablate, batch_size)
+
     text_batches = utils.batch_inputs(text_inputs, batch_size)
 
     is_tuple = {}
@@ -770,24 +815,34 @@ def run_interventions(
             column2_vals=p_config.column2_vals,
         )
 
+    # We need to do this for repeatability when running our end to end tests
+    t.manual_seed(random_seed)
+    random.seed(random_seed)
+    np.random.seed(random_seed)
+
+    print(f"Loading probes from {probe_path}")
     with open(probe_path, "rb") as f:
         probes = pickle.load(f)
 
     ### Get activations for original model, all classes
     print("Getting activations for original model")
     test_acts = {}
+    ablation_acts = {}
+
     for class_idx in tqdm(
         p_config.chosen_class_indices, desc="Getting activations per evaluated class"
     ):
-        test_acts[class_idx] = get_all_activations(
+        test_acts[class_idx] = get_all_meaned_activations(
             test_bios[class_idx], model, llm_batch_size, probe_act_submodule
         )
+        ablation_acts[class_idx] = None
 
         if class_idx in utils.PAIRED_CLASS_KEYS:
             paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
-            test_acts[paired_class_idx] = get_all_activations(
+            test_acts[paired_class_idx] = get_all_meaned_activations(
                 test_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
             )
+            ablation_acts[paired_class_idx] = None
 
     test_accuracies = probe_training.get_probe_test_accuracy(
         probes,
@@ -797,6 +852,25 @@ def run_interventions(
         p_config.spurious_corr,
     )
     del test_acts
+
+    # TODO: This can be combined with getting test_acts
+    if p_config.probe_layer == "sae_layer":
+        for class_idx in tqdm(
+            p_config.chosen_class_indices, desc="Getting ablation activations per evaluated class"
+        ):
+            ablation_acts[class_idx] = probe_training.get_all_activations(
+                test_bios[class_idx], model, llm_batch_size, probe_act_submodule
+            )
+
+            if class_idx in utils.PAIRED_CLASS_KEYS:
+                paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
+                ablation_acts[paired_class_idx] = probe_training.get_all_activations(
+                    test_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
+                )
+
+    t.manual_seed(random_seed)
+    random.seed(random_seed)
+    np.random.seed(random_seed)
 
     # %%
     ### Get activations for ablated models
@@ -811,7 +885,6 @@ def run_interventions(
         dictionary = dictionary.to(dtype=p_config.model_dtype)
         submodules.append(submodule)
         dictionaries[submodule] = dictionary
-        dict_size = sae_config["trainer"]["dict_size"]
 
         class_accuracies = {"clean_acc": test_accuracies}
 
@@ -942,6 +1015,7 @@ def run_interventions(
                                 selected_features_mask,
                                 llm_batch_size,
                                 probe_act_submodule,
+                                ablation_acts[evaluated_class_idx],
                             )
 
                             if evaluated_class_idx in utils.PAIRED_CLASS_KEYS:
@@ -954,6 +1028,7 @@ def run_interventions(
                                     selected_features_mask,
                                     llm_batch_size,
                                     probe_act_submodule,
+                                    ablation_acts[paired_class_idx],
                                 )
 
                         ablated_class_accuracies = probe_training.get_probe_test_accuracy(

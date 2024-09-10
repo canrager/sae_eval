@@ -326,8 +326,11 @@ def get_acts(text):
 
 
 @t.no_grad()
-def get_all_activations(
-    text_inputs: list[str], model: LanguageModel, batch_size: int, submodule: utils.submodule_alias
+def get_all_meaned_activations(
+    text_inputs: dict[str, t.Tensor] | list[str],
+    model: LanguageModel,
+    batch_size: int,
+    submodule: utils.submodule_alias,
 ) -> t.Tensor:
     # TODO: Rename text_inputs
     text_batches = utils.batch_inputs(text_inputs, batch_size)
@@ -347,6 +350,35 @@ def get_all_activations(
 
     all_acts_bD = t.cat(all_acts_list_BD, dim=0)
     return all_acts_bD
+
+
+@t.no_grad()
+def get_all_activations(
+    text_inputs: dict[str, t.Tensor] | list[str],
+    model: LanguageModel,
+    batch_size: int,
+    submodule: utils.submodule_alias,
+) -> t.Tensor:
+    # TODO: Rename text_inputs
+    text_batches = utils.batch_inputs(text_inputs, batch_size)
+
+    all_acts_list_BLD = []
+
+    for text_batch_BL in text_batches:
+        with model.trace(
+            text_batch_BL,
+            **tracer_kwargs,
+        ):
+            attn_mask = model.input[1]["attention_mask"]
+            acts_BLD = submodule.output[0]
+            acts_BLD = acts_BLD * attn_mask[:, :, None]
+            acts_BLD = acts_BLD.save()
+
+        all_acts_list_BLD.append(acts_BLD.value)
+
+    all_acts_bLD = t.cat(all_acts_list_BLD, dim=0)
+
+    return all_acts_bLD
 
 
 def get_activation_distribution_diff(
@@ -670,10 +702,10 @@ def train_probes(
         for i, class_name in enumerate(train_bios.keys()):
             print(f"Collecting activations for profession: {class_name}")
 
-            all_train_acts[class_name] = get_all_activations(
+            all_train_acts[class_name] = get_all_meaned_activations(
                 train_bios[class_name], model, llm_batch_size, probe_act_submodule
             )
-            all_test_acts[class_name] = get_all_activations(
+            all_test_acts[class_name] = get_all_meaned_activations(
                 test_bios[class_name], model, llm_batch_size, probe_act_submodule
             )
 
