@@ -27,6 +27,7 @@ import experiments.utils as utils
 import experiments.eval_saes as eval_saes
 import experiments.autointerp as autointerp
 import experiments.llm_autointerp.llm_query as llm_query
+import experiments.llm_autointerp.llm_utils as llm_utils
 import experiments.dataset_info as dataset_info
 
 from experiments.pipeline_config import PipelineConfig, FeatureSelection
@@ -735,7 +736,10 @@ def run_interventions(
 
     only_model_name = model_name.split("/")[-1]
     if p_config.spurious_corr:
-        probe_path = f"{p_config.probes_dir}/{only_model_name}/spurious_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+        spurious_probe_data_name = (
+            f"{p_config.dataset_name}_{p_config.column1_vals[0]}_{p_config.column1_vals[1]}"
+        )
+        probe_path = f"{p_config.probes_dir}/{only_model_name}/spurious_probes_{spurious_probe_data_name}_ctx_len_{context_length}_layer_{probe_layer}.pkl"
     else:
         probe_path = f"{p_config.probes_dir}/{only_model_name}/tpp_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
 
@@ -840,6 +844,7 @@ def run_interventions(
                     column2_name,
                 ]
             else:
+                p_config.chosen_autointerp_class_names = []
                 for class_idx in p_config.chosen_class_indices:
                     p_config.chosen_autointerp_class_names.append(
                         dataset_info.profession_int_to_str[class_idx]
@@ -980,7 +985,12 @@ def run_interventions(
     src_folder = os.path.join(p_config.dictionaries_path, sweep_name)
 
     if p_config.spurious_corr:
-        output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_spurious_removal"
+        spurious_probe_data_name = (
+            f"{p_config.dataset_name}_{p_config.column1_vals[0]}_{p_config.column1_vals[1]}"
+        )
+        output_folder_name = (
+            f"{sweep_name}_probe_layer_{probe_layer}_spurious_{spurious_probe_data_name}"
+        )
     else:
         output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_tpp"
     results_folder = os.path.join(src_folder, output_folder_name)
@@ -1087,10 +1097,7 @@ if __name__ == "__main__":
     pipeline_config = PipelineConfig()
 
     if pipeline_config.use_autointerp:
-        with open("../anthropic_api_key.txt", "r") as f:
-            api_key = f.read().strip()
-
-        os.environ["ANTHROPIC_API_KEY"] = api_key
+        llm_utils.set_api_key(pipeline_config.api_llm, "../")
 
     # This will look for any empty folders in any ae_path and raise an error if it finds any
     for sweep_name, submodule_trainers in ae_sweep_paths.items():

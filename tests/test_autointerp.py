@@ -5,6 +5,27 @@ from transformers import AutoTokenizer
 from experiments.pipeline_config import PipelineConfig
 import experiments.utils as utils
 import experiments.llm_autointerp.llm_query as llm_query
+import experiments.llm_autointerp.llm_utils as llm_utils
+
+
+def test_json_verification():
+    json_response = {
+        "filmmaker": 0,
+        "dentist": 0,
+        "professor": 0,
+        "nurse": 0,
+        "gender": 0,
+    }
+    chosen_class_names = ["filmmaker", "dentist", "gender"]
+
+    min_val = 0
+    max_val = 4
+
+    result, message = llm_utils.verify_json_response(
+        json_response, min_val, max_val, chosen_class_names
+    )
+
+    assert result == False
 
 
 # def test_decoding():
@@ -17,6 +38,7 @@ import experiments.llm_autointerp.llm_query as llm_query
 
 #     assert output1 == output2
 
+
 # We comment these tests by default because they use API tokens when running
 # Use sonnet 3.5 for more reliable results
 
@@ -24,16 +46,15 @@ import experiments.llm_autointerp.llm_query as llm_query
 # def test_llm_query():
 #     ae_path = "dictionary_learning/dictionaries/pythia70m_test_sae/resid_post_layer_3/trainer_0"
 
-#     with open("anthropic_api_key.txt", "r") as f:
-#         api_key = f.read().strip()
-
-#     os.environ["ANTHROPIC_API_KEY"] = api_key
-
 #     debug_mode = True
 
 #     pythia_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m-deduped")
 
 #     p_config = PipelineConfig()
+
+#     p_config.api_llm = "gpt-4o-mini-2024-07-18"
+
+#     llm_utils.set_api_key(p_config.api_llm, "")
 
 #     p_config.spurious_corr = True
 
@@ -59,11 +80,6 @@ import experiments.llm_autointerp.llm_query as llm_query
 
 
 # def test_llm_query():
-#     with open("anthropic_api_key.txt", "r") as f:
-#         api_key = f.read().strip()
-
-#     os.environ["ANTHROPIC_API_KEY"] = api_key
-
 #     chosen_class_names = [
 #         "gender",
 #         "professor",
@@ -76,6 +92,9 @@ import experiments.llm_autointerp.llm_query as llm_query
 #     ]
 
 #     p_config = PipelineConfig()
+#     p_config.api_llm = "gpt-4o-mini-2024-07-18"
+
+#     llm_utils.set_api_key(p_config.api_llm, "")
 
 #     p_config.prompt_dir = "experiments/llm_autointerp/"
 #     p_config.spurious_corr = False

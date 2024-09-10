@@ -1,7 +1,9 @@
 import asyncio
 import time
 import anthropic
+import openai
 from tenacity import retry, stop_after_attempt, RetryCallState
+import random
 import json
 import pickle
 import os
@@ -18,16 +20,23 @@ import experiments.dataset_info as dataset_info
 from experiments.pipeline_config import PipelineConfig
 
 
-def variable_wait(retry_state: RetryCallState):
-    if retry_state.attempt_number == 1:
-        return 5  # Wait 5 seconds after the first attempt
-    else:
-        return 60  # Wait 60 seconds (1 minute) for subsequent attempts
+def exponential_backoff(retry_state: RetryCallState):
+    # Base wait time (in seconds)
+    base_wait = 5
+    # Maximum wait time (in seconds)
+    max_wait = 1000
+    # Exponential factor
+    factor = 2
+
+    wait = min(base_wait * (factor ** (retry_state.attempt_number - 1)), max_wait)
+    # Add jitter to avoid thundering herd problem
+    jitter = random.uniform(0, 0.1 * wait)
+    return wait + jitter
 
 
 @retry(
-    stop=stop_after_attempt(4),
-    wait=variable_wait,
+    stop=stop_after_attempt(9),
+    wait=exponential_backoff,
 )
 async def anthropic_request_prompt_caching(
     client: anthropic.Anthropic,
@@ -65,6 +74,37 @@ async def anthropic_request_prompt_caching(
     return message.content[0].text
 
 
+@retry(
+    stop=stop_after_attempt(9),
+    wait=exponential_backoff,
+)
+async def openai_request(
+    client: openai.OpenAI,
+    system_prompt: str,
+    few_shot_examples: str,
+    test_prompt: str,
+    model: str,
+    verbose: bool = False,
+) -> str:
+    if verbose:
+        print("Attempting OpenAI API call")
+    message = await client.chat.completions.create(
+        model=model,
+        max_tokens=500,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": few_shot_examples + test_prompt,
+            },
+        ],
+    )
+    with open("openai_response.json", "w") as f:
+        json.dump(message.choices[0].message.content, f, indent=4)
+    return message.choices[0].message.content
+
+
 @retry(stop=stop_after_attempt(1))
 async def anthropic_request(
     client: anthropic.Anthropic,
@@ -95,8 +135,8 @@ async def anthropic_request(
 
 
 @retry(
-    stop=stop_after_attempt(4),
-    wait=variable_wait,
+    stop=stop_after_attempt(9),
+    wait=exponential_backoff,
 )
 async def fill_anthropic_prompt_cache(
     client: anthropic.Anthropic,
@@ -132,7 +172,7 @@ async def fill_anthropic_prompt_cache(
 
 
 async def process_prompt(
-    client: anthropic.Anthropic,
+    client: anthropic.Anthropic | openai.OpenAI,
     model: str,
     system_prompt: str,
     test_prompt: str,
@@ -142,21 +182,30 @@ async def process_prompt(
     max_scale: int,
     chosen_class_names: list[str],
 ) -> tuple[int, str, dict, bool, str]:
-    llm_response = await anthropic_request_prompt_caching(
-        client, system_prompt, few_shot_examples, test_prompt, model
-    )
+    if "claude" in model:
+        llm_response = await anthropic_request_prompt_caching(
+            client, system_prompt, few_shot_examples, test_prompt, model
+        )
+    elif "gpt" in model:
+        llm_response = await openai_request(
+            client, system_prompt, few_shot_examples, test_prompt, model
+        )
+    else:
+        raise ValueError("Model name must contain 'claude' or 'gpt'")
     json_response = llm_utils.extract_and_validate_json(llm_response)
     good_json, verification_message = llm_utils.verify_json_response(
         json_response, min_scale, max_scale, chosen_class_names
     )
     if good_json:
         json_response = llm_utils.zero_out_non_max_values_in_json_response(json_response)
+    else:
+        json_response = None
     return prompt_index, llm_response, json_response, good_json, verification_message, test_prompt
 
 
 async def run_all_prompts(
     number_of_test_examples: int,
-    client: anthropic.Anthropic,
+    client: anthropic.Anthropic | openai.OpenAI,
     api_llm: str,
     system_prompt: str,
     test_prompts: dict[int, str],
@@ -212,7 +261,7 @@ def test_llm_vs_manual_labels(
     number_of_test_examples: int,
     output_filename: str = "llm_results.json",
 ) -> dict[int, tuple[str, dict, bool, str]]:
-    client = anthropic.AsyncAnthropic()
+    client = llm_utils.get_async_client(p_config.api_llm)
 
     with open(os.path.join(p_config.prompt_dir, "manual_labels_can_final.json"), "r") as f:
         manual_test_labels = json.load(f)
@@ -229,7 +278,7 @@ def test_llm_vs_manual_labels(
     print(f"Few shot example is using {llm_utils.count_tokens(few_shot_examples)} tokens")
     print(f"System prompt is using {llm_utils.count_tokens(system_prompt[0]['text'])} tokens")
 
-    test_prompts = prompts.create_test_prompts(manual_test_labels)
+    test_prompts = prompts.create_test_prompts(manual_test_labels, chosen_class_names)
 
     test_prompts_tokens = 0
 
@@ -265,6 +314,7 @@ def construct_llm_features_prompts(
     ae_path: str,
     tokenizer: AutoTokenizer,
     p_config: PipelineConfig,
+    desired_prompt_classes: list[str],
 ) -> dict[int, str]:
     with open(f"{ae_path}/max_activating_inputs.pkl", "rb") as f:
         max_activating_inputs = pickle.load(f)
@@ -309,7 +359,7 @@ def construct_llm_features_prompts(
         tokens_string = ", ".join(tokens_list)
 
         feature_prompts[feature_idx.item()] = prompts.create_feature_prompt(
-            example_prompt, tokens_string
+            example_prompt, tokens_string, desired_prompt_classes
         )
 
     return feature_prompts
@@ -361,6 +411,7 @@ def get_node_effects_auto_interp_spurious(
     node_effects_attrib_patching: dict[str, torch.Tensor],
     dict_size: int,
     llm_json_response: dict[int, dict[str, int]],
+    column1_vals: tuple[str, str],
 ) -> dict[str, torch.Tensor]:
     node_effects_auto_interp = {}
 
@@ -377,8 +428,9 @@ def get_node_effects_auto_interp_spurious(
             if isinstance(class_name, int):
                 continue
 
-            professor_value = llm_json_response[sae_feature_idx]["professor"]
-            nurse_value = llm_json_response[sae_feature_idx]["nurse"]
+            # Note that getting professor / nurse indexing right doesn't really matter, as we take the max
+            professor_value = llm_json_response[sae_feature_idx][column1_vals[0]]
+            nurse_value = llm_json_response[sae_feature_idx][column1_vals[1]]
             gender_value = llm_json_response[sae_feature_idx]["gender"]
 
             professor_nurse_value = max(professor_value, nurse_value)
@@ -403,6 +455,7 @@ def get_node_effects_bias_shift(
     node_effects_attrib_patching: dict[str, torch.Tensor],
     dict_size: int,
     llm_json_response: dict[int, dict[str, int]],
+    column1_vals: tuple[str, str],
 ) -> dict[str, torch.Tensor]:
     node_effects_bias_shift_dir1 = {
         "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
@@ -418,6 +471,9 @@ def get_node_effects_bias_shift(
         "professor / nurse": torch.zeros(dict_size, device="cpu"),
     }
 
+    class1_key = column1_vals[0]
+    class2_key = column1_vals[1]
+
     for sae_feature_idx in llm_json_response:
         # This will happen if the LLM returns bad json for this feature idx
         if llm_json_response[sae_feature_idx] is None:
@@ -426,8 +482,8 @@ def get_node_effects_bias_shift(
         for class_name in node_effects_attrib_patching.keys():
             assert isinstance(class_name, str)
 
-            professor_value = llm_json_response[sae_feature_idx]["professor"]
-            nurse_value = llm_json_response[sae_feature_idx]["nurse"]
+            professor_value = llm_json_response[sae_feature_idx][class1_key]
+            nurse_value = llm_json_response[sae_feature_idx][class2_key]
             gender_value = llm_json_response[sae_feature_idx]["gender"]
 
             professor_nurse_value = max(professor_value, nurse_value)
@@ -445,8 +501,8 @@ def get_node_effects_bias_shift(
         if llm_json_response[sae_feature_idx] is None:
             continue
 
-        professor_value = llm_json_response[sae_feature_idx]["professor"]
-        nurse_value = llm_json_response[sae_feature_idx]["nurse"]
+        professor_value = llm_json_response[sae_feature_idx][class1_key]
+        nurse_value = llm_json_response[sae_feature_idx][class2_key]
         gender_value = llm_json_response[sae_feature_idx]["gender"]
 
         professor_nurse_value = max(professor_value, nurse_value)
@@ -480,10 +536,10 @@ def llm_json_response_to_node_effects(
 
     if p_config.spurious_corr:
         node_effects_auto_interp = get_node_effects_auto_interp_spurious(
-            node_effects_attrib_patching, dict_size, llm_json_response
+            node_effects_attrib_patching, dict_size, llm_json_response, p_config.column1_vals
         )
         node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = get_node_effects_bias_shift(
-            node_effects_attrib_patching, dict_size, llm_json_response
+            node_effects_attrib_patching, dict_size, llm_json_response, p_config.column1_vals
         )
 
         with open(f"{ae_path}/{p_config.bias_shift_dir1_filename}", "wb") as f:
@@ -495,6 +551,8 @@ def llm_json_response_to_node_effects(
         node_effects_auto_interp = get_node_effects_auto_interp_tpp(
             node_effects_attrib_patching, dict_size, llm_json_response
         )
+        node_effects_bias_shift_dir1 = {}
+        node_effects_bias_shift_dir2 = {}
 
     with open(f"{ae_path}/{p_config.autointerp_filename}", "wb") as f:
         pickle.dump(node_effects_auto_interp, f)
@@ -531,7 +589,7 @@ def perform_llm_autointerp(
     elif p_config.force_autointerp_recompute:
         print("Recomputing auto interp results")
 
-    client = anthropic.AsyncAnthropic()
+    client = llm_utils.get_async_client(p_config.api_llm)
 
     few_shot_examples = prompts.load_few_shot_examples(
         prompt_dir=p_config.prompt_dir, spurious_corr=p_config.spurious_corr
@@ -545,13 +603,22 @@ def perform_llm_autointerp(
     few_shot_examples_tokens = llm_utils.count_tokens(few_shot_examples)
     p_config.num_tokens_system_prompt = system_prompt_tokens + few_shot_examples_tokens
 
-    asyncio.run(
-        fill_anthropic_prompt_cache(
-            client, system_prompt[0]["text"], few_shot_examples, p_config.api_llm
+    if "claude" in p_config.api_llm:
+        asyncio.run(
+            fill_anthropic_prompt_cache(
+                client, system_prompt[0]["text"], few_shot_examples, p_config.api_llm
+            )
         )
-    )
 
-    features_prompts = construct_llm_features_prompts(ae_path, tokenizer, p_config)
+    desired_prompt_classes = [
+        p_config.column1_vals[0],
+        p_config.column1_vals[1],
+        p_config.column2_name,
+    ]
+
+    features_prompts = construct_llm_features_prompts(
+        ae_path, tokenizer, p_config, desired_prompt_classes
+    )
 
     batches_prompt_indices = llm_utils.get_prompt_batch_indices(features_prompts, p_config)
 
@@ -576,10 +643,11 @@ def perform_llm_autointerp(
         )
         num_batches_left = len(batches_prompt_indices) - b - 1
         if num_batches_left > 0:
+            seconds_delay = 65
             print(
-                f"Finished batch of {len(test_prompts)} prompts. Waiting for 60 seconds to obey API limits... There are {num_batches_left} batches left."
+                f"Finished batch of {len(test_prompts)} prompts. Waiting for {seconds_delay} seconds to obey API limits... There are {num_batches_left} batches left."
             )
-            time.sleep(60)
+            time.sleep(seconds_delay)
 
     # 1 is the index of the extracted json from the llm's response
     json_results = {idx: result[1] for idx, result in results.items()}
@@ -598,17 +666,14 @@ def perform_llm_autointerp(
 
 
 if __name__ == "__main__":
-    with open("../anthropic_api_key.txt", "r") as f:
-        api_key = f.read().strip()
-
-    os.environ["ANTHROPIC_API_KEY"] = api_key
-
     debug_mode = True
 
     ae_path = "../dictionary_learning/dictionaries/autointerp_test_data/pythia70m_sweep_topk_ctx128_0730/resid_post_layer_3/trainer_2"
     pythia_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m-deduped")
 
     p_config = PipelineConfig()
+
+    llm_utils.set_api_key(p_config.api_llm, "../")
 
     p_config.chosen_autointerp_class_names = ["gender", "professor", "nurse"]
     p_config.spurious_corr = True

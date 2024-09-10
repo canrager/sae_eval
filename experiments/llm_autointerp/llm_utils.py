@@ -1,7 +1,11 @@
 import tiktoken
 import re
 import json
-from typing import Optional, Dict
+import os
+from typing import Optional
+import anthropic
+import openai
+
 from experiments.pipeline_config import PipelineConfig
 
 
@@ -26,6 +30,29 @@ def extract_and_validate_json(text: str) -> Optional[dict[str, int]]:
         # If no JSON block found, return None
         print("WARNING: No JSON block found")
         return None
+
+
+def set_api_key(model_name: str, current_dir: str):
+    """Please include the `/` at the end of the current_dir."""
+    if "claude" in model_name:
+        with open(f"{current_dir}anthropic_api_key.txt", "r") as f:
+            api_key = f.read().strip()
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+    elif "gpt" in model_name:
+        with open(f"{current_dir}openai_api_key.txt", "r") as f:
+            api_key = f.read().strip()
+        os.environ["OPENAI_API_KEY"] = api_key
+    else:
+        raise ValueError("Model name must contain 'claude' or 'gpt'")
+
+
+def get_async_client(model_name: str) -> anthropic.AsyncAnthropic | openai.AsyncOpenAI:
+    if "claude" in model_name:
+        return anthropic.AsyncAnthropic()
+    elif "gpt" in model_name:
+        return openai.AsyncOpenAI()
+    else:
+        raise ValueError("Model name must contain 'claude' or 'gpt'")
 
 
 def verify_json_response(
@@ -59,7 +86,20 @@ def count_tokens(prompt: str, model: str = "gpt-4") -> int:
     return num_tokens
 
 
-def get_prompt_batch_indices(prompts: Dict[str, str], p_config: PipelineConfig):
+def get_rate_limits(model_name: str) -> tuple[int, int]:
+    if "claude" in model_name:
+        tokens_per_min = 400_000
+        requests_per_min = 4_000
+    elif "gpt" in model_name:
+        tokens_per_min = 4_000_000
+        requests_per_min = 5_000
+    else:
+        raise ValueError("Model name must contain 'claude' or 'gpt'")
+
+    return tokens_per_min, requests_per_min
+
+
+def get_prompt_batch_indices(prompts: dict[str, str], p_config: PipelineConfig):
     """Given a dictionary of prompts, return a list of lists of indices of the prompts to be queried in each batch."""
     assert (
         p_config.num_tokens_system_prompt is not None
@@ -68,12 +108,18 @@ def get_prompt_batch_indices(prompts: Dict[str, str], p_config: PipelineConfig):
         k: (count_tokens(v) + p_config.num_tokens_system_prompt) for k, v in prompts.items()
     }
 
+    tokens_per_min, requests_per_min = get_rate_limits(p_config.api_llm)
+    tokens_per_min *= p_config.max_percentage_of_num_allowed_tokens_per_minute
+    requests_per_min *= p_config.max_percentage_of_num_allowed_requests_per_minute
+    tokens_per_min = int(tokens_per_min)
+    requests_per_min = int(requests_per_min)
+
     running_token_count = 0
     running_feat_idx_batch = []
     api_call_feat_idx_batches = []
     for feat_idx, num_tokens in prompts_num_tokens.items():
-        if (len(running_feat_idx_batch) > p_config.num_allowed_requests_per_minute) or (
-            running_token_count + num_tokens > p_config.num_allowed_tokens_per_minute
+        if (len(running_feat_idx_batch) > requests_per_min) or (
+            running_token_count + num_tokens > tokens_per_min
         ):
             api_call_feat_idx_batches.append(running_feat_idx_batch)
             running_feat_idx_batch = [feat_idx]

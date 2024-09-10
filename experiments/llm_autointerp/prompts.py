@@ -453,7 +453,7 @@ def load_few_shot_examples(prompt_dir: str, spurious_corr: bool) -> str:
 
 
 def create_test_prompts(
-    manual_test_labels: dict,
+    manual_test_labels: dict, desired_prompt_classes: list[str]
 ) -> dict[int, str]:
     test_prompts = {}
     for test_index in manual_test_labels:
@@ -461,13 +461,20 @@ def create_test_prompts(
         example_prompts = manual_test_labels[test_index]["example_prompts"][0]
         tokens_string = manual_test_labels[test_index]["tokens_string"]
 
-        test_prompts[test_index] = create_feature_prompt(example_prompts, tokens_string)
+        test_prompts[test_index] = create_feature_prompt(
+            example_prompts, tokens_string, desired_prompt_classes
+        )
 
     return test_prompts
 
 
-def create_feature_prompt(example_prompts: str, tokens_string: str) -> str:
+def create_feature_prompt(
+    example_prompts: str, tokens_string: str, desired_prompt_classes: list[str]
+) -> str:
     llm_prompt = "Okay, now here's the real task.\n"
+    llm_prompt += (
+        f"As a reminder, we only want to use these classes: {', '.join(desired_prompt_classes)}\n"
+    )
     llm_prompt += f"Promoted tokens: {tokens_string}\n"
     llm_prompt += f"Example prompts: {example_prompts}\n"
     llm_prompt += "Chain of thought:"

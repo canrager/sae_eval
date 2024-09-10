@@ -2,7 +2,7 @@ import torch
 import json
 import os
 import shutil
-from typing import List, TypeAlias, Any, Optional
+from typing import TypeAlias, Any, Optional
 from tqdm import tqdm, trange
 from transformers import AutoTokenizer
 
@@ -14,10 +14,11 @@ from dictionary_learning.dictionary import (
     JumpReluAutoEncoder,
 )
 from dictionary_learning.trainers.top_k import AutoEncoderTopK
-from dictionary_learning.interp import examine_dimension
 
 submodule_alias: TypeAlias = Any
 
+# NOTE: These are going to be hardcoded, and won't change even if the underlying dataset or data labels change.
+# This is a bit confusing, but IMO male_professor / female_nurse is a bit easier to understand than e.g. class1_pos_class2_pos / class1_neg_class2_neg
 PAIRED_CLASS_KEYS = {
     "male / female": "female_data_only",
     "professor / nurse": "nurse_data_only",
@@ -333,7 +334,11 @@ def tokenize_data(
         # .data so we have a dict, not a BatchEncoding
         tokenized_data[key] = (
             tokenizer(
-                texts, padding=True, truncation=True, max_length=max_length, return_tensors="pt"
+                texts,
+                padding="max_length",
+                truncation=True,
+                max_length=max_length,
+                return_tensors="pt",
             )
             .to(device)
             .data

@@ -45,9 +45,5 @@ dataset_metadata = {
         "column2_name": "gender",
         "column1_mapping": profession_dict,
         "column2_mapping": gender_dict,
-        "column1_pos": "professor",
-        "column1_neg": "nurse",
-        "column2_pos": "male",
-        "column2_neg": "female",
     }
 }
