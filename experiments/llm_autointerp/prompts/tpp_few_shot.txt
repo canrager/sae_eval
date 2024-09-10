@@ -46,7 +46,7 @@ Step 2: The top promoted logits are related to television and broadcasting.
 Step 3: These themes are clearly related to filmakers. I will rate filmmakers as a 4, and all other classes as 0.
 
 ```json
-{'gender': 0, 'professor': 0, 'nurse': 0, 'accountant': 0, 'architect': 0, 'attorney': 0, 'dentist': 0, 'filmmaker': 4}
+{"gender": 0, "professor": 0, "nurse": 0, "accountant": 0, "architect": 0, "attorney": 0, "dentist": 0, "filmmaker": 4}
 ```
 <<END EXAMPLE FEATURE 0>>
 
@@ -89,7 +89,7 @@ Step 3: Understanding is partially related the learning and teaching, which is r
 However, this may also be a surface level pattern. I will rate professors as a 2, and all other classes as 0.
 
 ```json
-{'gender': 0, 'professor': 2, 'nurse': 0, 'accountant': 0, 'architect': 0, 'attorney': 0, 'dentist': 0, 'filmmaker': 0}
+{"gender": 0, "professor": 2, "nurse": 0, "accountant": 0, "architect": 0, "attorney": 0, "dentist": 0, "filmmaker": 0}
 ```
 <<END EXAMPLE FEATURE 1>>
 
@@ -132,7 +132,7 @@ Step 2: The promoted tokens are related to property rights and finances.
 Step 3: While this doesn't directly correspond to any of the given concepts, it has some distant relation to accountants (who might deal with property finances) and architects (who design buildings). Although the concept of attorney is generally absent from the examples, the single promoted token 'rights' is moderately related to attorneys. Therefore, I've given a score of 1 to accountants and architects and attorneys, indicating a distant relationship.
 
 ```json
-{'gender': 1, 'professor': 0, 'nurse': 0, 'accountant': 1, 'architect': 1, 'attorney': 1, 'dentist': 0, 'filmmaker': 0}
+{"gender": 1, "professor": 0, "nurse": 0, "accountant": 1, "architect": 1, "attorney": 1, "dentist": 0, "filmmaker": 0}
 ```
 <<END EXAMPLE FEATURE 2>>
 
@@ -198,7 +198,7 @@ Step 2: Some promoted tokens are related to politics and distantly related to la
 Step 3: Lawmaking falls in the domain of attorneys. Some promoted tokens are names of male politicains, so there's a possible gender connection. I will rate attorney as 1, gender as a 1, and all other classes as 0.
 
 ```json
-{'gender': 1, 'professor': 0, 'nurse': 0, 'accountant': 0, 'architect': 0, 'attorney': 3, 'dentist': 0, 'filmmaker': 0}
+{"gender": 1, "professor": 0, "nurse": 0, "accountant": 0, "architect": 0, "attorney": 3, "dentist": 0, "filmmaker": 0}
 ```
 <<END EXAMPLE FEATURE 3>>
 

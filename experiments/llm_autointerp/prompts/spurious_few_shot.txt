@@ -30,7 +30,7 @@ K. B. Hoy <<le>>(33) is currently writing the Young Adult Fantasy series The Gat
 
 
 Chain of thought:
-json_response: {'professor': 2, 'nurse': 0, 'gender': 1}
+json_response: {"professor": 2, "nurse": 0, "gender": 1}
 raw_response: Step 1: The text examples primarily focus on authors and writers, describing their backgrounds, writing processes, and personal details.
 
 Step 2: The promoted tokens are strongly related to writing and speaking, with words like "speaks," "writer," and "writes" being prominent.
@@ -80,7 +80,7 @@ THE UPMA
 
 
 Chain of thought:
-json_response: {'gender': 4, 'professor': 0, 'nurse': 0}
+json_response: {"gender": 4, "professor": 0, "nurse": 0}
 raw_response: Step 1: The text examples consistently show activations on feminine pronouns like "her" and "she", often in contexts describing women or female characters.
 
 Step 2: The promoted tokens are primarily feminine pronouns in different languages, including "她" (Chinese), "She", "HER", "herself", and "ла" (Russian).
@@ -129,7 +129,7 @@ Vladimir is a senior B2B marketing executive with 12 << years>>(30) experience <
 
 
 Chain of thought:
-json_response: {'professor': 3, 'nurse': 0, 'gender': 0}
+json_response: {"professor": 3, "nurse": 0, "gender": 0}
 raw_response: Step 1: The text examples primarily describe professional experiences and career backgrounds of individuals in various industries, often mentioning their years of experience and leadership positions.
 
 Step 2: The promoted tokens emphasize "years," "impact," and "experience," which are commonly used when describing professional backgrounds and achievements.
@@ -194,7 +194,7 @@ Category:Films scored by Carl St
 
 
 Chain of thought:
-json_response: {'professor': 0, 'nurse': 0, 'gender': 0}
+json_response: {"professor": 0, "nurse": 0, "gender": 0}
 raw_response: Step 1: The text examples cover a variety of topics, including literature excerpts, net worth information, and animated films.
 
 Step 2: The promoted tokens appear to be a mix of Chinese characters, programming-related terms, and miscellaneous words, with no clear thematic connection.
