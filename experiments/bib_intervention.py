@@ -931,6 +931,7 @@ def run_interventions(
 
     # TODO: This can be combined with getting test_acts
     if p_config.probe_layer == "sae_layer":
+        t.set_grad_enabled(False)
         indirect_effect_acts = {}
         for class_idx in tqdm(
             p_config.chosen_class_indices, desc="Getting ablation activations per evaluated class"
@@ -950,6 +951,8 @@ def run_interventions(
                 ablation_acts[paired_class_idx] = probe_training.get_all_activations(
                     test_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
                 )
+        gc.collect()
+        t.cuda.empty_cache()
     else:
         indirect_effect_acts = None
 
