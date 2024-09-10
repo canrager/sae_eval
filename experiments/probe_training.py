@@ -624,6 +624,7 @@ def train_probes(
     dataset_name: str = "bias_in_bios",
     probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
+    probe_layer: Optional[int] = None,
     epochs: int = 10,
     model_dtype: t.dtype = t.bfloat16,
     save_results: bool = True,
@@ -639,7 +640,8 @@ def train_probes(
 
     model_eval_config = utils.ModelEvalConfig.from_full_model_name(llm_model_name)
     d_model = model_eval_config.activation_dim
-    probe_layer = model_eval_config.probe_layer
+    if probe_layer is None:
+        probe_layer = model_eval_config.probe_layer
     probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
     train_df, test_df = load_and_prepare_dataset(dataset_name)
