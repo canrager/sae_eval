@@ -198,6 +198,8 @@ async def process_prompt(
     )
     if good_json:
         json_response = llm_utils.zero_out_non_max_values_in_json_response(json_response)
+    else:
+        json_response = None
     return prompt_index, llm_response, json_response, good_json, verification_message, test_prompt
 
 
