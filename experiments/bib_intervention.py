@@ -844,6 +844,7 @@ def run_interventions(
                     column2_name,
                 ]
             else:
+                p_config.chosen_autointerp_class_names = []
                 for class_idx in p_config.chosen_class_indices:
                     p_config.chosen_autointerp_class_names.append(
                         dataset_info.profession_int_to_str[class_idx]
