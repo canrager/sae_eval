@@ -29,7 +29,7 @@ class PipelineConfig:
 
     # Load datset and probes
     train_set_size: int = 2000
-    test_set_size: int = 2000
+    test_set_size: int = 1000  # This is limited as the test set is smaller than the train set
 
     eval_saes_n_inputs: int = 250
 
