@@ -578,7 +578,7 @@ def perform_llm_autointerp(
     elif p_config.force_autointerp_recompute:
         print("Recomputing auto interp results")
 
-    client = anthropic.AsyncAnthropic()
+    client = llm_utils.get_async_client(p_config.api_llm)
 
     few_shot_examples = prompts.load_few_shot_examples(
         prompt_dir=p_config.prompt_dir, spurious_corr=p_config.spurious_corr

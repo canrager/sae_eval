@@ -86,6 +86,19 @@ def count_tokens(prompt: str, model: str = "gpt-4") -> int:
     return num_tokens
 
 
+def get_rate_limits(model_name: str) -> tuple[int, int]:
+    if "claude" in model_name:
+        tokens_per_min = 400_000
+        requests_per_min = 4_000
+    elif "gpt" in model_name:
+        tokens_per_min = 4_000_000
+        requests_per_min = 5_000
+    else:
+        raise ValueError("Model name must contain 'claude' or 'gpt'")
+
+    return tokens_per_min, requests_per_min
+
+
 def get_prompt_batch_indices(prompts: dict[str, str], p_config: PipelineConfig):
     """Given a dictionary of prompts, return a list of lists of indices of the prompts to be queried in each batch."""
     assert (
@@ -95,12 +108,18 @@ def get_prompt_batch_indices(prompts: dict[str, str], p_config: PipelineConfig):
         k: (count_tokens(v) + p_config.num_tokens_system_prompt) for k, v in prompts.items()
     }
 
+    tokens_per_min, requests_per_min = get_rate_limits(p_config.api_llm)
+    tokens_per_min *= p_config.max_percentage_of_num_allowed_tokens_per_minute
+    requests_per_min *= p_config.max_percentage_of_num_allowed_requests_per_minute
+    tokens_per_min = int(tokens_per_min)
+    requests_per_min = int(requests_per_min)
+
     running_token_count = 0
     running_feat_idx_batch = []
     api_call_feat_idx_batches = []
     for feat_idx, num_tokens in prompts_num_tokens.items():
-        if (len(running_feat_idx_batch) > p_config.num_allowed_requests_per_minute) or (
-            running_token_count + num_tokens > p_config.num_allowed_tokens_per_minute
+        if (len(running_feat_idx_batch) > requests_per_min) or (
+            running_token_count + num_tokens > tokens_per_min
         ):
             api_call_feat_idx_batches.append(running_feat_idx_batch)
             running_feat_idx_batch = [feat_idx]

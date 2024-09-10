@@ -86,10 +86,8 @@ class PipelineConfig:
     api_llm: str = "claude-3-5-sonnet-20240620"
     # api_llm: str = "claude-3-haiku-20240307"
 
-    autointerp_api_total_token_per_minute_limit: int = 400_000
-    autointerp_api_total_requests_per_minute_limit: int = 4_000
-    num_allowed_tokens_per_minute: int = int(0.3 * autointerp_api_total_token_per_minute_limit)
-    num_allowed_requests_per_minute: int = int(0.3 * autointerp_api_total_requests_per_minute_limit)
+    max_percentage_of_num_allowed_tokens_per_minute: float = 0.2
+    max_percentage_of_num_allowed_requests_per_minute: float = 0.2
     num_tokens_system_prompt: Optional[int] = None  # Will be set during llm_query
 
     prompt_dir: str = "llm_autointerp/"
