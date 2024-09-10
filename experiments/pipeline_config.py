@@ -15,6 +15,7 @@ class PipelineConfig:
     dataset_name: str = "bias_in_bios"
     column1_vals = ("professor", "nurse")
     column2_vals = ("male", "female")
+    column2_name: str = "gender"
 
     spurious_corr: bool = True
 
