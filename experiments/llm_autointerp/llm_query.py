@@ -314,7 +314,6 @@ def construct_llm_features_prompts(
     ae_path: str,
     tokenizer: AutoTokenizer,
     p_config: PipelineConfig,
-    desired_prompt_classes: list[str],
 ) -> dict[int, str]:
     with open(f"{ae_path}/max_activating_inputs.pkl", "rb") as f:
         max_activating_inputs = pickle.load(f)
@@ -359,7 +358,7 @@ def construct_llm_features_prompts(
         tokens_string = ", ".join(tokens_list)
 
         feature_prompts[feature_idx.item()] = prompts.create_feature_prompt(
-            example_prompt, tokens_string, desired_prompt_classes
+            example_prompt, tokens_string, p_config.chosen_autointerp_class_names
         )
 
     return feature_prompts
@@ -610,15 +609,13 @@ def perform_llm_autointerp(
             )
         )
 
-    desired_prompt_classes = [
-        p_config.column1_vals[0],
-        p_config.column1_vals[1],
-        p_config.column2_name,
-    ]
-
     features_prompts = construct_llm_features_prompts(
-        ae_path, tokenizer, p_config, desired_prompt_classes
+        ae_path, tokenizer, p_config
     )
+
+    if debug_mode:
+         with open(os.path.join(ae_path, "input_prompts.json"), "w") as f:
+            json.dump(features_prompts, f)
 
     batches_prompt_indices = llm_utils.get_prompt_batch_indices(features_prompts, p_config)
 
@@ -658,9 +655,6 @@ def perform_llm_autointerp(
 
         with open(os.path.join(ae_path, "extracted_json_llm_outputs.json"), "w") as f:
             json.dump(json_results, f)
-
-        with open(os.path.join(ae_path, "input_prompts.json"), "w") as f:
-            json.dump(features_prompts, f)
 
     return llm_json_response_to_node_effects(json_results, ae_path, p_config)
 

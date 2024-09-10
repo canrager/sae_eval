@@ -1,5 +1,5 @@
 from dataclasses import dataclass, asdict
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 import torch
 
@@ -12,6 +12,8 @@ class FeatureSelection(Enum):
 
 @dataclass
 class PipelineConfig:
+    random_seed: int = 0
+
     dataset_name: str = "bias_in_bios"
     column1_vals = ("professor", "nurse")
     column2_vals = ("male", "female")
@@ -81,6 +83,11 @@ class PipelineConfig:
     # ]
 
     # Autointerp stuff
+    chosen_autointerp_class_names = [
+        column1_vals[0],
+        column1_vals[1],
+        column2_name,
+    ] # This was named desired_classes in llm_query.py
 
     use_autointerp: bool = True
 
@@ -111,7 +118,6 @@ class PipelineConfig:
     num_top_emphasized_tokens: int = 5
     num_top_inputs_autointerp: int = top_k_inputs_act_collect
     num_top_features_per_class: int = 20
-    # num_top_features_per_class: int = 1
 
     llm_judge_min_scale: int = 0
     llm_judge_max_scale: int = 4
@@ -119,7 +125,6 @@ class PipelineConfig:
 
     include_activation_values_in_prompt: bool = True
 
-    chosen_autointerp_class_names = None
 
     def to_dict(self):
         return {k: str(v) if isinstance(v, torch.dtype) else v for k, v in asdict(self).items()}
