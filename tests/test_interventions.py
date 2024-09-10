@@ -4,6 +4,7 @@ import os
 import experiments.bib_intervention as bib_intervention
 import experiments.utils as utils
 from experiments.pipeline_config import PipelineConfig
+import experiments.llm_autointerp.llm_utils as llm_utils
 
 
 def compare_dicts_within_tolerance(actual, expected, tolerance, path="", all_diffs=None):
