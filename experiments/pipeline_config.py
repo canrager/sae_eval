@@ -36,6 +36,10 @@ class PipelineConfig:
     probe_batch_size: int = min(500, test_set_size)
     probe_epochs: int = 10
 
+    sae_batch_size: int = (
+        500  # Used if we precompute model activations when sae_layer == probe_layer
+    )
+
     model_dtype: torch.dtype = torch.bfloat16
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -357,7 +357,8 @@ def get_all_node_effects_for_one_sae(
     train_bios: dict,
     spurious_corr: bool,
     seed: int,
-    batch_size: int = 10,
+    llm_batch_size: int = 10,
+    sae_batch_size: int = 500,
     patching_method: str = "attrib",
     steps: int = 10,  # only used for ig
     indirect_effect_acts: Optional[dict[int | str, t.Tensor]] = None,
@@ -389,7 +390,7 @@ def get_all_node_effects_for_one_sae(
                 train_bios,
                 spurious_corr,
                 seed,
-                batch_size=batch_size,
+                batch_size=llm_batch_size,
                 patching_method=patching_method,
                 steps=steps,
             )
@@ -402,7 +403,7 @@ def get_all_node_effects_for_one_sae(
                 indirect_effect_acts,
                 spurious_corr,
                 model.device,
-                batch_size,
+                sae_batch_size,
             )
 
     node_effects = utils.to_device(node_effects, "cpu")
@@ -497,9 +498,12 @@ def get_all_acts_ablated(
     batch_size: int,
     probe_submodule: utils.submodule_alias,
     ablation_acts: Optional[t.Tensor] = None,
+    sae_batch_size: int = 500,
 ):
     if ablation_acts is not None:
-        return ablated_precomputed_activations(ablation_acts, dictionaries, to_ablate, batch_size)
+        return ablated_precomputed_activations(
+            ablation_acts, dictionaries, to_ablate, sae_batch_size
+        )
 
     text_batches = utils.batch_inputs(text_inputs, batch_size)
 
@@ -982,10 +986,11 @@ def run_interventions(
             train_bios=train_bios,
             spurious_corr=p_config.spurious_corr,
             seed=random_seed,
-            batch_size=patching_batch_size,
+            llm_batch_size=patching_batch_size,
             patching_method=p_config.attribution_patching_method,
             steps=p_config.ig_steps,
             indirect_effect_acts=indirect_effect_acts,
+            sae_batch_size=p_config.sae_batch_size,
         )
 
         all_node_effects = [(node_effects_attrib, "_attrib", p_config.attrib_t_effects)]
@@ -1098,6 +1103,7 @@ def run_interventions(
                                 llm_batch_size,
                                 probe_act_submodule,
                                 ablation_acts[evaluated_class_idx],
+                                p_config.sae_batch_size,
                             )
 
                             if evaluated_class_idx in utils.PAIRED_CLASS_KEYS:
@@ -1111,6 +1117,7 @@ def run_interventions(
                                     llm_batch_size,
                                     probe_act_submodule,
                                     ablation_acts[paired_class_idx],
+                                    p_config.sae_batch_size,
                                 )
 
                         ablated_class_accuracies = probe_training.get_probe_test_accuracy(
