@@ -143,6 +143,7 @@ def test_run_interventions_spurious_correlation():
 
     test_config.probe_train_set_size = 4000
     test_config.probe_test_set_size = 1000
+    test_config.probe_layer = 4
 
     # Load datset and probes
     test_config.train_set_size = 500
@@ -206,6 +207,7 @@ def test_run_interventions_tpp():
 
     test_config.probe_train_set_size = 4000
     test_config.probe_test_set_size = 1000
+    test_config.probe_layer = 4
 
     # Load datset and probes
     test_config.train_set_size = 500
@@ -264,6 +266,7 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
 
     test_config.probe_train_set_size = 4000
     test_config.probe_test_set_size = 1000
+    test_config.probe_layer = 4
 
     # Load datset and probes
     test_config.train_set_size = 500
@@ -377,6 +380,7 @@ def test_run_interventions_spurious_correlation_autointerp():
 
     test_config.probe_train_set_size = 4000
     test_config.probe_test_set_size = 1000
+    test_config.probe_layer = 4
 
     # Load datset and probes
     test_config.train_set_size = 500
