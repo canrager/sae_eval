@@ -5,13 +5,14 @@ import anthropic
 from typing import List, Tuple, Dict
 from experiments.llm_autointerp.prompts import (
     build_system_prompt,
-    create_few_shot_examples,
+    load_few_shot_examples,
     create_unlabeled_prompts,
 )
 from experiments.llm_autointerp import llm_query
 from experiments.llm_autointerp import llm_utils
 from experiments.autointerp import get_autointerp_inputs_for_all_saes, format_examples
 from experiments import utils_bib_dataset
+
 
 def extract_scores_llm(data: List[Tuple[str, Dict[str, int], bool, str]]) -> Dict[str, List[int]]:
     result = {}
@@ -26,6 +27,7 @@ def extract_scores_llm(data: List[Tuple[str, Dict[str, int], bool, str]]) -> Dic
                 result[category].append(score)
     return result
 
+
 def node_effects_autointerp(
     model,
     cfg,
@@ -35,11 +37,10 @@ def node_effects_autointerp(
     top_dla_token_idxs_FK,
     few_shot_manual_labels,
 ):
-
     # Select top features for each class
     topk_feature_idxs = {}
     all_features_set = set()
-    for class_idx in cfg['chosen_class_idxs']:
+    for class_idx in cfg["chosen_class_idxs"]:
         effects = node_effects_classprobe[class_idx]
         top_k_indices = t.topk(effects, cfg["num_top_features_per_class"]).indices
         topk_feature_idxs[class_idx] = top_k_indices
@@ -54,7 +55,7 @@ def node_effects_autointerp(
     system_prompt = build_system_prompt(
         concepts=list(utils_bib_dataset.profession_dict.keys()),
     )
-    few_shot_examples = create_few_shot_examples(few_shot_manual_labels)
+    few_shot_examples = load_few_shot_examples(few_shot_manual_labels)
 
     print(f"Few shot example is using {llm_utils.count_tokens(few_shot_examples)} tokens")
     print(f"System prompt is using {llm_utils.count_tokens(system_prompt[0]['text'])} tokens")
@@ -82,7 +83,7 @@ def node_effects_autointerp(
         max_scale=cfg["judge_max_scale"],
         chosen_class_names=cfg["chosen_class_strs"],
     )
-    
+
     # Extract scores
     # TODO handle that only a subset of features is used
     llm_labels = extract_scores_llm(llm_out)
@@ -92,7 +93,7 @@ def node_effects_autointerp(
         node_effects[utils_bib_dataset.profession_dict[labels]] = t.tensor(llm_labels[labels])
 
     # save as llm_autointerp/node_effects_autointerp.pkl
-    with open(os.path.join('llm_autointerp', cfg["output_filename"]), 'wb') as f:
+    with open(os.path.join("llm_autointerp", cfg["output_filename"]), "wb") as f:
         pickle.dump(node_effects, f)
 
     return None
@@ -125,7 +126,7 @@ if __name__ == "__main__":
     # Load configs
 
     cfg = get_default_cfg()
-    cfg['output_filename'] = 'node_effects_autointerp.pkl'
+    cfg["output_filename"] = "node_effects_autointerp.pkl"
 
     # Load Model
     DEVICE = "cuda"
@@ -188,7 +189,9 @@ if __name__ == "__main__":
     # Testing
     cfg["chosen_class_idxs"] = [0]
 
-    node_effects_classprobe = {k: v for k, v in node_effects_classprobe.items() if k in cfg["chosen_class_idxs"]}
+    node_effects_classprobe = {
+        k: v for k, v in node_effects_classprobe.items() if k in cfg["chosen_class_idxs"]
+    }
     cfg["chosen_class_strs"] = [profession_int_to_str[i] for i in node_effects_classprobe.keys()]
 
     # Run LLM
