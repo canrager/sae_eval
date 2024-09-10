@@ -334,7 +334,11 @@ def tokenize_data(
         # .data so we have a dict, not a BatchEncoding
         tokenized_data[key] = (
             tokenizer(
-                texts, padding=True, truncation=True, max_length=max_length, return_tensors="pt"
+                texts,
+                padding="max_length",
+                truncation=True,
+                max_length=max_length,
+                return_tensors="pt",
             )
             .to(device)
             .data
