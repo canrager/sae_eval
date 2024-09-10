@@ -1,6 +1,7 @@
 import asyncio
 import time
 import anthropic
+import openai
 from tenacity import retry, stop_after_attempt, RetryCallState
 import random
 import json
@@ -73,6 +74,37 @@ async def anthropic_request_prompt_caching(
     return message.content[0].text
 
 
+@retry(
+    stop=stop_after_attempt(9),
+    wait=exponential_backoff,
+)
+async def openai_request(
+    client: openai.OpenAI,
+    system_prompt: str,
+    few_shot_examples: str,
+    test_prompt: str,
+    model: str,
+    verbose: bool = False,
+) -> str:
+    if verbose:
+        print("Attempting OpenAI API call")
+    message = await client.chat.completions.create(
+        model=model,
+        max_tokens=500,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": few_shot_examples + test_prompt,
+            },
+        ],
+    )
+    with open("openai_response.json", "w") as f:
+        json.dump(message.choices[0].message.content, f, indent=4)
+    return message.choices[0].message.content
+
+
 @retry(stop=stop_after_attempt(1))
 async def anthropic_request(
     client: anthropic.Anthropic,
@@ -140,7 +172,7 @@ async def fill_anthropic_prompt_cache(
 
 
 async def process_prompt(
-    client: anthropic.Anthropic,
+    client: anthropic.Anthropic | openai.OpenAI,
     model: str,
     system_prompt: str,
     test_prompt: str,
@@ -150,9 +182,16 @@ async def process_prompt(
     max_scale: int,
     chosen_class_names: list[str],
 ) -> tuple[int, str, dict, bool, str]:
-    llm_response = await anthropic_request_prompt_caching(
-        client, system_prompt, few_shot_examples, test_prompt, model
-    )
+    if "claude" in model:
+        llm_response = await anthropic_request_prompt_caching(
+            client, system_prompt, few_shot_examples, test_prompt, model
+        )
+    elif "gpt" in model:
+        llm_response = await openai_request(
+            client, system_prompt, few_shot_examples, test_prompt, model
+        )
+    else:
+        raise ValueError("Model name must contain 'claude' or 'gpt'")
     json_response = llm_utils.extract_and_validate_json(llm_response)
     good_json, verification_message = llm_utils.verify_json_response(
         json_response, min_scale, max_scale, chosen_class_names
@@ -164,7 +203,7 @@ async def process_prompt(
 
 async def run_all_prompts(
     number_of_test_examples: int,
-    client: anthropic.Anthropic,
+    client: anthropic.Anthropic | openai.OpenAI,
     api_llm: str,
     system_prompt: str,
     test_prompts: dict[int, str],
@@ -220,7 +259,7 @@ def test_llm_vs_manual_labels(
     number_of_test_examples: int,
     output_filename: str = "llm_results.json",
 ) -> dict[int, tuple[str, dict, bool, str]]:
-    client = anthropic.AsyncAnthropic()
+    client = llm_utils.get_async_client(p_config.api_llm)
 
     with open(os.path.join(p_config.prompt_dir, "manual_labels_can_final.json"), "r") as f:
         manual_test_labels = json.load(f)
@@ -553,11 +592,12 @@ def perform_llm_autointerp(
     few_shot_examples_tokens = llm_utils.count_tokens(few_shot_examples)
     p_config.num_tokens_system_prompt = system_prompt_tokens + few_shot_examples_tokens
 
-    asyncio.run(
-        fill_anthropic_prompt_cache(
-            client, system_prompt[0]["text"], few_shot_examples, p_config.api_llm
+    if "claude" in p_config.api_llm:
+        asyncio.run(
+            fill_anthropic_prompt_cache(
+                client, system_prompt[0]["text"], few_shot_examples, p_config.api_llm
+            )
         )
-    )
 
     features_prompts = construct_llm_features_prompts(ae_path, tokenizer, p_config)
 

@@ -5,6 +5,7 @@ from transformers import AutoTokenizer
 from experiments.pipeline_config import PipelineConfig
 import experiments.utils as utils
 import experiments.llm_autointerp.llm_query as llm_query
+import experiments.llm_autointerp.llm_utils as llm_utils
 
 
 # def test_decoding():
@@ -16,6 +17,7 @@ import experiments.llm_autointerp.llm_query as llm_query
 #     output2 = utils.batch_decode_to_tokens(input_FKL, pythia_tokenizer)
 
 #     assert output1 == output2
+
 
 # We comment these tests by default because they use API tokens when running
 # Use sonnet 3.5 for more reliable results
@@ -58,39 +60,40 @@ import experiments.llm_autointerp.llm_query as llm_query
 #     assert node_effects_bias_shift_dir2["male_professor / female_nurse"][3243] == 0.0
 
 
-# def test_llm_query():
-#     with open("anthropic_api_key.txt", "r") as f:
-#         api_key = f.read().strip()
+def test_llm_query():
+    chosen_class_names = [
+        "gender",
+        "professor",
+        "nurse",
+        "accountant",
+        "architect",
+        "attorney",
+        "dentist",
+        "filmmaker",
+    ]
 
-#     os.environ["ANTHROPIC_API_KEY"] = api_key
+    p_config = PipelineConfig()
+    p_config.api_llm = "gpt-4o-mini-2024-07-18"
 
-#     chosen_class_names = [
-#         "gender",
-#         "professor",
-#         "nurse",
-#         "accountant",
-#         "architect",
-#         "attorney",
-#         "dentist",
-#         "filmmaker",
-#     ]
+    llm_utils.set_api_key(p_config.api_llm, "")
 
-#     p_config = PipelineConfig()
+    p_config.prompt_dir = "experiments/llm_autointerp/"
+    p_config.spurious_corr = False
 
-#     p_config.prompt_dir = "experiments/llm_autointerp/"
-#     p_config.spurious_corr = False
+    # IMPORTANT NOTE: We are using prompt caching. Before running on many prompts, run a single prompt
+    # two times with number_of_test_examples = 1 and verify that
+    # the cache_creation_input_tokens is 0 and cache_read_input_tokens is > 3000 on the second call.
+    # Then you can run on many prompts with number_of_test_examples > 1.
+    number_of_test_examples = 2
 
-#     # IMPORTANT NOTE: We are using prompt caching. Before running on many prompts, run a single prompt
-#     # two times with number_of_test_examples = 1 and verify that
-#     # the cache_creation_input_tokens is 0 and cache_read_input_tokens is > 3000 on the second call.
-#     # Then you can run on many prompts with number_of_test_examples > 1.
-#     number_of_test_examples = 2
+    result = llm_query.test_llm_vs_manual_labels(
+        p_config=p_config,
+        chosen_class_names=chosen_class_names,
+        number_of_test_examples=number_of_test_examples,
+        output_filename="llm_test_results.json",
+    )
 
-#     result = llm_query.test_llm_vs_manual_labels(
-#         p_config=p_config,
-#         chosen_class_names=chosen_class_names,
-#         number_of_test_examples=number_of_test_examples,
-#         output_filename="llm_test_results.json",
-#     )
+    assert result["1"][1]["dentist"] > 0
 
-#     assert result["1"][1]["dentist"] > 0
+
+test_llm_query()
