@@ -6,6 +6,12 @@ import experiments.utils as utils
 from experiments.pipeline_config import PipelineConfig
 import experiments.llm_autointerp.llm_utils as llm_utils
 
+# Very dangerous to set this to True, as it will overwrite the expected results
+FORCE_UPDATE_EXPECTED_RESULTS = False
+
+# Set this to False for faster testing, but risk being misled by old probes
+FORCE_RECOMPUTE_PROBES = True
+
 
 def compare_dicts_within_tolerance(actual, expected, tolerance, path="", all_diffs=None):
     """
@@ -67,6 +73,7 @@ def test_run_interventions_spurious_correlation():
     test_config.use_autointerp = False
     test_config.force_node_effects_recompute = True
     test_config.force_ablations_recompute = True
+    test_config.force_probe_recompute = FORCE_RECOMPUTE_PROBES
 
     test_config.spurious_corr = True
 
@@ -113,6 +120,10 @@ def test_run_interventions_spurious_correlation():
             class_accuracies = pickle.load(f)
         tolerance = 0.03
 
+        if FORCE_UPDATE_EXPECTED_RESULTS:
+            with open("tests/test_data/class_accuracies_attrib_spurious.pkl", "wb") as f:
+                pickle.dump(class_accuracies, f)
+
         with open("tests/test_data/class_accuracies_attrib_spurious.pkl", "rb") as f:
             expected_results = pickle.load(f)
 
@@ -125,6 +136,7 @@ def test_run_interventions_tpp():
     test_config.use_autointerp = False
     test_config.force_node_effects_recompute = True
     test_config.force_ablations_recompute = True
+    test_config.force_probe_recompute = FORCE_RECOMPUTE_PROBES
 
     test_config.spurious_corr = False
 
@@ -166,6 +178,10 @@ def test_run_interventions_tpp():
             class_accuracies = pickle.load(f)
         tolerance = 0.03
 
+        if FORCE_UPDATE_EXPECTED_RESULTS:
+            with open("tests/test_data/class_accuracies_attrib_tpp.pkl", "wb") as f:
+                pickle.dump(class_accuracies, f)
+
         with open("tests/test_data/class_accuracies_attrib_tpp.pkl", "rb") as f:
             expected_results = pickle.load(f)
 
@@ -178,6 +194,7 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
     test_config.use_autointerp = False
     test_config.force_node_effects_recompute = True
     test_config.force_ablations_recompute = True
+    test_config.force_probe_recompute = FORCE_RECOMPUTE_PROBES
 
     test_config.spurious_corr = True
 
@@ -233,6 +250,13 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
                 class_accuracies = pickle.load(f)
             tolerance = 0.03
 
+            if FORCE_UPDATE_EXPECTED_RESULTS:
+                with open(
+                    f"tests/test_data/class_accuracies_attrib_spurious_{column1_vals[0]}_{column1_vals[1]}.pkl",
+                    "wb",
+                ) as f:
+                    pickle.dump(class_accuracies, f)
+
             with open(
                 f"tests/test_data/class_accuracies_attrib_spurious_{column1_vals[0]}_{column1_vals[1]}.pkl",
                 "rb",
@@ -270,76 +294,81 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
 
 
 # # NOTE: This will use ~5k API tokens.
-# def test_run_interventions_spurious_correlation_autointerp():
-#     test_config = PipelineConfig()
+def test_run_interventions_spurious_correlation_autointerp():
+    test_config = PipelineConfig()
 
-#     llm_utils.set_api_key(test_config.api_llm, "")
+    llm_utils.set_api_key(test_config.api_llm, "")
 
-#     test_config.use_autointerp = True
-#     test_config.force_node_effects_recompute = True
-#     test_config.force_ablations_recompute = True
+    test_config.use_autointerp = True
+    test_config.force_node_effects_recompute = True
+    test_config.force_ablations_recompute = True
+    test_config.force_probe_recompute = FORCE_RECOMPUTE_PROBES
 
-#     test_config.prompt_dir = "experiments/llm_autointerp/"
-#     test_config.force_autointerp_recompute = True
+    test_config.prompt_dir = "experiments/llm_autointerp/"
+    test_config.force_autointerp_recompute = True
 
-#     test_config.num_top_features_per_class = 5
+    test_config.num_top_features_per_class = 5
 
-#     test_config.spurious_corr = True
+    test_config.spurious_corr = True
 
-#     test_config.probe_train_set_size = 4000
-#     test_config.probe_test_set_size = 1000
+    test_config.probe_train_set_size = 4000
+    test_config.probe_test_set_size = 1000
 
-#     # Load datset and probes
-#     test_config.train_set_size = 500
-#     test_config.test_set_size = 500
+    # Load datset and probes
+    test_config.train_set_size = 500
+    test_config.test_set_size = 500
 
-#     seed = 42
+    seed = 42
 
-#     test_config.chosen_class_indices = [
-#         "male / female",
-#         "professor / nurse",
-#         "male_professor / female_nurse",
-#         "biased_male / biased_female",
-#     ]
+    test_config.chosen_class_indices = [
+        "male / female",
+        "professor / nurse",
+        "male_professor / female_nurse",
+        "biased_male / biased_female",
+    ]
 
-#     test_config.autointerp_t_effects = [5]
+    test_config.autointerp_t_effects = [5]
 
-#     test_config.attrib_t_effects = []
+    test_config.attrib_t_effects = []
 
-#     test_config.dictionaries_path = "dictionary_learning/dictionaries"
-#     test_config.probes_dir = "experiments/test_trained_bib_probes"
+    test_config.dictionaries_path = "dictionary_learning/dictionaries"
+    test_config.probes_dir = "experiments/test_trained_bib_probes"
 
-#     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
+    ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
-#     for sweep_name, submodule_trainers in ae_sweep_paths.items():
-#         bib_intervention.run_interventions(
-#             submodule_trainers,
-#             test_config,
-#             sweep_name,
-#             seed,
-#             verbose=True,
-#         )
+    for sweep_name, submodule_trainers in ae_sweep_paths.items():
+        bib_intervention.run_interventions(
+            submodule_trainers,
+            test_config,
+            sweep_name,
+            seed,
+            verbose=True,
+        )
 
-#         ae_group_paths = utils.get_ae_group_paths(
-#             test_config.dictionaries_path, sweep_name, submodule_trainers
-#         )
-#         ae_paths = utils.get_ae_paths(ae_group_paths)
-#         tolerance = 0.03
+        ae_group_paths = utils.get_ae_group_paths(
+            test_config.dictionaries_path, sweep_name, submodule_trainers
+        )
+        ae_paths = utils.get_ae_paths(ae_group_paths)
+        tolerance = 0.03
 
-#         filenames = [
-#             "class_accuracies_auto_interp_spurious.pkl",
-#             "class_accuracies_bias_shift_dir1_spurious.pkl",
-#             "class_accuracies_bias_shift_dir2_spurious.pkl",
-#         ]
+        filenames = [
+            "class_accuracies_auto_interp_spurious.pkl",
+            "class_accuracies_bias_shift_dir1_spurious.pkl",
+            "class_accuracies_bias_shift_dir2_spurious.pkl",
+        ]
 
-#         for filename in filenames:
-#             output_filename = filename.replace("_spurious", "")
-#             output_filename = f"{ae_paths[0]}/{output_filename}"
+        for filename in filenames:
+            output_filename = filename.replace("_spurious", "")
+            output_filename = f"{ae_paths[0]}/{output_filename}"
 
-#             with open(output_filename, "rb") as f:
-#                 class_accuracies = pickle.load(f)
+            with open(output_filename, "rb") as f:
+                class_accuracies = pickle.load(f)
 
-#             with open(f"tests/test_data/{filename}", "rb") as f:
-#                 expected_results = pickle.load(f)
+            if FORCE_UPDATE_EXPECTED_RESULTS:
+                with open(f"tests/test_data/{filename}", "wb") as f:
+                    pickle.dump(class_accuracies, f)
 
-#             compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
+            with open(f"tests/test_data/{filename}", "rb") as f:
+                expected_results = pickle.load(f)
+
+            compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
