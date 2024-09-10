@@ -54,8 +54,8 @@ class PipelineConfig:
 
     # If == "sae_layer", then the probe layer is the same as the SAE layer
     # else it should be an int, representing the layer number
-    # This only applies to Gemma-2-2b
-    gemma_probe_layer: str | int = "sae_layer"
+    # If None, then the probe layer is pulled from utils.py
+    probe_layer: Optional[str | int] = "sae_layer"
 
     attribution_patching_method: str = "attrib"
     ig_steps: int = 10
@@ -87,7 +87,7 @@ class PipelineConfig:
         column1_vals[0],
         column1_vals[1],
         column2_name,
-    ] # This was named desired_classes in llm_query.py
+    ]  # This was named desired_classes in llm_query.py
 
     use_autointerp: bool = True
 
@@ -124,7 +124,6 @@ class PipelineConfig:
     llm_judge_binary_threshold: float = 0.5
 
     include_activation_values_in_prompt: bool = True
-
 
     def to_dict(self):
         return {k: str(v) if isinstance(v, torch.dtype) else v for k, v in asdict(self).items()}
