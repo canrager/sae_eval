@@ -50,7 +50,7 @@ else:
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
 
 
-def metric_fn(
+def spurious_metric_fn(
     model: LanguageModel, labels: t.Tensor, probe: Probe, probe_act_submodule: utils.submodule_alias
 ):
     attn_mask = model.input[1]["attention_mask"]
@@ -59,6 +59,17 @@ def metric_fn(
     acts = acts.sum(1) / attn_mask.sum(1)[:, None]
 
     return t.where(labels == utils.POSITIVE_CLASS_LABEL, probe(acts), -probe(acts))
+
+
+def tpp_metric_fn(
+    model: LanguageModel, labels: t.Tensor, probe: Probe, probe_act_submodule: utils.submodule_alias
+):
+    attn_mask = model.input[1]["attention_mask"]
+    acts = probe_act_submodule.output[0]
+    acts = acts * attn_mask[:, :, None]
+    acts = acts.sum(1) / attn_mask.sum(1)[:, None]
+
+    return t.where(labels == utils.POSITIVE_CLASS_LABEL, probe(acts), probe(acts))
 
 
 # Attribution Patching
@@ -261,6 +272,13 @@ def get_effects_per_class_precomputed_acts(
     decoder_weight_DF = utils.get_decoder_weight(dictionary).to(dtype=t.float32, device=device)
 
     dot_prod_F = (probe_weight_D @ decoder_weight_DF).squeeze()
+    # Because POSITIVE_CLASS_LABEL is 0, the dot product is negative so we need to flip the sign
+    # Kind of annoying
+    dot_prod_F *= -1
+
+    if not spurious_corr:
+        # Only consider activations from the positive class
+        average_acts_F.clamp_(min=0.0)
 
     effects_F = average_acts_F * dot_prod_F
 
@@ -292,13 +310,15 @@ def get_effects_per_class(
     device = model.device
     probe = probes[class_idx]
 
+    t.set_grad_enabled(True)
+
     if spurious_corr:
         assert isinstance(class_idx, str)
         inputs_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
     else:
         assert isinstance(class_idx, int)
-        inputs_train, labels_train = get_class_samples(train_bios, class_idx, device)
-        # texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
+        # inputs_train, labels_train = get_class_samples(train_bios, class_idx, device)
+        inputs_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
 
     inputs_train = utils.batch_inputs(inputs_train, batch_size)
     labels_train = utils.batch_inputs(labels_train, batch_size)
@@ -311,6 +331,11 @@ def get_effects_per_class(
     for batch_idx, (clean, labels) in enumerate(zip(inputs_train, labels_train)):
         if batch_idx == n_batches:
             break
+
+        if spurious_corr:
+            metric_fn = spurious_metric_fn
+        else:
+            metric_fn = tpp_metric_fn
 
         effects, _, _, _ = patching_effect(
             clean,

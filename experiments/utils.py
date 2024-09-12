@@ -335,6 +335,15 @@ def batch_inputs(inputs, batch_size: int):
         raise ValueError("Unsupported input type")
 
 
+def filter_dataset(
+    data: dict[int, list[str]], chosen_class_indices: list[int]
+) -> dict[int, list[str]]:
+    filtered_data = {}
+    for class_name in chosen_class_indices:
+        filtered_data[class_name] = data[class_name]
+    return filtered_data
+
+
 def tokenize_data(
     data: dict[int, list[str]], tokenizer, max_length: int, device: str
 ) -> dict[int, dict]:
