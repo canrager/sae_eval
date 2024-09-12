@@ -651,6 +651,7 @@ def train_probes(
     device: str,
     probe_output_filename: str,
     spurious_correlation_removal: bool,
+    chosen_class_indices: Optional[list[str | int]] = None,  # only required for tpp
     dataset_name: str = "bias_in_bios",
     probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
@@ -662,8 +663,6 @@ def train_probes(
     column1_vals: Optional[tuple[str, str]] = None,
     column2_vals: Optional[tuple[str, str]] = None,
 ) -> dict[int, float]:
-    """Because we save the probes, we always train them on all classes to avoid potential issues with missing classes. It's only a one-time cost.
-    Example of column1_vals and column2_vals: ('professor', 'nurse'), ('male', 'female')"""
     t.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -687,6 +686,10 @@ def train_probes(
         column1_vals=column1_vals,
         column2_vals=column2_vals,
     )
+
+    if not spurious_correlation_removal:
+        train_bios = utils.filter_dataset(train_bios, chosen_class_indices)
+        test_bios = utils.filter_dataset(test_bios, chosen_class_indices)
 
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)

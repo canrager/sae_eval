@@ -853,6 +853,10 @@ def run_interventions(
         column2_vals=p_config.column2_vals,
     )
 
+    if not p_config.spurious_corr:
+        train_bios = utils.filter_dataset(train_bios, p_config.chosen_class_indices)
+        test_bios = utils.filter_dataset(test_bios, p_config.chosen_class_indices)
+
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
@@ -863,7 +867,8 @@ def run_interventions(
         )
         probe_path = f"{p_config.probes_dir}/{only_model_name}/spurious_probes_{spurious_probe_data_name}_ctx_len_{context_length}_layer_{probe_layer}.pkl"
     else:
-        probe_path = f"{p_config.probes_dir}/{only_model_name}/tpp_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+        class_names = "_".join([str(i) for i in p_config.chosen_class_indices])
+        probe_path = f"{p_config.probes_dir}/{only_model_name}/tpp_{class_names}_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
@@ -887,6 +892,7 @@ def run_interventions(
             epochs=p_config.probe_epochs,
             model_dtype=p_config.model_dtype,
             spurious_correlation_removal=p_config.spurious_corr,
+            chosen_class_indices=p_config.chosen_class_indices,
             column1_vals=p_config.column1_vals,
             column2_vals=p_config.column2_vals,
         )
