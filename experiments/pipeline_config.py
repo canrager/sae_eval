@@ -21,6 +21,8 @@ class PipelineConfig:
 
     sweep_output_dir: str = ""
 
+    sae_name_filters = []
+
     spurious_corr: bool = True
 
     max_activations_collection_n_inputs: int = 10000
