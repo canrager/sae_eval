@@ -480,7 +480,7 @@ def plot_2var_graph(
 
     # Set labels and title
     ax.set_xlabel("L0")
-    ax.set_ylabel("Fraction Recovered")
+    ax.set_ylabel(y_label)
     ax.set_title(title)
 
     ax.legend(handles, labels, loc=legend_location)
