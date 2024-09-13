@@ -38,6 +38,56 @@ gender_dict = {
     "female": 1,
 }
 
+# From the original dataset
+# amazon_category_dict = {
+#     "All_Beauty": 0,
+#     "Toys_and_Games": 1,
+#     "Cell_Phones_and_Accessories": 2,
+#     "Industrial_and_Scientific": 3,
+#     "Gift_Cards": 4,
+#     "Musical_Instruments": 5,
+#     "Electronics": 6,
+#     "Handmade_Products": 7,
+#     "Arts_Crafts_and_Sewing": 8,
+#     "Baby_Products": 9,
+#     "Health_and_Household": 10,
+#     "Office_Products": 11,
+#     "Digital_Music": 12,
+#     "Grocery_and_Gourmet_Food": 13,
+#     "Sports_and_Outdoors": 14,
+#     "Home_and_Kitchen": 15,
+#     "Subscription_Boxes": 16,
+#     "Tools_and_Home_Improvement": 17,
+#     "Pet_Supplies": 18,
+#     "Video_Games": 19,
+#     "Kindle_Store": 20,
+#     "Clothing_Shoes_and_Jewelry": 21,
+#     "Patio_Lawn_and_Garden": 22,
+#     "Unknown": 23,
+#     "Books": 24,
+#     "Automotive": 25,
+#     "CDs_and_Vinyl": 26,
+#     "Beauty_and_Personal_Care": 27,
+#     "Amazon_Fashion": 28,
+#     "Magazine_Subscriptions": 29,
+#     "Software": 30,
+#     "Health_and_Personal_Care": 31,
+#     "Appliances": 32,
+#     "Movies_and_TV": 33
+# }
+# amazon_int_to_str = {v: k for k, v in amazon_dict.items()}
+
+# modified category naming when filtering the dataset for simplicity
+amazon_category_dict = {
+    "electronics": "electronics",
+    "beauty": "beauty",
+}
+
+amazon_rating_dict = {
+    1.0: 1.0,
+    5.0: 5.0,
+}
+
 dataset_metadata = {
     "bias_in_bios": {
         "text_column_name": "hard_text",
@@ -45,45 +95,12 @@ dataset_metadata = {
         "column2_name": "gender",
         "column1_mapping": profession_dict,
         "column2_mapping": gender_dict,
-    }
+    },
+    "amazon_reviews": {
+        "text_column_name": "text",
+        "column1_name": "category",
+        "column2_name": "rating",
+        "column1_mapping": amazon_category_dict,
+        "column2_mapping": amazon_rating_dict,
+    },
 }
-
-# Amazon Reviews
-
-amazon_dict = {
-    "All_Beauty": 0,
-    "Toys_and_Games": 1,
-    "Cell_Phones_and_Accessories": 2,
-    "Industrial_and_Scientific": 3,
-    "Gift_Cards": 4,
-    "Musical_Instruments": 5,
-    "Electronics": 6,
-    "Handmade_Products": 7,
-    "Arts_Crafts_and_Sewing": 8,
-    "Baby_Products": 9,
-    "Health_and_Household": 10,
-    "Office_Products": 11,
-    "Digital_Music": 12,
-    "Grocery_and_Gourmet_Food": 13,
-    "Sports_and_Outdoors": 14,
-    "Home_and_Kitchen": 15,
-    "Subscription_Boxes": 16,
-    "Tools_and_Home_Improvement": 17,
-    "Pet_Supplies": 18,
-    "Video_Games": 19,
-    "Kindle_Store": 20,
-    "Clothing_Shoes_and_Jewelry": 21,
-    "Patio_Lawn_and_Garden": 22,
-    "Unknown": 23,
-    "Books": 24,
-    "Automotive": 25,
-    "CDs_and_Vinyl": 26,
-    "Beauty_and_Personal_Care": 27,
-    "Amazon_Fashion": 28,
-    "Magazine_Subscriptions": 29,
-    "Software": 30,
-    "Health_and_Personal_Care": 31,
-    "Appliances": 32,
-    "Movies_and_TV": 33
-}
-amazon_int_to_str = {v: k for k, v in amazon_dict.items()}

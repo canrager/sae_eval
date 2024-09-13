@@ -15,11 +15,13 @@ p_config.attrib_t_effects = [100]
 p_config.autointerp_t_effects = [20]
 p_config.num_top_features_per_class = 100
 
-p_config.model_dtype = torch.float32
 
-p_config.train_set_size = 500
-p_config.test_set_size = 500
-p_config.force_eval_results_recompute = True
+
+# For debugging with pythia
+# p_config.model_dtype = torch.float32
+# p_config.train_set_size = 500
+# p_config.test_set_size = 500
+p_config.force_autointerp_recompute = True
 p_config.force_node_effects_recompute = True
 
 p_config.chosen_class_indices = [
@@ -32,58 +34,58 @@ p_config.chosen_autointerp_class_names = [
 ]
 
 
-trainer_ids = [2, 10, 18]
-trainer_ids = [10]
-
-ae_sweep_paths = {
-    "pythia70m_sweep_standard_ctx128_0712": {
-        #     # "resid_post_layer_0": {"trainer_ids": None},
-        #     # "resid_post_layer_1": {"trainer_ids": None},
-        #     # "resid_post_layer_2": {"trainer_ids": None},
-        "resid_post_layer_3": {"trainer_ids": trainer_ids},
-        #     "resid_post_layer_4": {"trainer_ids": None},
-    },
-    # "pythia70m_sweep_gated_ctx128_0730": {
-    #     # "resid_post_layer_0": {"trainer_ids": None},
-    #     # "resid_post_layer_1": {"trainer_ids": None},
-    #     # "resid_post_layer_2": {"trainer_ids": None},
-    #     "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
-    #     # "resid_post_layer_4": {"trainer_ids": None},
-    # },
-    # "pythia70m_sweep_panneal_ctx128_0730": {
-    #     # "resid_post_layer_0": {"trainer_ids": None},
-    #     # "resid_post_layer_1": {"trainer_ids": None},
-    #     # "resid_post_layer_2": {"trainer_ids": None},
-    #     "resid_post_layer_3": {"trainer_ids": trainer_ids},
-    #     # "resid_post_layer_4": {"trainer_ids": None},
-    # },
-    "pythia70m_sweep_topk_ctx128_0730": {
-        # "resid_post_layer_0": {"trainer_ids": None},
-        # "resid_post_layer_1": {"trainer_ids": None},
-        # "resid_post_layer_2": {"trainer_ids": None},
-        "resid_post_layer_3": {"trainer_ids": trainer_ids},
-        # "resid_post_layer_4": {"trainer_ids": None},
-    },
-}
-
-# trainer_ids = [0, 3, 5]
+# trainer_ids = [2, 10, 18]
+# trainer_ids = [10]
 
 # ae_sweep_paths = {
-#     "gemma-2-2b_sweep_topk_ctx128_ef8_0824": {
-#         # "resid_post_layer_3": {"trainer_ids": trainer_ids},
-#         # "resid_post_layer_7": {"trainer_ids": trainer_ids},
-#         "resid_post_layer_11": {"trainer_ids": trainer_ids},
-#         # "resid_post_layer_15": {"trainer_ids": trainer_ids},
-#         # "resid_post_layer_19": {"trainer_ids": trainer_ids},
-# },
-#     "gemma-2-2b_sweep_standard_ctx128_ef8_0824": {
-#         # "resid_post_layer_3": {"trainer_ids": trainer_ids},
-#         # "resid_post_layer_7": {"trainer_ids": trainer_ids},
-#         "resid_post_layer_11": {"trainer_ids": trainer_ids},
-#         # "resid_post_layer_15": {"trainer_ids": trainer_ids},
-#         # "resid_post_layer_19": {"trainer_ids": trainer_ids},
+#     "pythia70m_sweep_standard_ctx128_0712": {
+#         #     # "resid_post_layer_0": {"trainer_ids": None},
+#         #     # "resid_post_layer_1": {"trainer_ids": None},
+#         #     # "resid_post_layer_2": {"trainer_ids": None},
+#         "resid_post_layer_3": {"trainer_ids": trainer_ids},
+#         #     "resid_post_layer_4": {"trainer_ids": None},
+#     },
+#     # "pythia70m_sweep_gated_ctx128_0730": {
+#     #     # "resid_post_layer_0": {"trainer_ids": None},
+#     #     # "resid_post_layer_1": {"trainer_ids": None},
+#     #     # "resid_post_layer_2": {"trainer_ids": None},
+#     #     "resid_post_layer_3": {"trainer_ids": [2, 6, 10, 18]},
+#     #     # "resid_post_layer_4": {"trainer_ids": None},
+#     # },
+#     # "pythia70m_sweep_panneal_ctx128_0730": {
+#     #     # "resid_post_layer_0": {"trainer_ids": None},
+#     #     # "resid_post_layer_1": {"trainer_ids": None},
+#     #     # "resid_post_layer_2": {"trainer_ids": None},
+#     #     "resid_post_layer_3": {"trainer_ids": trainer_ids},
+#     #     # "resid_post_layer_4": {"trainer_ids": None},
+#     # },
+#     "pythia70m_sweep_topk_ctx128_0730": {
+#         # "resid_post_layer_0": {"trainer_ids": None},
+#         # "resid_post_layer_1": {"trainer_ids": None},
+#         # "resid_post_layer_2": {"trainer_ids": None},
+#         "resid_post_layer_3": {"trainer_ids": trainer_ids},
+#         # "resid_post_layer_4": {"trainer_ids": None},
 #     },
 # }
+
+trainer_ids = [0, 3, 5]
+
+ae_sweep_paths = {
+    "gemma-2-2b_sweep_topk_ctx128_ef8_0824": {
+        # "resid_post_layer_3": {"trainer_ids": trainer_ids},
+        # "resid_post_layer_7": {"trainer_ids": trainer_ids},
+        "resid_post_layer_11": {"trainer_ids": trainer_ids},
+        # "resid_post_layer_15": {"trainer_ids": trainer_ids},
+        # "resid_post_layer_19": {"trainer_ids": trainer_ids},
+},
+    "gemma-2-2b_sweep_standard_ctx128_ef8_0824": {
+        # "resid_post_layer_3": {"trainer_ids": trainer_ids},
+        # "resid_post_layer_7": {"trainer_ids": trainer_ids},
+        "resid_post_layer_11": {"trainer_ids": trainer_ids},
+        # "resid_post_layer_15": {"trainer_ids": trainer_ids},
+        # "resid_post_layer_19": {"trainer_ids": trainer_ids},
+    },
+}
 
 # Set manually in console
 # if pipeline_config.use_autointerp:

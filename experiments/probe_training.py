@@ -95,6 +95,10 @@ def load_and_prepare_dataset(dataset_name: str) -> tuple[pd.DataFrame, pd.DataFr
         dataset = load_dataset("LabHC/bias_in_bios")
         train_df = pd.DataFrame(dataset["train"])
         test_df = pd.DataFrame(dataset["test"])
+    elif dataset_name == "amazon_reviews":
+        dataset = load_dataset('canrager/amazon_reviews_mcauley')
+        train_df = pd.DataFrame(dataset["train"])
+        test_df = pd.DataFrame(dataset["test"])
     else:
         raise ValueError(f"Unknown dataset name: {dataset_name}")
     return train_df, test_df
