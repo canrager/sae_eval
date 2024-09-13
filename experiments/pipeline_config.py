@@ -19,6 +19,8 @@ class PipelineConfig:
     column2_vals = ("male", "female")
     column2_name: str = "gender"
 
+    sweep_output_dir: str = ""
+
     spurious_corr: bool = True
 
     max_activations_collection_n_inputs: int = 10000

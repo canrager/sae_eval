@@ -798,6 +798,8 @@ def run_interventions(
 
     assert p_config.selection_method == FeatureSelection.top_n, "Only top_n is supported right now"
 
+    assert len(p_config.sweep_output_dir) > 0, "sweep_output_dir must be set"
+
     t.manual_seed(random_seed)
     random.seed(random_seed)
     np.random.seed(random_seed)
@@ -1192,7 +1194,9 @@ def run_interventions(
         )
     else:
         output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_tpp"
-    results_folder = os.path.join(src_folder, output_folder_name)
+    results_folder = os.path.join(
+        p_config.dictionaries_path, p_config.sweep_output_dir, output_folder_name
+    )
 
     utils.extract_results(src_folder, results_folder, p_config.saving_exclude_files, ae_paths)
 
