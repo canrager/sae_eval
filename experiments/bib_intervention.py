@@ -50,7 +50,7 @@ else:
 # Metric function effectively maximizing the logit difference between the classes: selected, and nonclass
 
 
-def metric_fn(
+def spurious_metric_fn(
     model: LanguageModel, labels: t.Tensor, probe: Probe, probe_act_submodule: utils.submodule_alias
 ):
     attn_mask = model.input[1]["attention_mask"]
@@ -59,6 +59,17 @@ def metric_fn(
     acts = acts.sum(1) / attn_mask.sum(1)[:, None]
 
     return t.where(labels == utils.POSITIVE_CLASS_LABEL, probe(acts), -probe(acts))
+
+
+def tpp_metric_fn(
+    model: LanguageModel, labels: t.Tensor, probe: Probe, probe_act_submodule: utils.submodule_alias
+):
+    attn_mask = model.input[1]["attention_mask"]
+    acts = probe_act_submodule.output[0]
+    acts = acts * attn_mask[:, :, None]
+    acts = acts.sum(1) / attn_mask.sum(1)[:, None]
+
+    return t.where(labels == utils.POSITIVE_CLASS_LABEL, probe(acts), probe(acts))
 
 
 # Attribution Patching
@@ -261,6 +272,13 @@ def get_effects_per_class_precomputed_acts(
     decoder_weight_DF = utils.get_decoder_weight(dictionary).to(dtype=t.float32, device=device)
 
     dot_prod_F = (probe_weight_D @ decoder_weight_DF).squeeze()
+    # Because POSITIVE_CLASS_LABEL is 0, the dot product is negative so we need to flip the sign
+    # Kind of annoying
+    dot_prod_F *= -1
+
+    if not spurious_corr:
+        # Only consider activations from the positive class
+        average_acts_F.clamp_(min=0.0)
 
     effects_F = average_acts_F * dot_prod_F
 
@@ -292,13 +310,15 @@ def get_effects_per_class(
     device = model.device
     probe = probes[class_idx]
 
+    t.set_grad_enabled(True)
+
     if spurious_corr:
         assert isinstance(class_idx, str)
         inputs_train, labels_train = get_paired_class_samples(train_bios, class_idx, device)
     else:
         assert isinstance(class_idx, int)
-        inputs_train, labels_train = get_class_samples(train_bios, class_idx, device)
-        # texts_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
+        # inputs_train, labels_train = get_class_samples(train_bios, class_idx, device)
+        inputs_train, labels_train = get_class_nonclass_samples(train_bios, class_idx, device)
 
     inputs_train = utils.batch_inputs(inputs_train, batch_size)
     labels_train = utils.batch_inputs(labels_train, batch_size)
@@ -311,6 +331,11 @@ def get_effects_per_class(
     for batch_idx, (clean, labels) in enumerate(zip(inputs_train, labels_train)):
         if batch_idx == n_batches:
             break
+
+        if spurious_corr:
+            metric_fn = spurious_metric_fn
+        else:
+            metric_fn = tpp_metric_fn
 
         effects, _, _, _ = patching_effect(
             clean,
@@ -773,6 +798,8 @@ def run_interventions(
 
     assert p_config.selection_method == FeatureSelection.top_n, "Only top_n is supported right now"
 
+    assert len(p_config.sweep_output_dir) > 0, "sweep_output_dir must be set"
+
     t.manual_seed(random_seed)
     random.seed(random_seed)
     np.random.seed(random_seed)
@@ -853,6 +880,10 @@ def run_interventions(
         column2_vals=p_config.column2_vals,
     )
 
+    if not p_config.spurious_corr:
+        train_bios = utils.filter_dataset(train_bios, p_config.chosen_class_indices)
+        test_bios = utils.filter_dataset(test_bios, p_config.chosen_class_indices)
+
     train_bios = utils.tokenize_data(train_bios, model.tokenizer, context_length, device)
     test_bios = utils.tokenize_data(test_bios, model.tokenizer, context_length, device)
 
@@ -863,7 +894,8 @@ def run_interventions(
         )
         probe_path = f"{p_config.probes_dir}/{only_model_name}/spurious_probes_{spurious_probe_data_name}_ctx_len_{context_length}_layer_{probe_layer}.pkl"
     else:
-        probe_path = f"{p_config.probes_dir}/{only_model_name}/tpp_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
+        class_names = "_".join([str(i) for i in p_config.chosen_class_indices])
+        probe_path = f"{p_config.probes_dir}/{only_model_name}/tpp_{class_names}_probes_ctx_len_{context_length}_layer_{probe_layer}.pkl"
 
     # TODO: Add logic to ensure probes share keys with train_bios and test_bios
     # We train the probes and save them as a file.
@@ -887,6 +919,7 @@ def run_interventions(
             epochs=p_config.probe_epochs,
             model_dtype=p_config.model_dtype,
             spurious_correlation_removal=p_config.spurious_corr,
+            chosen_class_indices=p_config.chosen_class_indices,
             column1_vals=p_config.column1_vals,
             column2_vals=p_config.column2_vals,
         )
@@ -1161,7 +1194,9 @@ def run_interventions(
         )
     else:
         output_folder_name = f"{sweep_name}_probe_layer_{probe_layer}_tpp"
-    results_folder = os.path.join(src_folder, output_folder_name)
+    results_folder = os.path.join(
+        p_config.dictionaries_path, p_config.sweep_output_dir, output_folder_name
+    )
 
     utils.extract_results(src_folder, results_folder, p_config.saving_exclude_files, ae_paths)
 
