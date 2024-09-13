@@ -172,6 +172,8 @@ circuits/*
 **/trained_saes/*
 /ravel/data/*
 /ravel/models/*
+gemma_results_0913/*
+.gitattributes
 
 anthropic_api_key.txt
 experiments/latent_probing/probes/*
