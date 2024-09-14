@@ -838,7 +838,7 @@ def run_interventions(
                 filtered_ae_paths.append(path)
 
         print(f"Filtered AE paths: {filtered_ae_paths}")
-    ae_paths = filtered_ae_paths
+        ae_paths = filtered_ae_paths
 
     # TODO: experiment with different context lengths
     context_length = utils.get_ctx_length(ae_paths)
