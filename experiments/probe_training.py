@@ -95,8 +95,16 @@ def load_and_prepare_dataset(dataset_name: str) -> tuple[pd.DataFrame, pd.DataFr
         dataset = load_dataset("LabHC/bias_in_bios")
         train_df = pd.DataFrame(dataset["train"])
         test_df = pd.DataFrame(dataset["test"])
-    elif dataset_name == "amazon_reviews":
-        dataset = load_dataset('canrager/amazon_reviews_mcauley')
+    elif dataset_name == "amazon_reviews_all_ratings":
+        dataset = load_dataset(
+            "canrager/amazon_reviews_mcauley",
+            config_name="dataset_all_categories_and_ratings_train1000_test250",
+        )
+    elif dataset_name == "amazon_reviews_ratings_1and5":
+        dataset = load_dataset(
+            "canrager/amazon_reviews_mcauley",
+            config_name="dataset_all_categories_ratings_1and5_train10000_test2500",
+        )
         train_df = pd.DataFrame(dataset["train"])
         test_df = pd.DataFrame(dataset["test"])
     else:
@@ -341,11 +349,20 @@ def get_all_meaned_activations(
 
     all_acts_list_BD = []
     for text_batch_BL in text_batches:
+
+        # TODO: Check for this Gemma NaN return error across library
+        # The error was caused by passing a dict to model.trace() instead of a tensor
+        attn_mask = None
+        if isinstance(text_batch_BL, dict):
+            input_ids = text_batch_BL["input_ids"]
+            attn_mask = text_batch_BL["attention_mask"]
+
         with model.trace(
-            text_batch_BL,
+            input_ids,
             **tracer_kwargs,
         ):
-            attn_mask = model.input[1]["attention_mask"]
+            if attn_mask is None:
+                attn_mask = model.input[1]["attention_mask"]
             acts_BLD = submodule.output[0]
             acts_BLD = acts_BLD * attn_mask[:, :, None]
             acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]
