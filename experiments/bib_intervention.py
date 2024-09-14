@@ -829,6 +829,7 @@ def run_interventions(
     )
     ae_paths = utils.get_ae_paths(ae_group_paths)
 
+    # This is primarily useful if you only want to analyze a subset of checkpoints
     if len(p_config.sae_name_filters) > 0:
         filtered_ae_paths = []
 
