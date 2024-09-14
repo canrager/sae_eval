@@ -50,6 +50,14 @@ class ModelEvalConfig:
             "attribution_patching_batch_size": 50,
             "eval_results_batch_size": 50,
         },
+        "pythia1.4b": {
+            "full_model_name": "EleutherAI/pythia-1.4b-deduped",
+            "activation_dim": 2048,
+            "probe_layer": 20,
+            "llm_batch_size": 32,
+            "attribution_patching_batch_size": 8,
+            "eval_results_batch_size": 24,
+        },
         "gemma-2-2b": {
             "full_model_name": "google/gemma-2-2b",
             "activation_dim": 2304,
