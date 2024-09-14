@@ -39,7 +39,7 @@ gender_dict = {
 }
 
 # From the original dataset
-full_amazon_category_dict = {
+amazon_category_dict = {
     "All_Beauty": 0,
     "Toys_and_Games": 1,
     "Cell_Phones_and_Accessories": 2,
@@ -75,12 +75,12 @@ full_amazon_category_dict = {
     "Appliances": 32,
     "Movies_and_TV": 33
 }
-full_amazon_int_to_str = {v: k for k, v in full_amazon_category_dict.items()}
+amazon_int_to_str = {v: k for k, v in amazon_category_dict.items()}
 
 
 amazon_rating_dict = {
-    1.0: 0,
-    5.0: 1,
+    1.0: 1.0,
+    5.0: 5.0,
 }
 
 dataset_metadata = {
@@ -91,7 +91,7 @@ dataset_metadata = {
         "column1_mapping": profession_dict,
         "column2_mapping": gender_dict,
     },
-    "amazon_reviews": {
+    "amazon_reviews_1and5": {
         "text_column_name": "text",
         "column1_name": "category",
         "column2_name": "rating",

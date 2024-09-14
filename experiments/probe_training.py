@@ -35,39 +35,6 @@ sys.path.append(parent_dir)
 
 tracer_kwargs = dict(scan=DEBUGGING, validate=DEBUGGING)
 
-# Profession dictionary
-profession_dict = {
-    "accountant": 0,
-    "architect": 1,
-    "attorney": 2,
-    "chiropractor": 3,
-    "comedian": 4,
-    "composer": 5,
-    "dentist": 6,
-    "dietitian": 7,
-    "dj": 8,
-    "filmmaker": 9,
-    "interior_designer": 10,
-    "journalist": 11,
-    "model": 12,
-    "nurse": 13,
-    "painter": 14,
-    "paralegal": 15,
-    "pastor": 16,
-    "personal_trainer": 17,
-    "photographer": 18,
-    "physician": 19,
-    "poet": 20,
-    "professor": 21,
-    "psychologist": 22,
-    "rapper": 23,
-    "software_engineer": 24,
-    "surgeon": 25,
-    "teacher": 26,
-    "yoga_teacher": 27,
-}
-profession_dict_rev = {v: k for k, v in profession_dict.items()}
-
 
 def ensure_shared_keys(train_data: dict, test_data: dict) -> tuple[dict, dict]:
     # Find keys that are in test but not in train
@@ -100,10 +67,9 @@ def load_and_prepare_dataset(dataset_name: str) -> tuple[pd.DataFrame, pd.DataFr
             "canrager/amazon_reviews_mcauley",
             config_name="dataset_all_categories_and_ratings_train1000_test250",
         )
-    elif dataset_name == "amazon_reviews_ratings_1and5":
+    elif dataset_name == "amazon_reviews_1and5":
         dataset = load_dataset(
-            "canrager/amazon_reviews_mcauley",
-            config_name="dataset_all_categories_ratings_1and5_train10000_test2500",
+            "canrager/amazon_reviews_mcauley_1and5",
         )
         train_df = pd.DataFrame(dataset["train"])
         test_df = pd.DataFrame(dataset["test"])
@@ -158,6 +124,7 @@ def get_spurious_corr_data(
         len(pos_neg), len(neg_neg), len(pos_pos), len(neg_pos), min_samples_per_quadrant
     )
 
+    print(f'min_count: {min_count}, min_samples_per_quadrant: {min_samples_per_quadrant}')
     assert min_count == min_samples_per_quadrant
 
     rng = np.random.default_rng(random_seed)
