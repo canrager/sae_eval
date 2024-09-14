@@ -35,6 +35,7 @@ class PipelineConfig:
 
     eval_saes_n_inputs: int = 250
 
+    probe_context_length: int = 128
     probe_batch_size: int = min(500, test_set_size)
     probe_epochs: int = 10
 
