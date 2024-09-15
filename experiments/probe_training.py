@@ -124,7 +124,7 @@ def get_spurious_corr_data(
         len(pos_neg), len(neg_neg), len(pos_pos), len(neg_pos), min_samples_per_quadrant
     )
 
-    print(f'min_count: {min_count}, min_samples_per_quadrant: {min_samples_per_quadrant}')
+    print(f"min_count: {min_count}, min_samples_per_quadrant: {min_samples_per_quadrant}")
     assert min_count == min_samples_per_quadrant
 
     rng = np.random.default_rng(random_seed)
@@ -316,20 +316,11 @@ def get_all_meaned_activations(
 
     all_acts_list_BD = []
     for text_batch_BL in text_batches:
-
-        # TODO: Check for this Gemma NaN return error across library
-        # The error was caused by passing a dict to model.trace() instead of a tensor
-        attn_mask = None
-        if isinstance(text_batch_BL, dict):
-            input_ids = text_batch_BL["input_ids"]
-            attn_mask = text_batch_BL["attention_mask"]
-
         with model.trace(
-            input_ids,
+            text_batch_BL,
             **tracer_kwargs,
         ):
-            if attn_mask is None:
-                attn_mask = model.input[1]["attention_mask"]
+            attn_mask = model.input[1]["attention_mask"]
             acts_BLD = submodule.output[0]
             acts_BLD = acts_BLD * attn_mask[:, :, None]
             acts_BD = acts_BLD.sum(1) / attn_mask.sum(1)[:, None]
