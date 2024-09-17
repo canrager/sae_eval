@@ -164,7 +164,8 @@ phenomena/vocab/*.json
 phenomena/circuits/*
 circuits/*
 *.out
-# *.sh
+*run.sh
+
 **/wandb
 
 **/*_datasets/*

@@ -1051,12 +1051,25 @@ def run_interventions(
                     p_config.column1_vals[1],
                     column2_name,
                 ]
+                if "amazon" in p_config.dataset_name:
+                    p_config.chosen_autointerp_class_names = [
+                        dataset_info.amazon_int_to_str[i] for i in p_config.column1_vals
+                    ]
+                    p_config.chosen_autointerp_class_names.append(column2_name)
+
             else:
                 p_config.chosen_autointerp_class_names = []
                 for class_idx in p_config.chosen_class_indices:
-                    p_config.chosen_autointerp_class_names.append(
-                        dataset_info.profession_int_to_str[class_idx]
-                    )
+                    if p_config.dataset_name == "bias_in_bios":
+                        p_config.chosen_autointerp_class_names.append(
+                            dataset_info.profession_int_to_str[class_idx]
+                        )
+                    elif "amazon" in p_config.dataset_name:
+                        p_config.chosen_autointerp_class_names.append(
+                            dataset_info.amazon_int_to_str[class_idx]
+                        )
+                    else:
+                        raise ValueError("Invalid dataset name")
 
             # This will save node_effects_auto_interp.pkl, node_effects_bias_shift_dir1.pkl, and node_effects_bias_shift_dir2.pkl alongside each SAE
             node_effects_auto_interp, node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = (
