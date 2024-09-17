@@ -8,7 +8,6 @@ import experiments.llm_autointerp.llm_utils as llm_utils
 
 # Very dangerous to set this to True, as it will overwrite the expected results
 FORCE_UPDATE_EXPECTED_RESULTS = False
-
 # Set this to False for faster testing, but risk being misled by old probes
 FORCE_RECOMPUTE_PROBES = True
 
@@ -69,12 +68,12 @@ def compare_dicts_within_tolerance(actual, expected, tolerance, path="", all_dif
 
 def test_run_interventions_spurious_correlation_same_layer():
     test_config = PipelineConfig()
+    test_config.sweep_output_dir = "tests"
 
     test_config.use_autointerp = False
     test_config.force_node_effects_recompute = True
     test_config.force_ablations_recompute = True
     test_config.force_probe_recompute = FORCE_RECOMPUTE_PROBES
-    test_config.probe_layer = "sae_layer"
 
     test_config.spurious_corr = True
 
@@ -101,38 +100,45 @@ def test_run_interventions_spurious_correlation_same_layer():
 
     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
+    probe_layers = ["sae_layer", 3]
+
     for sweep_name, submodule_trainers in ae_sweep_paths.items():
-        bib_intervention.run_interventions(
-            submodule_trainers,
-            test_config,
-            sweep_name,
-            seed,
-            verbose=True,
-        )
+        for probe_layer in probe_layers:
+            test_config.probe_layer = probe_layer
+            bib_intervention.run_interventions(
+                submodule_trainers,
+                test_config,
+                sweep_name,
+                seed,
+                verbose=True,
+            )
 
-        ae_group_paths = utils.get_ae_group_paths(
-            test_config.dictionaries_path, sweep_name, submodule_trainers
-        )
-        ae_paths = utils.get_ae_paths(ae_group_paths)
+            ae_group_paths = utils.get_ae_group_paths(
+                test_config.dictionaries_path, sweep_name, submodule_trainers
+            )
+            ae_paths = utils.get_ae_paths(ae_group_paths)
 
-        output_filename = f"{ae_paths[0]}/class_accuracies_attrib.pkl"
+            output_filename = f"{ae_paths[0]}/class_accuracies_attrib.pkl"
 
-        with open(output_filename, "rb") as f:
-            class_accuracies = pickle.load(f)
-        tolerance = 0.03
+            with open(output_filename, "rb") as f:
+                class_accuracies = pickle.load(f)
+            tolerance = 0.03
 
-        if FORCE_UPDATE_EXPECTED_RESULTS:
-            with open("tests/test_data/class_accuracies_attrib_spurious_same_layer.pkl", "wb") as f:
-                pickle.dump(class_accuracies, f)
+            if FORCE_UPDATE_EXPECTED_RESULTS:
+                with open(
+                    "tests/test_data/class_accuracies_attrib_spurious_same_layer.pkl", "wb"
+                ) as f:
+                    pickle.dump(class_accuracies, f)
 
-        with open("tests/test_data/class_accuracies_attrib_spurious_same_layer.pkl", "rb") as f:
-            expected_results = pickle.load(f)
+            with open("tests/test_data/class_accuracies_attrib_spurious_same_layer.pkl", "rb") as f:
+                expected_results = pickle.load(f)
 
-        compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
+            compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
 
 
 def test_run_interventions_spurious_correlation():
     test_config = PipelineConfig()
+    test_config.sweep_output_dir = "tests"
 
     test_config.use_autointerp = False
     test_config.force_node_effects_recompute = True
@@ -195,8 +201,74 @@ def test_run_interventions_spurious_correlation():
         compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
 
 
+def test_run_interventions_tpp_same_layer():
+    test_config = PipelineConfig()
+
+    test_config.sweep_output_dir = "tests"
+
+    test_config.use_autointerp = False
+    test_config.force_node_effects_recompute = True
+    test_config.force_ablations_recompute = True
+    test_config.force_probe_recompute = FORCE_RECOMPUTE_PROBES
+
+    test_config.spurious_corr = False
+    test_config.chosen_class_indices = [0, 1, 2]
+
+    test_config.probe_train_set_size = 4000
+    test_config.probe_test_set_size = 1000
+
+    # Load datset and probes
+    test_config.train_set_size = 4000
+    test_config.test_set_size = 1000
+
+    seed = 42
+
+    test_config.attrib_t_effects = [20]
+
+    test_config.dictionaries_path = "dictionary_learning/dictionaries"
+    test_config.probes_dir = "experiments/test_trained_bib_probes"
+
+    ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
+
+    # Because of differences between attribution patching and same layer node effects,
+    # we won't get identical results for the same layer between the two methods.
+    probe_layers = ["sae_layer"]
+
+    for sweep_name, submodule_trainers in ae_sweep_paths.items():
+        for probe_layer in probe_layers:
+            test_config.probe_layer = probe_layer
+            bib_intervention.run_interventions(
+                submodule_trainers,
+                test_config,
+                sweep_name,
+                seed,
+                verbose=True,
+            )
+
+            ae_group_paths = utils.get_ae_group_paths(
+                test_config.dictionaries_path, sweep_name, submodule_trainers
+            )
+            ae_paths = utils.get_ae_paths(ae_group_paths)
+
+            output_filename = f"{ae_paths[0]}/class_accuracies_attrib.pkl"
+
+            with open(output_filename, "rb") as f:
+                class_accuracies = pickle.load(f)
+            tolerance = 0.03
+
+            if FORCE_UPDATE_EXPECTED_RESULTS:
+                with open("tests/test_data/class_accuracies_attrib_tpp_same_layer.pkl", "wb") as f:
+                    pickle.dump(class_accuracies, f)
+
+            with open("tests/test_data/class_accuracies_attrib_tpp_same_layer.pkl", "rb") as f:
+                expected_results = pickle.load(f)
+
+            compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
+
+
 def test_run_interventions_tpp():
     test_config = PipelineConfig()
+    test_config.sweep_output_dir = "tests"
 
     test_config.use_autointerp = False
     test_config.force_node_effects_recompute = True
@@ -256,6 +328,7 @@ def test_run_interventions_tpp():
 
 def test_run_interventions_spurious_correlation_multiple_groupings():
     test_config = PipelineConfig()
+    test_config.sweep_output_dir = "tests"
 
     test_config.use_autointerp = False
     test_config.force_node_effects_recompute = True
@@ -363,6 +436,7 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
 # NOTE: This will use ~5k API tokens.
 def test_run_interventions_spurious_correlation_autointerp():
     test_config = PipelineConfig()
+    test_config.sweep_output_dir = "tests"
 
     llm_utils.set_api_key(test_config.api_llm, "")
 
