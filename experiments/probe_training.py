@@ -28,6 +28,7 @@ import experiments.dataset_info as dataset_info
 # Configuration
 DEBUGGING = False
 SEED = 42
+MAXIMUM_SPUROUS_TRAIN_SET_SIZE = 10000
 
 # Set up paths and model
 parent_dir = os.path.abspath("..")
@@ -84,10 +85,13 @@ def get_spurious_corr_data(
     column2_vals: tuple[str, str],
     dataset_name: str,
     min_samples_per_quadrant: int,
+    max_spurious_train_set_size: bool,
     random_seed: int,
 ) -> dict[str, list[str]]:
     """Returns a dataset of, in the case of bias_in_bios, a key that's something like `female_nurse_data_only`,
-    and a value that's a list of bios (strs) of len min_samples_per_quadrant * 2."""
+    and a value that's a list of bios (strs) of len min_samples_per_quadrant * 2.
+    If max_spurious_train_set_size is True, then the spurious correlation dataset size will be larger,
+    limited to a max of 10,000 samples."""
     balanced_data = {}
 
     text_column_name = dataset_info.dataset_metadata[dataset_name]["text_column_name"]
@@ -127,6 +131,13 @@ def get_spurious_corr_data(
     print(f"min_count: {min_count}, min_samples_per_quadrant: {min_samples_per_quadrant}")
     assert min_count == min_samples_per_quadrant
 
+    # For biased classes, we don't have two quadrants per label
+    assert len(pos_pos) > min_samples_per_quadrant * 2
+    assert len(neg_neg) > min_samples_per_quadrant * 2
+
+    biased_count = min(len(neg_neg), len(pos_pos), MAXIMUM_SPUROUS_TRAIN_SET_SIZE)
+    print(f"biased_count: {biased_count}")
+
     rng = np.random.default_rng(random_seed)
 
     # Create and shuffle combinations
@@ -134,8 +145,8 @@ def get_spurious_corr_data(
     combined_neg = neg_pos[:min_count] + neg_neg[:min_count]
     pos_combined = pos_pos[:min_count] + neg_pos[:min_count]
     neg_combined = pos_neg[:min_count] + neg_neg[:min_count]
-    pos_pos = pos_pos[: min_count * 2]
-    neg_neg = neg_neg[: min_count * 2]
+    pos_pos = pos_pos[:biased_count]
+    neg_neg = neg_neg[:biased_count]
 
     # Shuffle each combination
     rng.shuffle(combined_pos)
@@ -158,6 +169,9 @@ def get_spurious_corr_data(
     balanced_data["female_nurse_data_only"] = neg_neg  # female_nurse data only
 
     for key in balanced_data.keys():
+        if max_spurious_train_set_size:
+            if "female_nurse" in key:
+                continue
         balanced_data[key] = balanced_data[key][: min_samples_per_quadrant * 2]
         assert len(balanced_data[key]) == min_samples_per_quadrant * 2
 
@@ -217,12 +231,34 @@ def get_train_test_data(
     random_seed: int,
     column1_vals: Optional[tuple[str, str]] = None,
     column2_vals: Optional[tuple[str, str]] = None,
+    use_max_possible_spurious_train_set: bool = False,
 ) -> tuple[dict, dict]:
     # 4 is because male / gender for each profession
     minimum_train_samples_per_quadrant = train_set_size // 4
     minimum_test_samples_per_quadrant = test_set_size // 4
 
-    if not spurious_corr:
+    if spurious_corr:
+        train_bios = get_spurious_corr_data(
+            train_df,
+            column1_vals,
+            column2_vals,
+            dataset_name,
+            minimum_train_samples_per_quadrant,
+            use_max_possible_spurious_train_set,
+            random_seed,
+        )
+
+        test_bios = get_spurious_corr_data(
+            test_df,
+            column1_vals,
+            column2_vals,
+            dataset_name,
+            minimum_test_samples_per_quadrant,
+            use_max_possible_spurious_train_set,
+            random_seed,
+        )
+
+    else:
         train_bios = get_balanced_dataset_tpp(
             train_df,
             dataset_name,
@@ -234,24 +270,6 @@ def get_train_test_data(
             dataset_name,
             minimum_test_samples_per_quadrant,
             random_seed=random_seed,
-        )
-    else:
-        train_bios = get_spurious_corr_data(
-            train_df,
-            column1_vals,
-            column2_vals,
-            dataset_name,
-            minimum_train_samples_per_quadrant,
-            random_seed,
-        )
-
-        test_bios = get_spurious_corr_data(
-            test_df,
-            column1_vals,
-            column2_vals,
-            dataset_name,
-            minimum_test_samples_per_quadrant,
-            random_seed,
         )
 
     train_bios, test_bios = ensure_shared_keys(train_bios, test_bios)
@@ -642,6 +660,7 @@ def train_probes(
         random_seed=seed,
         column1_vals=column1_vals,
         column2_vals=column2_vals,
+        use_max_possible_spurious_train_set=True,
     )
 
     if not spurious_correlation_removal:
