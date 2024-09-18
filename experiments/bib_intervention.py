@@ -1322,9 +1322,9 @@ if __name__ == "__main__":
 
     column1_vals_list = [
         ("professor", "nurse"),
-        ("filmmaker", "dentist"),
-        # ("painter", "teacher"),
-        # ("photographer", "physician"),
+        ("architect", "journalist"),
+        # ("surgeon", "psychologist"),
+        # ("attorney", "teacher"),
     ]
 
     for ae_sweep_paths in ae_sweep_paths_list:
