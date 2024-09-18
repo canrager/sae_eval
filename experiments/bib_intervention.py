@@ -951,19 +951,12 @@ def run_interventions(
     ablation_acts = {}
 
     for class_idx in tqdm(
-        p_config.chosen_class_indices, desc="Getting activations per evaluated class"
+        test_bios.keys(), desc="Getting probe test activations per evaluated class"
     ):
         test_acts[class_idx] = get_all_meaned_activations(
             test_bios[class_idx], model, llm_batch_size, probe_act_submodule
         )
         ablation_acts[class_idx] = None
-
-        if class_idx in utils.PAIRED_CLASS_KEYS:
-            paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
-            test_acts[paired_class_idx] = get_all_meaned_activations(
-                test_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
-            )
-            ablation_acts[paired_class_idx] = None
 
     test_accuracies = probe_training.get_probe_test_accuracy(
         probes,
@@ -979,7 +972,7 @@ def run_interventions(
         t.set_grad_enabled(False)
         indirect_effect_acts = {}
         for class_idx in tqdm(
-            p_config.chosen_class_indices, desc="Getting ablation activations per evaluated class"
+            train_bios.keys(), desc="Getting ablation activations per evaluated class"
         ):
             indirect_effect_acts[class_idx] = probe_training.get_all_activations(
                 train_bios[class_idx], model, llm_batch_size, probe_act_submodule
@@ -987,15 +980,6 @@ def run_interventions(
             ablation_acts[class_idx] = probe_training.get_all_activations(
                 test_bios[class_idx], model, llm_batch_size, probe_act_submodule
             )
-
-            if class_idx in utils.PAIRED_CLASS_KEYS:
-                paired_class_idx = utils.PAIRED_CLASS_KEYS[class_idx]
-                indirect_effect_acts[paired_class_idx] = probe_training.get_all_activations(
-                    train_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
-                )
-                ablation_acts[paired_class_idx] = probe_training.get_all_activations(
-                    test_bios[paired_class_idx], model, llm_batch_size, probe_act_submodule
-                )
         gc.collect()
         t.cuda.empty_cache()
     else:
@@ -1153,7 +1137,7 @@ def run_interventions(
                             print(f"Ablating {selected_features_mask.sum()} features")
                         test_acts_ablated = {}
                         for evaluated_class_idx in tqdm(
-                            node_effects_group.keys(), desc="Getting activations"
+                            test_bios.keys(), desc="Getting activations"
                         ):
                             test_acts_ablated[evaluated_class_idx] = get_all_acts_ablated(
                                 test_bios[evaluated_class_idx],
@@ -1166,20 +1150,6 @@ def run_interventions(
                                 ablation_acts[evaluated_class_idx],
                                 p_config.sae_batch_size,
                             )
-
-                            if evaluated_class_idx in utils.PAIRED_CLASS_KEYS:
-                                paired_class_idx = utils.PAIRED_CLASS_KEYS[evaluated_class_idx]
-                                test_acts_ablated[paired_class_idx] = get_all_acts_ablated(
-                                    test_bios[paired_class_idx],
-                                    model,
-                                    submodules,
-                                    dictionaries,
-                                    selected_features_mask,
-                                    llm_batch_size,
-                                    probe_act_submodule,
-                                    ablation_acts[paired_class_idx],
-                                    p_config.sae_batch_size,
-                                )
 
                         ablated_class_accuracies = probe_training.get_probe_test_accuracy(
                             probes,
