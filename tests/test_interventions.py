@@ -358,7 +358,7 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
 
     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
-    column1_vals_list = [("professor", "nurse"), ("filmmaker", "dentist")]
+    column1_vals_list = [("professor", "nurse"), ("architect", "journalist")]
     column2_vals = ("male", "female")
 
     for i, column1_vals in enumerate(column1_vals_list):
