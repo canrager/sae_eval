@@ -38,9 +38,11 @@ class PipelineConfig:
     eval_saes_n_inputs: int = 250
 
     probe_context_length: int = 128
-    probe_train_batch_size: int = 8
+    probe_train_batch_size: int = (
+        16  # We don't want probe batch size to be close to the train set size
+    )
     probe_test_batch_size: int = min(500, test_set_size)
-    probe_epochs: int = 2
+    probe_epochs: int = 5
 
     sae_batch_size: int = (
         500  # Used if we precompute model activations when sae_layer == probe_layer
