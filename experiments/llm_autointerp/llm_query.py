@@ -506,13 +506,21 @@ def get_node_effects_bias_shift(
 
         professor_nurse_value = max(professor_value, nurse_value)
 
+        unrelated_gender_value = 4
+        unrelated_professor_nurse_value = 4
+
+        if gender_value > 0:
+            unrelated_gender_value = 0
+
+        if professor_nurse_value > 0:
+            unrelated_professor_nurse_value = 0
+
         for class_name in node_effects_bias_shift_dir1.keys():
-            if (
-                class_name == "male_professor / female_nurse"
-                or class_name == "biased_male / biased_female"
-            ):
-                node_effects_bias_shift_dir1[class_name][sae_feature_idx] = gender_value
-                node_effects_bias_shift_dir2[class_name][sae_feature_idx] = professor_nurse_value
+            if class_name == "male_professor / female_nurse":
+                node_effects_bias_shift_dir1[class_name][sae_feature_idx] = (
+                    unrelated_professor_nurse_value
+                )
+                node_effects_bias_shift_dir2[class_name][sae_feature_idx] = unrelated_gender_value
 
     return node_effects_bias_shift_dir1, node_effects_bias_shift_dir2
 
