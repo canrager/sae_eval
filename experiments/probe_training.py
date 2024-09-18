@@ -254,7 +254,7 @@ def get_train_test_data(
             column2_vals,
             dataset_name,
             minimum_test_samples_per_quadrant,
-            use_max_possible_spurious_train_set,
+            False,
             random_seed,
         )
 
