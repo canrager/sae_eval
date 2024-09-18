@@ -927,6 +927,7 @@ def run_interventions(
             probe_output_filename=probe_path,
             dataset_name=p_config.dataset_name,
             probe_dir=p_config.probes_dir,
+            probe_layer=probe_layer,
             llm_model_name=model_name,
             epochs=p_config.probe_epochs,
             model_dtype=p_config.model_dtype,

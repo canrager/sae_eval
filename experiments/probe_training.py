@@ -28,7 +28,7 @@ import experiments.dataset_info as dataset_info
 # Configuration
 DEBUGGING = False
 SEED = 42
-MAXIMUM_SPUROUS_TRAIN_SET_SIZE = 10000
+MAXIMUM_SPUROUS_TRAIN_SET_SIZE = 5000
 
 # Set up paths and model
 parent_dir = os.path.abspath("..")
@@ -171,6 +171,8 @@ def get_spurious_corr_data(
     for key in balanced_data.keys():
         if max_spurious_train_set_size:
             if "female_nurse" in key:
+                balanced_data[key] = balanced_data[key][:MAXIMUM_SPUROUS_TRAIN_SET_SIZE]
+                assert len(balanced_data[key]) == MAXIMUM_SPUROUS_TRAIN_SET_SIZE
                 continue
         balanced_data[key] = balanced_data[key][: min_samples_per_quadrant * 2]
         assert len(balanced_data[key]) == min_samples_per_quadrant * 2
@@ -626,12 +628,12 @@ def train_probes(
     device: str,
     probe_output_filename: str,
     spurious_correlation_removal: bool,
+    probe_layer: int,
+    epochs: int,
+    llm_model_name: str,
     chosen_class_indices: Optional[list[str | int]] = None,  # only required for tpp
     dataset_name: str = "bias_in_bios",
     probe_dir: str = "trained_bib_probes",
-    llm_model_name: str = "EleutherAI/pythia-70m-deduped",
-    probe_layer: Optional[int] = None,
-    epochs: int = 2,
     model_dtype: t.dtype = t.bfloat16,
     save_results: bool = True,
     seed: int = SEED,
@@ -644,8 +646,7 @@ def train_probes(
 
     model_eval_config = utils.ModelEvalConfig.from_full_model_name(llm_model_name)
     d_model = model_eval_config.activation_dim
-    if probe_layer is None:
-        probe_layer = model_eval_config.probe_layer
+
     probe_act_submodule = utils.get_submodule(model, "resid_post", probe_layer)
 
     train_df, test_df = load_and_prepare_dataset(dataset_name)
@@ -759,6 +760,7 @@ if __name__ == "__main__":
         device=device,
         probe_output_filename=probe_output_filename,
         spurious_correlation_removal=False,
+        probe_layer=probe_layer,
         dataset_name="bias_in_bios",
         probe_dir=probe_dir,
         llm_model_name=llm_model_name,
