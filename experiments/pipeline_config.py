@@ -29,7 +29,7 @@ class PipelineConfig:
     top_k_inputs_act_collect: int = 5
 
     probe_train_set_size: int = 4000
-    probe_test_set_size: int = 500
+    probe_test_set_size: int = 1000
 
     # Load datset and probes
     train_set_size: int = 2000
@@ -38,8 +38,9 @@ class PipelineConfig:
     eval_saes_n_inputs: int = 250
 
     probe_context_length: int = 128
-    probe_batch_size: int = min(500, test_set_size)
-    probe_epochs: int = 10
+    probe_train_batch_size: int = 8
+    probe_test_batch_size: int = min(500, test_set_size)
+    probe_epochs: int = 2
 
     sae_batch_size: int = (
         500  # Used if we precompute model activations when sae_layer == probe_layer
@@ -80,7 +81,6 @@ class PipelineConfig:
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     # This is for targeted probe perturbation

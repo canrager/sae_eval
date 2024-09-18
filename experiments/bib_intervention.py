@@ -920,7 +920,8 @@ def run_interventions(
             p_config.probe_test_set_size,
             model,
             context_length=context_length,
-            probe_batch_size=p_config.probe_batch_size,
+            probe_train_batch_size=p_config.probe_train_batch_size,
+            probe_test_batch_size=p_config.probe_test_batch_size,
             llm_batch_size=llm_batch_size,
             device=device,
             probe_output_filename=probe_path,
@@ -968,7 +969,7 @@ def run_interventions(
         probes,
         p_config.chosen_class_indices,
         test_acts,
-        p_config.probe_batch_size,
+        p_config.probe_test_batch_size,
         p_config.spurious_corr,
     )
     del test_acts
@@ -1184,7 +1185,7 @@ def run_interventions(
                             probes,
                             list(node_effects_group.keys()),
                             test_acts_ablated,
-                            p_config.probe_batch_size,
+                            p_config.probe_test_batch_size,
                             p_config.spurious_corr,
                         )
 

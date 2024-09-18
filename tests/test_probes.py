@@ -22,10 +22,11 @@ def test_probing_tpp():
         test_set_size=1000,
         model=model,
         context_length=128,
-        probe_batch_size=1000,
+        probe_train_batch_size=8,
+        probe_test_batch_size=1000,
         llm_batch_size=500,
         llm_model_name=llm_model_name,
-        epochs=10,
+        epochs=2,
         device=device,
         probe_output_filename=probe_output_filename,
         spurious_correlation_removal=False,
@@ -36,11 +37,11 @@ def test_probing_tpp():
     )
 
     expected_accuracies = {
-        0: (0.8870000243186951, 0.878000020980835, 0.8960000276565552, 0.29296875),
-        1: (0.9270000457763672, 0.9280000329017639, 0.9260000586509705, 0.2314453125),
-        2: (0.9010000228881836, 0.8880000710487366, 0.9140000343322754, 0.2490234375),
-        6: (0.9750000238418579, 0.9600000381469727, 0.9900000691413879, 0.08935546875),
-        9: (0.9480000734329224, 0.9360000491142273, 0.9600000381469727, 0.140625),
+        0: (0.878000020980835, 0.8720000386238098, 0.8840000629425049, 0.3359375),
+        1: (0.9160000681877136, 0.9180000424385071, 0.9140000343322754, 0.291015625),
+        2: (0.8860000371932983, 0.9040000438690186, 0.8680000305175781, 0.30078125),
+        6: (0.9750000238418579, 0.9580000638961792, 0.9920000433921814, 0.12109375),
+        9: (0.9420000314712524, 0.9200000166893005, 0.9640000462532043, 0.1708984375),
     }
 
     print(test_accuracies)
@@ -67,10 +68,11 @@ def test_probing_spurious_correlation():
         test_set_size=1000,
         model=model,
         context_length=128,
-        probe_batch_size=1000,
+        probe_train_batch_size=8,
+        probe_test_batch_size=1000,
         llm_batch_size=500,
         llm_model_name=llm_model_name,
-        epochs=10,
+        epochs=2,
         device=device,
         probe_output_filename=probe_output_filename,
         spurious_correlation_removal=True,
@@ -82,24 +84,18 @@ def test_probing_spurious_correlation():
     )
 
     expected_accuracies = {
-        "male / female": (0.9920000433921814, 1.0, 0.984000027179718, 0.07470703125),
+        "male / female": (0.987000048160553, 1.0, 0.9740000367164612, 0.1376953125),
         "professor / nurse": (
-            0.9350000619888306,
+            0.9330000281333923,
+            0.9280000329017639,
             0.9380000233650208,
-            0.9320000410079956,
-            0.1669921875,
+            0.2001953125,
         ),
         "male_professor / female_nurse": (
-            0.9920000433921814,
+            0.9910000562667847,
             0.9960000514984131,
-            0.9880000352859497,
-            0.037353515625,
-        ),
-        "biased_male / biased_female": (
-            0.9780000448226929,
-            0.9760000705718994,
-            0.9800000190734863,
-            0.0830078125,
+            0.9860000610351562,
+            0.0693359375,
         ),
     }
 

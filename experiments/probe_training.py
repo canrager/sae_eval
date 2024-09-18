@@ -459,7 +459,7 @@ def train_probe(
     epochs: int,
     device: str,
     model_dtype: t.dtype,
-    lr: float = 1e-2,
+    lr: float = 1e-3,
     seed: int = SEED,
 ) -> tuple[Probe, float]:
     """input_batches can be a list of tensors or strings. If strings, get_acts must be provided."""
@@ -602,7 +602,8 @@ def train_probes(
     test_set_size: int,
     model: LanguageModel,
     context_length: int,
-    probe_batch_size: int,
+    probe_train_batch_size: int,
+    probe_test_batch_size: int,
     llm_batch_size: int,
     device: str,
     probe_output_filename: str,
@@ -612,7 +613,7 @@ def train_probes(
     probe_dir: str = "trained_bib_probes",
     llm_model_name: str = "EleutherAI/pythia-70m-deduped",
     probe_layer: Optional[int] = None,
-    epochs: int = 10,
+    epochs: int = 2,
     model_dtype: t.dtype = t.bfloat16,
     save_results: bool = True,
     seed: int = SEED,
@@ -675,11 +676,11 @@ def train_probes(
             continue
 
         train_acts, train_labels = prepare_probe_data(
-            all_train_acts, class_name, spurious_correlation_removal, probe_batch_size
+            all_train_acts, class_name, spurious_correlation_removal, probe_train_batch_size
         )
 
         test_acts, test_labels = prepare_probe_data(
-            all_test_acts, class_name, spurious_correlation_removal, probe_batch_size
+            all_test_acts, class_name, spurious_correlation_removal, probe_test_batch_size
         )
 
         probe, test_accuracy = train_probe(
@@ -734,7 +735,7 @@ if __name__ == "__main__":
         test_set_size=1000,
         model=model,
         context_length=128,
-        probe_batch_size=50,
+        probe_train_batch_size=50,
         llm_batch_size=20,
         device=device,
         probe_output_filename=probe_output_filename,
