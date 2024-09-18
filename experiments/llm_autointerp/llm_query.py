@@ -439,10 +439,7 @@ def get_node_effects_auto_interp_spurious(
                 node_effects_auto_interp[class_name][sae_feature_idx] = gender_value
             elif class_name == "professor / nurse":
                 node_effects_auto_interp[class_name][sae_feature_idx] = professor_nurse_value
-            elif (
-                class_name == "male_professor / female_nurse"
-                or class_name == "biased_male / biased_female"
-            ):
+            elif class_name == "male_professor / female_nurse":
                 node_effects_auto_interp[class_name][sae_feature_idx] = professor_nurse_gender_value
             else:
                 raise ValueError(f"Unknown class name: {class_name}")
@@ -458,14 +455,12 @@ def get_node_effects_bias_shift(
 ) -> dict[str, torch.Tensor]:
     node_effects_bias_shift_dir1 = {
         "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
-        "biased_male / biased_female": torch.zeros(dict_size, device="cpu"),
         "male / female": torch.zeros(dict_size, device="cpu"),
         "professor / nurse": torch.zeros(dict_size, device="cpu"),
     }
 
     node_effects_bias_shift_dir2 = {
         "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
-        "biased_male / biased_female": torch.zeros(dict_size, device="cpu"),
         "male / female": torch.zeros(dict_size, device="cpu"),
         "professor / nurse": torch.zeros(dict_size, device="cpu"),
     }
@@ -617,12 +612,10 @@ def perform_llm_autointerp(
             )
         )
 
-    features_prompts = construct_llm_features_prompts(
-        ae_path, tokenizer, p_config
-    )
+    features_prompts = construct_llm_features_prompts(ae_path, tokenizer, p_config)
 
     if debug_mode:
-         with open(os.path.join(ae_path, "input_prompts.json"), "w") as f:
+        with open(os.path.join(ae_path, "input_prompts.json"), "w") as f:
             json.dump(features_prompts, f)
 
     batches_prompt_indices = llm_utils.get_prompt_batch_indices(features_prompts, p_config)

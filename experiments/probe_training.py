@@ -137,21 +137,6 @@ def get_spurious_corr_data(
     pos_pos = pos_pos[: min_count * 2]
     neg_neg = neg_neg[: min_count * 2]
 
-    mixed_classes = combined_pos + combined_neg
-    rng.shuffle(mixed_classes)
-
-    pos_ratio = 1.95
-    noise_ratio = 2.0 - pos_ratio
-
-    noisy_combined_pos = (
-        pos_pos[: math.ceil(min_count * pos_ratio)]
-        + mixed_classes[: math.ceil(min_count * noise_ratio)]
-    )
-    noisy_combined_neg = (
-        neg_neg[: math.ceil(min_count * pos_ratio)]
-        + mixed_classes[: math.ceil(min_count * noise_ratio)]
-    )
-
     # Shuffle each combination
     rng.shuffle(combined_pos)
     rng.shuffle(combined_neg)
@@ -159,8 +144,6 @@ def get_spurious_corr_data(
     rng.shuffle(neg_combined)
     rng.shuffle(pos_pos)
     rng.shuffle(neg_neg)
-    rng.shuffle(noisy_combined_pos)
-    rng.shuffle(noisy_combined_neg)
 
     # Assign to balanced_data
     balanced_data["male / female"] = combined_pos  # male data only, to be combined with female data
@@ -173,12 +156,6 @@ def get_spurious_corr_data(
         pos_pos  # male_professor data only, to be combined with female_nurse data
     )
     balanced_data["female_nurse_data_only"] = neg_neg  # female_nurse data only
-
-    # TODO: Rename biased_male to noisy_male_professor for clarity.
-    balanced_data["biased_male / biased_female"] = (
-        noisy_combined_pos  # noisy_male_professor data only, to be combined with noisy_female_nurse
-    )
-    balanced_data["biased_female_data_only"] = noisy_combined_neg  # noisy_female_nurse data only
 
     for key in balanced_data.keys():
         balanced_data[key] = balanced_data[key][: min_samples_per_quadrant * 2]
