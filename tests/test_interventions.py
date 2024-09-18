@@ -90,7 +90,6 @@ def test_run_interventions_spurious_correlation_same_layer():
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     test_config.attrib_t_effects = [20]
@@ -161,7 +160,6 @@ def test_run_interventions_spurious_correlation():
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     test_config.attrib_t_effects = [20]
@@ -351,7 +349,6 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     test_config.attrib_t_effects = [20]
@@ -466,7 +463,6 @@ def test_run_interventions_spurious_correlation_autointerp():
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     test_config.autointerp_t_effects = [5]

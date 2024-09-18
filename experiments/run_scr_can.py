@@ -36,7 +36,7 @@ p_config.force_node_effects_recompute = True
 p_config.force_autointerp_recompute = True
 p_config.use_autointerp = True
 
-p_config.dataset_name ='amazon_reviews_1and5'
+p_config.dataset_name = "amazon_reviews_1and5"
 
 # chosen_classes = [
 #     "Beauty_and_Personal_Care",
@@ -49,18 +49,17 @@ p_config.dataset_name ='amazon_reviews_1and5'
 #     amazon_category_dict[i] for i in chosen_classes
 # ]
 p_config.chosen_class_indices = [
-        "male / female",
-        "professor / nurse",
-        "male_professor / female_nurse",
-        "biased_male / biased_female",
-    ]
+    "male / female",
+    "professor / nurse",
+    "male_professor / female_nurse",
+]
 
 trainer_ids = None
 
 ae_sweep_paths = {
     "gemma-2-2b_sweep_topk_ctx128_ef8_0824": {
         "resid_post_layer_19": {"trainer_ids": trainer_ids},
-},
+    },
     "gemma-2-2b_sweep_standard_ctx128_ef8_0824": {
         "resid_post_layer_19": {"trainer_ids": trainer_ids},
     },

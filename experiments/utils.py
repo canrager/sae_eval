@@ -23,7 +23,6 @@ PAIRED_CLASS_KEYS = {
     "male / female": "female_data_only",
     "professor / nurse": "nurse_data_only",
     "male_professor / female_nurse": "female_nurse_data_only",
-    "biased_male / biased_female": "biased_female_data_only",
 }
 
 POSITIVE_CLASS_LABEL = 0

@@ -96,15 +96,13 @@ def test_run_interventions_spurious_correlation_same_layer():
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     test_config.attrib_t_effects = [20]
 
-    test_config.dataset_name = 'amazon_reviews_1and5'
+    test_config.dataset_name = "amazon_reviews_1and5"
     test_config.dictionaries_path = "dictionary_learning/dictionaries"
     # test_config.probes_dir = "experiments/test_trained_bib_probes"
-
 
     ae_sweep_paths = {"pythia70m_test_sae": {"resid_post_layer_3": {"trainer_ids": [0]}}}
 
@@ -129,10 +127,16 @@ def test_run_interventions_spurious_correlation_same_layer():
         tolerance = 0.03
 
         if FORCE_UPDATE_EXPECTED_RESULTS:
-            with open("tests/test_data_amazon/amazon_class_accuracies_data_attrib_spurious_same_layer.pkl", "wb") as f:
+            with open(
+                "tests/test_data_amazon/amazon_class_accuracies_data_attrib_spurious_same_layer.pkl",
+                "wb",
+            ) as f:
                 pickle.dump(class_accuracies, f)
 
-        with open("tests/test_data_amazon/amazon_class_accuracies_data_attrib_spurious_same_layer.pkl", "rb") as f:
+        with open(
+            "tests/test_data_amazon/amazon_class_accuracies_data_attrib_spurious_same_layer.pkl",
+            "rb",
+        ) as f:
             expected_results = pickle.load(f)
 
         compare_dicts_within_tolerance(class_accuracies, expected_results, tolerance)
@@ -149,7 +153,6 @@ def test_run_interventions_spurious_correlation():
     test_config.spurious_corr = True
     test_config.sweep_output_dir = "tests/test_data_amazon"
 
-
     test_config.probe_train_set_size = 4000
     test_config.probe_test_set_size = 1000
     test_config.probe_layer = 4
@@ -164,7 +167,6 @@ def test_run_interventions_spurious_correlation():
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     test_config.attrib_t_effects = [20]
@@ -195,7 +197,9 @@ def test_run_interventions_spurious_correlation():
         tolerance = 0.03
 
         if FORCE_UPDATE_EXPECTED_RESULTS:
-            with open("tests/test_data_amazon/amazon_class_accuracies_attrib_spurious.pkl", "wb") as f:
+            with open(
+                "tests/test_data_amazon/amazon_class_accuracies_attrib_spurious.pkl", "wb"
+            ) as f:
                 pickle.dump(class_accuracies, f)
 
         with open("tests/test_data_amazon/amazon_class_accuracies_attrib_spurious.pkl", "rb") as f:
@@ -214,7 +218,6 @@ def test_run_interventions_tpp():
 
     test_config.spurious_corr = False
     test_config.sweep_output_dir = "tests/test_data_amazon"
-
 
     test_config.probe_train_set_size = 4000
     test_config.probe_test_set_size = 1000
@@ -290,7 +293,6 @@ def test_run_interventions_spurious_correlation_multiple_groupings():
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     test_config.attrib_t_effects = [20]
@@ -405,7 +407,6 @@ def test_run_interventions_spurious_correlation_autointerp():
         "male / female",
         "professor / nurse",
         "male_professor / female_nurse",
-        "biased_male / biased_female",
     ]
 
     test_config.autointerp_t_effects = [5]
