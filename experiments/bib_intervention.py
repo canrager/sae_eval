@@ -1031,17 +1031,23 @@ def run_interventions(
         if p_config.use_autointerp:
             # Select the classes given to the LLM for autointerp
             if p_config.spurious_corr:
-                column2_name = dataset_info.dataset_metadata[p_config.dataset_name]["column2_name"]
+                column2_autointerp_name = dataset_info.dataset_metadata[p_config.dataset_name][
+                    "column2_autointerp_name"
+                ]
                 p_config.chosen_autointerp_class_names = [
                     p_config.column1_vals[0],
                     p_config.column1_vals[1],
-                    column2_name,
+                    column2_autointerp_name,
                 ]
                 if "amazon" in p_config.dataset_name:
+                    # p_config.chosen_autointerp_class_names = [
+                    #     dataset_info.amazon_int_to_str[i] for i in p_config.column1_vals
+                    # ]
                     p_config.chosen_autointerp_class_names = [
-                        dataset_info.amazon_int_to_str[i] for i in p_config.column1_vals
+                        p_config.column1_vals[0],
+                        p_config.column1_vals[1],
+                        column2_autointerp_name,
                     ]
-                    p_config.chosen_autointerp_class_names.append(column2_name)
 
             else:
                 p_config.chosen_autointerp_class_names = []

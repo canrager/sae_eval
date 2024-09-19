@@ -73,7 +73,7 @@ amazon_category_dict = {
     "Software": 30,
     "Health_and_Personal_Care": 31,
     "Appliances": 32,
-    "Movies_and_TV": 33
+    "Movies_and_TV": 33,
 }
 amazon_int_to_str = {v: k for k, v in amazon_category_dict.items()}
 
@@ -88,6 +88,7 @@ dataset_metadata = {
         "text_column_name": "hard_text",
         "column1_name": "profession",
         "column2_name": "gender",
+        "column2_autointerp_name": "gender",
         "column1_mapping": profession_dict,
         "column2_mapping": gender_dict,
     },
@@ -95,6 +96,7 @@ dataset_metadata = {
         "text_column_name": "text",
         "column1_name": "category",
         "column2_name": "rating",
+        "column2_autointerp_name": "Amazon Review Sentiment",
         "column1_mapping": amazon_category_dict,
         "column2_mapping": amazon_rating_dict,
     },

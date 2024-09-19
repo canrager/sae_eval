@@ -411,6 +411,7 @@ def get_node_effects_auto_interp_spurious(
     dict_size: int,
     llm_json_response: dict[int, dict[str, int]],
     column1_vals: tuple[str, str],
+    column2_autointerp_name: str,
 ) -> dict[str, torch.Tensor]:
     node_effects_auto_interp = {}
 
@@ -430,7 +431,7 @@ def get_node_effects_auto_interp_spurious(
             # Note that getting professor / nurse indexing right doesn't really matter, as we take the max
             professor_value = llm_json_response[sae_feature_idx][column1_vals[0]]
             nurse_value = llm_json_response[sae_feature_idx][column1_vals[1]]
-            gender_value = llm_json_response[sae_feature_idx]["gender"]
+            gender_value = llm_json_response[sae_feature_idx][column2_autointerp_name]
 
             professor_nurse_value = max(professor_value, nurse_value)
             professor_nurse_gender_value = max(professor_nurse_value, gender_value)
@@ -452,6 +453,7 @@ def get_node_effects_bias_shift(
     dict_size: int,
     llm_json_response: dict[int, dict[str, int]],
     column1_vals: tuple[str, str],
+    column2_autointerp_name: str,
 ) -> dict[str, torch.Tensor]:
     node_effects_bias_shift_dir1 = {
         "male_professor / female_nurse": torch.zeros(dict_size, device="cpu"),
@@ -478,7 +480,7 @@ def get_node_effects_bias_shift(
 
             professor_value = llm_json_response[sae_feature_idx][class1_key]
             nurse_value = llm_json_response[sae_feature_idx][class2_key]
-            gender_value = llm_json_response[sae_feature_idx]["gender"]
+            gender_value = llm_json_response[sae_feature_idx][column2_autointerp_name]
 
             professor_nurse_value = max(professor_value, nurse_value)
 
@@ -497,7 +499,7 @@ def get_node_effects_bias_shift(
 
         professor_value = llm_json_response[sae_feature_idx][class1_key]
         nurse_value = llm_json_response[sae_feature_idx][class2_key]
-        gender_value = llm_json_response[sae_feature_idx]["gender"]
+        gender_value = llm_json_response[sae_feature_idx][column2_autointerp_name]
 
         professor_nurse_value = max(professor_value, nurse_value)
 
@@ -537,11 +539,23 @@ def llm_json_response_to_node_effects(
     dict_size = first_node_effect.size(0)
 
     if p_config.spurious_corr:
+        column2_autointerp_name = dataset_info.dataset_metadata[p_config.dataset_name][
+            "column2_autointerp_name"
+        ]
+
         node_effects_auto_interp = get_node_effects_auto_interp_spurious(
-            node_effects_attrib_patching, dict_size, llm_json_response, p_config.column1_vals
+            node_effects_attrib_patching,
+            dict_size,
+            llm_json_response,
+            p_config.column1_vals,
+            column2_autointerp_name,
         )
         node_effects_bias_shift_dir1, node_effects_bias_shift_dir2 = get_node_effects_bias_shift(
-            node_effects_attrib_patching, dict_size, llm_json_response, p_config.column1_vals
+            node_effects_attrib_patching,
+            dict_size,
+            llm_json_response,
+            p_config.column1_vals,
+            column2_autointerp_name,
         )
 
         with open(f"{ae_path}/{p_config.bias_shift_dir1_filename}", "wb") as f:
