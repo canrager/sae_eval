@@ -81,7 +81,15 @@ def run_sae_training(
     warmup_steps = 1000  # Warmup period at start of training and after each resample
     resample_steps = None
 
-    save_steps = [0, 4882, 9764, 19528, 29292]
+    desired_checkpoints = t.logspace(-3, 0, 7).tolist()
+    desired_checkpoints = [0.0] + desired_checkpoints[:-1]
+    desired_checkpoints.sort()
+    print(f"desired_checkpoints: {desired_checkpoints}")
+
+    save_steps = [int(steps * step) for step in desired_checkpoints]
+    save_steps.sort()
+
+    print(f"save_steps: {save_steps}")
 
     # standard sae training parameters
     learning_rates = [3e-4]
@@ -227,7 +235,7 @@ def run_sae_training(
             log_steps=log_steps,
             use_wandb=not no_wandb_logging,
             wandb_entity="adam-karvonen",
-            wandb_project="standard_sae_sweep",
+            wandb_project="checkpoint_sae_sweep",
         )
 
 
