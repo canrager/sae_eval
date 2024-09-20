@@ -69,7 +69,7 @@ ae_sweep_paths = {
 column1_vals_list = [
     ("Books", "CDs_and_Vinyl"),
     ("Software", "Electronics"),
-    ("Pet Supplies", "Office_Products"),
+    ("Pet_Supplies", "Office_Products"),
     ("Industrial_and_Scientific", "Toys_and_Games"),
 ]
 
