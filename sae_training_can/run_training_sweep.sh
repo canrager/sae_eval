@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Define arrays for different configurations
-ARCH=("vanilla" "vanilla" "vanilla" "topk" "topk" "topk")
-LAYERS=(5 12 19 5 12 19)
+ARCH="vanilla topk"
+LAYERS=(5 12 19)
 WIDTH=12
 NUM_TOKENS=200_000_000
-DEVICES=("cuda:0", "cuda:1", "cuda:2", "cuda:3", "cuda:4", "cuda:5")
+DEVICES=("cuda:0", "cuda:1", "cuda:2")
 
 # Loop through the configurations
-for i in {0..5}; do
+for i in {0..2}; do
     nohup python3 training_sweep.py \
         --save_dir saes \
         --architecture ${ARCH[$i]} \
@@ -16,7 +16,7 @@ for i in {0..5}; do
         --width_exponents ${WIDTH} \
         --num_tokens ${NUM_TOKENS}\
         --device ${DEVICES[$i]} \
-        > "${ARCH[$i]}_l${LAYERS[$i]}_w${WIDTH}_${DEVICE//:/_}.out" 2>&1 &
+        > "vanilla_topk_l${LAYERS[$i]}_w${WIDTH}_${DEVICE//:/_}.out" 2>&1 &
 
         # --no_wandb_logging \
         # --dry_run \
