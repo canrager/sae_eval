@@ -2,7 +2,7 @@
 # Define arrays for different configurations
 ARCH=("vanilla" "vanilla" "vanilla" "topk" "topk" "topk")
 LAYERS=(5 12 19 5 12 19)
-WIDTH=12
+WIDTH=16
 NUM_TOKENS=200_000_000
 DEVICES=("cuda:0" "cuda:1" "cuda:2" "cuda:3" "cuda:4" "cuda:5")
 

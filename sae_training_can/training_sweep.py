@@ -30,7 +30,7 @@ def get_args():
         "--width_exponents", type=int, nargs="+", required=True, help="power of 2 for total number of SAE latents"
     )
     parser.add_argument(
-        "--architecture", type=str, required=True, choices=["vanilla", "topk"], help="architecture of the SAE"
+        "--architectures", type=str, nargs="+", required=True, help="architecture of the SAE"
     )
     parser.add_argument("--device", type=str, help="device to train on")
     args = parser.parse_args()
@@ -41,7 +41,7 @@ def run_sae_training(
     layer: int,
     width_exponents: list[int],
     num_tokens: int,
-    architecture: str,
+    architectures: list[str],
     save_dir: str,
     device: str,
     dry_run: bool = False,
@@ -148,7 +148,7 @@ def run_sae_training(
     for seed, initial_sparsity_penalty, dict_size, learning_rate in itertools.product(
         random_seeds, initial_sparsity_penalties, dict_sizes, learning_rates
     ):
-        if architecture == "vanilla":
+        if "vanilla" in architectures:
             trainer_configs.extend([{
                     "trainer": StandardTrainer,
                     "dict_class": AutoEncoder,
@@ -166,7 +166,7 @@ def run_sae_training(
                     "submodule_name": submodule_name,
             }])
 
-        if architecture == "topk":
+        if "topk" in architectures:
             trainer_configs.extend([{
                 "trainer": TrainerTopK,
                 "dict_class": AutoEncoderTopK,
@@ -229,7 +229,8 @@ def run_sae_training(
     mmdd = datetime.now().strftime('%m%d')
     model_id = model_name.split('/')[1]
     width_str = "_".join([str(i) for i in width_exponents])
-    save_name = f"{model_id}_{architecture}_layer-{layer}_width-2pow{width_str}_date-{mmdd}"
+    architectures_str = "_".join(architectures)
+    save_name = f"{model_id}_{architectures_str}_layer-{layer}_width-2pow{width_str}_date-{mmdd}"
     save_dir = os.path.join(save_dir, save_name)
     print(f"save_dir: {save_dir}")
     print(f"desired_checkpoints: {desired_checkpoints}")
@@ -262,7 +263,7 @@ if __name__ == "__main__":
             save_dir=args.save_dir,
             num_tokens=args.num_tokens,
             width_exponents=args.width_exponents,
-            architecture=args.architecture,
+            architectures=args.architectures,
             device=args.device,
             dry_run=args.dry_run,
             no_wandb_logging=args.no_wandb_logging,
