@@ -112,14 +112,16 @@ def run_sae_training(
     if no_wandb_logging:
         log_steps = None
 
+    cache_dir = "/data/huggingface/"
     model = LanguageModel(
         model_name,
-        # token=hf_token, # I had to use huggingface-cli login for some reason
         device_map=device,
         low_cpu_mem_usage=True,
         attn_implementation="eager",
         torch_dtype=t.bfloat16,
+        cache_dir=cache_dir,
     )
+
     submodule = model.model.layers[layer]
     submodule_name = f"resid_post_layer_{layer}"
     io = "out"
