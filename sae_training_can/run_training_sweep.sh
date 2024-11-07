@@ -16,7 +16,7 @@ for i in {0..5}; do
         --width_exponents ${WIDTH} \
         --num_tokens ${NUM_TOKENS}\
         --device ${DEVICES[$i]} \
-        > "${ARCH[$i]}_l${LAYERS[$i]}_w${WIDTH}_${DEVICE//:/_}.out" 2>&1 &
+        > "${ARCH[$i]}_l${LAYERS[$i]}_w${WIDTH}_${DEVICES[$i]//:/_}.out" 2>&1 &
 
         # --no_wandb_logging \
         # --dry_run \
