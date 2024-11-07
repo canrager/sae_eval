@@ -11,7 +11,7 @@ DEVICES=("cuda:0" "cuda:1" "cuda:2")
 for i in {0..2}; do
     nohup python3 training_sweep.py \
         --save_dir saes \
-        --architecture ${ARCH[$i]} \
+        --architecture ${ARCH} \
         --layers ${LAYERS[$i]} \
         --width_exponents ${WIDTH} \
         --num_tokens ${NUM_TOKENS}\
@@ -21,7 +21,7 @@ for i in {0..2}; do
         # --no_wandb_logging \
         # --dry_run \
 
-    echo "Started job ${i}/2: ${ARCH[$i]} with ${LAYERS[$i]} layers"
+    echo "Started job ${i}/2: ${ARCH} with ${LAYERS[$i]} layers"
     
     # Optional: add a small delay between job submissions
     sleep 2
