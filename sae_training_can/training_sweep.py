@@ -51,9 +51,9 @@ def run_sae_training(
     model_name = "google/gemma-2-2b"
     context_length = 128
 
-    buffer_size = int(4096)
-    llm_batch_size = 64  # 32 on a 24GB RTX 3090
-    sae_batch_size = 4096  # 2048 on a 24GB RTX 3090
+    buffer_size = int(2048)
+    llm_batch_size = 24  # 32 on a 24GB RTX 3090
+    sae_batch_size = 2048  # 2048 on a 24GB RTX 3090
 
     # sae training parameters
     # random_seeds = t.arange(10).tolist()
@@ -119,7 +119,7 @@ def run_sae_training(
         low_cpu_mem_usage=True,
         attn_implementation="eager",
         torch_dtype=t.bfloat16,
-        cache_dir=cache_dir,
+        # cache_dir=cache_dir,
     )
 
     submodule = model.model.layers[layer]

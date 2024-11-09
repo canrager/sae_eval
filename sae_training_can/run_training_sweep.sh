@@ -4,8 +4,9 @@
 ARCH=("vanilla" "vanilla" "vanilla" "topk" "topk" "topk")
 LAYERS=(5 12 19 5 12 19)
 WIDTH=14
-NUM_TOKENS=400_000_000
+NUM_TOKENS=300_000_000
 DEVICES=("cuda:0" "cuda:1" "cuda:2" "cuda:3" "cuda:4" "cuda:5")
+
 
 # Loop through the configurations
 for i in {0..5}; do
@@ -21,7 +22,7 @@ for i in {0..5}; do
         # --no_wandb_logging \
         # --dry_run \
 
-    echo "Started job ${i}/6: ${ARCH[$i]} with ${LAYERS[$i]} layers"
+    echo "Started job ${i}/1: ${ARCH[$i]} with ${LAYERS[$i]} layers"
     
     # Optional: add a small delay between job submissions
     sleep 2

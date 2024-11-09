@@ -179,3 +179,4 @@ gemma_results_0913/*
 anthropic_api_key.txt
 experiments/latent_probing/probes/*
 openai_api_key.txt
+sae_training_can/saes/*
